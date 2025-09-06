@@ -166,28 +166,29 @@ def apply_button_style(button: tk.Button, style: str = None, **overrides) -> Non
                     pass
 
 def apply_treeview_style():
-    """Configure the global style for ttk Treeviews."""
+    """Configure and return a namespaced Treeview style (App.Treeview).
+
+    This avoids mutating the global "Treeview" style which can cause
+    font/size changes across unrelated screens when multiple views
+    configure styles at different times.
+    """
     style = ttk.Style()
-    
-    # Configurar el estilo base del Treeview
-    style.configure("Treeview",
-                   background=COLORS['surface'],
-                   foreground=COLORS['text'],
-                   rowheight=25,
-                   fieldbackground=COLORS['surface'])
-    
-    style.configure("Treeview.Heading",
-                   background=COLORS['background'],
-                   foreground=COLORS['text'],
-                   font=FONTS['bold'])
-    
-    # Configurar colores de selección
-    style.map('Treeview',
+    # Create a namespaced style for application Treeviews
+    style_name = "App.Treeview"
+    style.configure(style_name,
+                    font=FONTS['normal'],
+                    rowheight=25,
+                    background=COLORS['surface'],
+                    foreground=COLORS['text'],
+                    fieldbackground=COLORS['surface'])
+
+    style.configure(f"{style_name}.Heading",
+                    background=COLORS['background'],
+                    foreground=COLORS['text'],
+                    font=FONTS['bold'])
+
+    style.map(style_name,
               background=[('selected', COLORS['accent'])],
               foreground=[('selected', COLORS['primary'])])
-    
-    return style
-    style = ttk.Style()
-    style.configure("App.Treeview", font=FONTS['normal'], rowheight=28)
-    style.configure("App.Treeview.Heading", font=FONTS['bold'])
+
     return style

@@ -64,11 +64,6 @@ def init_db():
         FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id)
     )
     ''')
-    # Intentar agregar columna metodo_pago_id si no existe
-    try:
-        c.execute("ALTER TABLE ventas ADD COLUMN metodo_pago_id INTEGER REFERENCES metodos_pago(id)")
-    except Exception:
-        pass
     # Índice para búsquedas por fecha de venta
     try:
         c.execute("CREATE INDEX idx_ventas_fecha_hora ON ventas(fecha_hora)")
@@ -102,10 +97,6 @@ def init_db():
         pass
     try:
         c.execute("CREATE INDEX idx_tickets_status ON tickets(status)")
-    except Exception:
-        pass
-    try:
-        c.execute("ALTER TABLE tickets ADD COLUMN producto_id INTEGER REFERENCES products(id)")
     except Exception:
         pass
 
@@ -178,18 +169,6 @@ def init_db():
         obs_cierre TEXT
     )
     ''')
-    try:
-        c.execute("ALTER TABLE caja_diaria ADD COLUMN codigo_caja TEXT")
-    except Exception:
-        pass
-    try:
-        c.execute("ALTER TABLE caja_diaria ADD COLUMN disciplina TEXT")
-    except Exception:
-        pass
-    try:
-        c.execute("ALTER TABLE caja_diaria ADD COLUMN transferencias_final REAL DEFAULT 0")
-    except Exception:
-        pass
 
 
     # Movimientos manuales (ingreso / retiro) por caja

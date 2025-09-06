@@ -28,14 +28,17 @@ class HistorialView(tk.Frame):
         self.chk_ocultar = tk.Checkbutton(self.frame_filtro_fecha, text="Ocultar anulados", variable=self.var_ocultar_anulados, command=self.on_filtro_cambiado)
         self.chk_ocultar.pack(side=tk.LEFT, padx=5)
 
-        style = ttk.Style()
-        style.configure("Treeview", font=("Arial", 12))
-        style.configure("Treeview.Heading", font=("Arial", 11, "bold"))
+        from theme import apply_treeview_style, FONTS
+        style = apply_treeview_style()
+        # asegúrate de usar el style namespaced 'App.Treeview' para este Treeview
+        style.configure('App.Treeview', font=FONTS['normal'])
+        style.configure('App.Treeview.Heading', font=FONTS['bold'])
         self.tree = ttk.Treeview(
             self,
             columns=("fecha_hora", "item", "total", "categoria", "status", "codigo_caja", "identificador", "metodo_pago"),
             show="headings",
             height=15,
+            style='App.Treeview',
         )
         self.tree.heading("fecha_hora", text="Fecha")
         self.tree.heading("item", text="Item")

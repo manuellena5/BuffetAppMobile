@@ -61,26 +61,41 @@ class DetalleCajaFrame(tk.Frame):
     def _create_tables_panel(self):
         tables_frame = tk.Frame(self, bg=COLORS['background'])
         tables_frame.grid(row=1, column=0, sticky="nsew")
-        
+
         # Ventas por categoría
-        cat_frame = tk.LabelFrame(tables_frame, text="🗂 Ventas por categoría",
-                                bg=COLORS['surface'], font=FONTS['bold'])
-        cat_frame.pack(fill='x', pady=(0,10))
-        
-        self.cat_tree = ttk.Treeview(cat_frame, columns=('categoria', 'monto'),
-                                   show='headings', height=6)
+        cat_frame = tk.LabelFrame(
+            tables_frame, text="🗂 Ventas por categoría",
+            bg=COLORS['surface'], font=FONTS['bold']
+        )
+        cat_frame.pack(fill='x', pady=(0, 10))
+
+        from theme import apply_treeview_style
+        _style = apply_treeview_style()
+        self.cat_tree = ttk.Treeview(
+            cat_frame,
+            columns=('categoria', 'monto'),
+            show='headings',
+            height=6,
+            style='App.Treeview'
+        )
         self.cat_tree.heading('categoria', text='Categoría')
         self.cat_tree.heading('monto', text='Monto')
         self.cat_tree.pack(fill='x', padx=5, pady=5)
-        
+
         # Productos vendidos
-        prod_frame = tk.LabelFrame(tables_frame, text="📦 Productos vendidos",
-                                 bg=COLORS['surface'], font=FONTS['bold'])
+        prod_frame = tk.LabelFrame(
+            tables_frame, text="📦 Productos vendidos",
+            bg=COLORS['surface'], font=FONTS['bold']
+        )
         prod_frame.pack(fill='x')
-        
-        self.prod_tree = ttk.Treeview(prod_frame, 
-                                    columns=('producto', 'cant', 'monto'),
-                                    show='headings', height=8)
+
+        self.prod_tree = ttk.Treeview(
+            prod_frame,
+            columns=('producto', 'cant', 'monto'),
+            show='headings',
+            height=8,
+            style='App.Treeview'
+        )
         self.prod_tree.heading('producto', text='Producto')
         self.prod_tree.heading('cant', text='Cant')
         self.prod_tree.heading('monto', text='Monto')
@@ -142,76 +157,70 @@ class DetalleCajaFrame(tk.Frame):
                      command=self._exportar_excel).pack(fill='x', pady=2)
         themed_button(btn_frame, text="📄 Exportar PDF",
                      command=self._exportar_pdf).pack(fill='x', pady=2)
-        themed_button(btn_frame, text="❌ Salir",
-                     command=self._salir).pack(fill='x', pady=(10,0))
+
         # Bind para cálculo en vivo
         self.conteo_entry.bind('<KeyRelease>', self._calcular_diferencia)
         self.transf_entry.bind('<KeyRelease>', self._calcular_diferencia)
-    def _salir(self):
-        """Cierra la vista de detalle"""
-        if self.on_close:
-            # Before closing, re-enable movimiento menu items on the main app if possible
-            try:
-                if self.disable_movimientos and hasattr(self.master, 'caja_menu'):
-                    try:
-                        if hasattr(self.master, 'actualizar_menu_caja'):
-                            self.master.actualizar_menu_caja()
-                        else:
-                            self.master.caja_menu.entryconfig("Ingreso de efectivo", state='normal')
-                            self.master.caja_menu.entryconfig("Retiro de efectivo", state='normal')
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            # Report that the detail was closed but the caja was NOT closed
-            try:
-                self.on_close(False)
-            except TypeError:
-                # backward compatibility: allow handlers without parameter
-                self.on_close()
+    
             
     def _calcular_diferencia(self, event=None):
         try:
-            conteo = float(self.conteo_entry.get().replace(',', '.') or 0)
-            transf = float(self.transf_entry.get().replace(',', '.') or 0)
-            # Según fórmula requerida:
-            # Teórico = Fondo inicial + Ventas totales teóricas + Ingresos - Retiros
-            # Real    = Conteo efectivo + Transferencias + Ingresos - Retiros + Fondo inicial
-            ingresos = float(getattr(self, 'ingresos', 0) or 0)
-            retiros = float(getattr(self, 'retiros', 0) or 0)
-            fondo = float(getattr(self, 'fondo_inicial', 0) or 0)
-            total_real = conteo + transf + ingresos - retiros + fondo
-            teorico = float(getattr(self, 'total_teorico', 0) or 0)
-            diferencia = total_real - teorico
-            
+            def to_float(v):
+                try:
+                    if v is None or v == '':
+                        return 0.0
+                    return float(str(v).replace(',', '.'))
+                except Exception:
+                    return 0.0
+
+            conteo = to_float(self.conteo_entry.get() if hasattr(self, 'conteo_entry') else 0)
+            transf = to_float(self.transf_entry.get() if hasattr(self, 'transf_entry') else getattr(self, 'transferencias_final', 0))
+            ingresos = to_float(getattr(self, 'ingresos', 0))
+            retiros = to_float(getattr(self, 'retiros', 0))
+            fondo = to_float(getattr(self, 'fondo_inicial', 0))
+            total_ventas = to_float(getattr(self, 'total_ventas', 0))
+
+            # Nueva lógica: real = conteo + transferencias
+            real = conteo + transf
+            # teor = fondo_inicial + total_ventas + ingresos - retiros
+            teor = fondo + total_ventas + ingresos - retiros
+            diferencia = real - teor
+
             color = FINANCE_COLORS['positive_fg'] if diferencia >= 0 else FINANCE_COLORS['negative_fg']
             self.diff_label.config(
                 text=f"🧮 Diferencia: {format_currency(diferencia, include_sign=True)}",
                 fg=color
             )
-        except ValueError:
+            return diferencia
+        except Exception:
             self.diff_label.config(
-                text="🧮 Diferencia: $ 0,00", 
+                text="🧮 Diferencia: $ 0,00",
                 fg=COLORS['text']
             )
+            return 0.0
             
     def _load_data(self):
         with get_connection() as conn:
             cursor = conn.cursor()
-            # Cargar datos básicos de la caja (seleccionar columnas explícitas para evitar dependencias de índice)
+            # Cargar datos básicos de la caja (usar nombres de columnas para evitar dependencias de índice)
             try:
                 cursor.execute("""
                     SELECT cd.id, cd.codigo_caja, cd.fecha, cd.hora_apertura, cd.hora_cierre,
                            cd.usuario_apertura, cd.usuario_cierre, cd.fondo_inicial,
                            cd.observaciones_apertura, cd.obs_cierre, cd.total_ventas,
                            cd.total_efectivo_teorico, cd.conteo_efectivo_final, cd.transferencias_final,
-                           cd.ingresos, cd.retiros, cd.diferencia, cd.total_tickets,
+                           cd.ingresos, cd.retiros, cd.diferencia, cd.total_tickets, cd.estado,
                            d.descripcion as nombre_disciplina
                     FROM caja_diaria cd
                     LEFT JOIN disciplinas d ON d.codigo = cd.disciplina
                     WHERE cd.id = ?
                 """, (self.caja_id,))
-                caja = cursor.fetchone()
+                row = cursor.fetchone()
+                if row:
+                    cols = [c[0] for c in cursor.description]
+                    caja = dict(zip(cols, row))
+                else:
+                    caja = None
             except sqlite3.Error:
                 caja = None
             if not caja:
@@ -231,37 +240,36 @@ class DetalleCajaFrame(tk.Frame):
                 total_ventas = cursor.fetchone()[0] or 0
             except sqlite3.Error:
                 total_ventas = 0
-            # Mapear campos de caja a variables legibles (si la consulta devolvió datos)
+
+            # Mapear campos de caja a atributos usando nombres de columna
             try:
-                # Indices según SELECT anterior - guardar como atributos de instancia para usarlos en export
-                self.codigo_caja = caja[1]
-                self.fecha = caja[2]
-                self.hora_apertura = caja[3]
-                self.hora_cierre = caja[4]
-                self.usuario_apertura = caja[5]
-                self.usuario_cierre = caja[6]
-                self.fondo_inicial = caja[7] or 0
-                self.observaciones_apertura = caja[8] or ''
-                self.obs_cierre_db = caja[9] or ''
+                self.codigo_caja = caja.get('codigo_caja')
+                self.fecha = caja.get('fecha')
+                self.hora_apertura = caja.get('hora_apertura')
+                self.hora_cierre = caja.get('hora_cierre')
+                self.usuario_apertura = caja.get('usuario_apertura')
+                self.usuario_cierre = caja.get('usuario_cierre')
+                self.fondo_inicial = caja.get('fondo_inicial') or 0
+                self.observaciones_apertura = caja.get('observaciones_apertura') or ''
+                self.obs_cierre_db = caja.get('obs_cierre') or ''
                 # total_ventas puede venir vacío en la tabla
-                self.total_ventas = caja[10] or total_ventas or 0
-                try:
-                    self.total_teorico = caja[11] if caja[11] is not None else None
-                except Exception:
-                    self.total_teorico = None
-                self.conteo_efectivo_final = caja[12] or 0
-                self.transferencias_final = caja[13] or 0
-                self.ingresos = caja[14] or 0
-                self.retiros = caja[15] or 0
-                self.diferencia_db = caja[16]
-                self.total_tickets = caja[17] or 0
+                self.total_ventas = caja.get('total_ventas') or total_ventas or 0
+                self.total_teorico = caja.get('total_efectivo_teorico') if caja.get('total_efectivo_teorico') is not None else None
+                self.conteo_efectivo_final = caja.get('conteo_efectivo_final') or 0
+                self.transferencias_final = caja.get('transferencias_final') or 0
+                self.ingresos = caja.get('ingresos') or 0
+                self.retiros = caja.get('retiros') or 0
+                self.diferencia_db = caja.get('diferencia')
+                self.total_tickets = caja.get('total_tickets') or 0
                 # contar tickets anulados explícitamente
                 try:
                     cursor.execute("SELECT COALESCE(COUNT(*),0) FROM tickets t JOIN ventas v ON v.id = t.venta_id WHERE v.caja_id=? AND t.status='Anulado'", (self.caja_id,))
                     self.tickets_anulados = cursor.fetchone()[0] or 0
                 except Exception:
                     self.tickets_anulados = 0
-                self.nombre_disciplina = caja[18] or ''
+                self.nombre_disciplina = caja.get('nombre_disciplina') or ''
+                # estado de la caja
+                self.estado = caja.get('estado') or ''
             except Exception:
                 # Si algo falla, inicializar valores por seguridad
                 self.codigo_caja = None
@@ -274,6 +282,7 @@ class DetalleCajaFrame(tk.Frame):
                 self.diferencia_db = None
                 self.total_tickets = 0
                 self.nombre_disciplina = ''
+                self.estado = ''
             # Si total_teorico no está presente en la fila, estimar con una suma segura
             if getattr(self, 'total_teorico', None) is None:
                 try:
@@ -451,14 +460,8 @@ class DetalleCajaFrame(tk.Frame):
                     self.prod_tree.insert('', 'end', values=(row[0], int(row[1]), format_currency(row[2] or 0)))
                 except Exception:
                     pass
-            # Obtener estado actual (cerrada/abierta) desde la DB (usar la fila ya leída)
-            try:
-                # En la consulta inicial, la columna 'estado' no fue seleccionada; leer desde tabla
-                cursor.execute("SELECT estado FROM caja_diaria WHERE id=?", (self.caja_id,))
-                row = cursor.fetchone()
-                esta_cerrada = (row and row[0] == 'cerrada')
-            except Exception:
-                esta_cerrada = False
+            # Obtener estado actual (cerrada/abierta) desde la fila ya leída
+            esta_cerrada = (getattr(self, 'estado', '') == 'cerrada')
             # Ajustar estado de campos de cierre según si la caja está cerrada
             if esta_cerrada:
                 # Deshabilitar campos editables del cierre
@@ -487,13 +490,25 @@ class DetalleCajaFrame(tk.Frame):
                         self.btn_imprimir.pack(fill='x', pady=2)
                     except Exception:
                         pass
+            # Mostrar diferencia almacenada si la caja está cerrada; si está abierta, calcular en vivo
+            if esta_cerrada:
+                # Mostrar valor guardado en la base (self.diferencia_db)
+                diff_val = getattr(self, 'diferencia_db', None)
+                if diff_val is None:
+                    diff_val = 0.0
+                color = FINANCE_COLORS['positive_fg'] if float(diff_val) >= 0 else FINANCE_COLORS['negative_fg']
+                self.diff_label.config(text=f"🧮 Diferencia: {format_currency(diff_val, include_sign=True)}", fg=color)
             else:
-                # Caja abierta: campos editables y botón de cerrar activo
+                # Caja abierta: campos editables y botón de cerrar activo; mantener cálculo en vivo
                 try:
                     self.conteo_entry.config(state='normal')
                     self.transf_entry.config(state='normal')
                     self.usuario_entry.config(state='normal')
                     self.obs_text.config(state='normal')
+                except Exception:
+                    pass
+                try:
+                    self._calcular_diferencia()
                 except Exception:
                     pass
                 try:
@@ -535,12 +550,15 @@ class DetalleCajaFrame(tk.Frame):
                 with get_connection() as conn:
                     cursor = conn.cursor()
                     now = datetime.datetime.now()
-                    # Calcular diferencia con la fórmula completa
+                    # Calcular diferencia con la nueva fórmula:
                     ingresos = float(getattr(self, 'ingresos', 0) or 0)
                     retiros = float(getattr(self, 'retiros', 0) or 0)
                     fondo = float(getattr(self, 'fondo_inicial', 0) or 0)
-                    teorico = float(getattr(self, 'total_teorico', 0) or 0)
-                    real = conteo + transf + ingresos - retiros + fondo
+                    total_ventas = float(getattr(self, 'total_ventas', 0) or 0)
+                    # real = conteo + transferencias
+                    real = conteo + transf
+                    # teor = fondo_inicial + total_ventas + ingresos - retiros
+                    teorico = fondo + total_ventas + ingresos - retiros
                     diferencia = real - teorico
                     cursor.execute("""
                         UPDATE caja_diaria 

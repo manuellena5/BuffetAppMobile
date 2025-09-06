@@ -16,8 +16,8 @@ class CajaListadoView(tk.Frame):
 	Columnas incluyen tickets_anulados y diferencia. Export incluye esas columnas.
 	"""
 
+	# Note: 'id' is kept as the internal iid for selection but removed from visible columns
 	COLUMNS = [
-		('id', 'ID'),
 		('codigo', 'Código'),
 		('fecha', 'Fecha'),
 		('usuario', 'Usuario Apertura'),
@@ -30,6 +30,7 @@ class CajaListadoView(tk.Frame):
 		('retiros', 'Retiros'),
 		('conteo_efectivo_final', 'Conteo Efectivo Final'),
 		('diferencia', 'Diferencia'),
+		('estado', 'Estado'),
 	]
 
 	def __init__(self, parent, on_caja_cerrada=None):
@@ -48,11 +49,17 @@ class CajaListadoView(tk.Frame):
 		# Treeview
 		cols = [c[0] for c in self.COLUMNS]
 		headings = [c[1] for c in self.COLUMNS]
-		self.tree = ttk.Treeview(self, columns=cols, show='headings', selectmode='browse')
+		from theme import apply_treeview_style
+		style = apply_treeview_style()
+		self.tree = ttk.Treeview(self, columns=cols, show='headings', selectmode='browse', style='App.Treeview')
 		for cid, head in zip(cols, headings):
 			self.tree.heading(cid, text=head)
 			self.tree.column(cid, width=110, anchor='w')
-		self.tree.column('id', width=60, anchor='center')
+		# highlight tag for open boxes
+		try:
+			self.tree.tag_configure('abierta', background='#FFF59D')
+		except Exception:
+			pass
 
 		self.vsb = ttk.Scrollbar(self, orient='vertical', command=self.tree.yview)
 		self.hsb = ttk.Scrollbar(self, orient='horizontal', command=self.tree.xview)
@@ -75,19 +82,21 @@ class CajaListadoView(tk.Frame):
 				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_ventas,"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_tickets,"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status='Anulado') as tickets_anulados,"
-				" COALESCE(cd.transferencias_final,0), COALESCE(cd.ingresos,0), COALESCE(cd.retiros,0), COALESCE(cd.conteo_efectivo_final,0), cd.diferencia"
+				" COALESCE(cd.transferencias_final,0), COALESCE(cd.ingresos,0), COALESCE(cd.retiros,0), COALESCE(cd.conteo_efectivo_final,0), cd.diferencia, COALESCE(cd.estado, '')"
 				" FROM caja_diaria cd ORDER BY cd.fecha DESC LIMIT 200"
 			)
 			cur.execute(query)
 			rows = cur.fetchall()
 
 			for row in rows:
-				(cid, codigo, fecha, usuario, fondo_inicial, total_ventas, total_tickets, tickets_anulados, transfer, ingresos, retiros, conteo_final, diferencia_db) = row
+				(cid, codigo, fecha, usuario, fondo_inicial, total_ventas, total_tickets, tickets_anulados, transfer, ingresos, retiros, conteo_final, diferencia_db, estado) = row
 
 				# Si diferencia guardada es NULL => calcular por la fórmula del negocio
 				if diferencia_db is None:
 					try:
-						real = float(conteo_final or 0) + float(transfer or 0) + float(ingresos or 0) - float(retiros or 0) + float(fondo_inicial or 0)
+						# Nueva lógica: real = conteo_final + transferencias
+						real = float(conteo_final or 0) + float(transfer or 0)
+						# teor = fondo_inicial + total_ventas + ingresos - retiros
 						teor = float(fondo_inicial or 0) + float(total_ventas or 0) + float(ingresos or 0) - float(retiros or 0)
 						diferencia = real - teor
 					except Exception:
@@ -95,8 +104,12 @@ class CajaListadoView(tk.Frame):
 				else:
 					diferencia = diferencia_db or 0
 
-				values = [cid, codigo, fecha, usuario, fondo_inicial, total_ventas, total_tickets, tickets_anulados, transfer, ingresos, retiros, conteo_final, diferencia]
-				self.tree.insert('', 'end', iid=str(cid), values=values)
+				# Build visible values (omit internal id, append estado)
+				values = [codigo, fecha, usuario, fondo_inicial, total_ventas, total_tickets, tickets_anulados, transfer, ingresos, retiros, conteo_final, diferencia, estado]
+				tags = ()
+				if str(estado).lower() == 'abierta':
+					tags = ('abierta',)
+				self.tree.insert('', 'end', iid=str(cid), values=values, tags=tags)
 
 	def _selected_caja_id(self):
 		sel = self.tree.selection()

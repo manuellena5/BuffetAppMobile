@@ -1022,10 +1022,12 @@ class BarCanchaApp:
             from caja_listado_view import CajaListadoView
         self.ocultar_frames()
 
-        # Vista temporal solo para el cierre
-        vista_temporal = CajaListadoView(self.root, self.on_caja_cerrada)
-        vista_temporal.ver_detalle(caja_id)
-        vista_temporal.pack(fill=tk.BOTH, expand=True)
+        # Vista temporal solo para el cierre. Guardarla en self.cajas_view
+        # para que los mecanismos de ocultado/restaurado puedan gestionarla correctamente
+        self.cajas_view = CajaListadoView(self.root, self.on_caja_cerrada)
+        # mostrar detalle directamente
+        self.cajas_view.ver_detalle(caja_id)
+        self.cajas_view.pack(fill=tk.BOTH, expand=True)
 
     def vincular_venta_a_caja(self, venta_id):
         caja_id = getattr(self, 'caja_abierta_id', None)

@@ -1,0 +1,13 @@
+BuffetApp_v1.4/__pycache__/caja_listado_view.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/caja_operaciones.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/db_utils.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/herramientas_view.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/historial_view.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/init_db.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/login_view.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/menu_view.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/metodo_pago_dialog.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/productos_view.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/theme.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/utils_paths.cpython-311.pyc
+BuffetApp_v1.4/__pycache__/ventas_view_new.cpython-311.pyc
