@@ -1,0 +1,325 @@
+# archivo: init_db.py
+import sqlite3
+from db_utils import get_connection
+
+def init_db():
+    
+    conn = get_connection()
+    c = conn.cursor()
+
+    # Métodos de pago
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS metodos_pago (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        descripcion TEXT NOT NULL
+    )
+    ''')
+    # Insertar métodos de pago por defecto si la tabla está vacía
+    c.execute("SELECT COUNT(*) FROM metodos_pago")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO metodos_pago (descripcion) VALUES ('Efectivo')")
+        c.execute("INSERT INTO metodos_pago (descripcion) VALUES ('Transferencia')")
+
+
+    # Categorías de productos
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS Categoria_Producto (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        descripcion TEXT NOT NULL
+    )
+    ''')
+
+    # Productos con referencia a categoría
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo_producto TEXT,
+        nombre TEXT NOT NULL,
+        precio_compra INTEGER NOT NULL,
+        precio_venta INTEGER NOT NULL,
+        stock_actual INTEGER DEFAULT 0,
+        stock_minimo INTEGER DEFAULT 3,
+        categoria_id INTEGER,
+        visible INTEGER DEFAULT 1,
+        color TEXT,
+        FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id)
+    )
+    ''')
+    # Intentar agregar columnas opcionales si no existen
+    for col in ("color", "codigo_producto"):
+        try:
+            c.execute(f"ALTER TABLE products ADD COLUMN {col} TEXT")
+        except Exception:
+            pass
+
+    # Ventas (una venta puede tener varios tickets)
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT NOT NULL,
+        total_venta REAL NOT NULL,
+        status TEXT DEFAULT 'No impreso',
+        activo INTEGER DEFAULT 1,
+        metodo_pago_id INTEGER,
+        FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id)
+    )
+    ''')
+    # Intentar agregar columna metodo_pago_id si no existe
+    try:
+        c.execute("ALTER TABLE ventas ADD COLUMN metodo_pago_id INTEGER REFERENCES metodos_pago(id)")
+    except Exception:
+        pass
+    # Índice para búsquedas por fecha de venta
+    try:
+        c.execute("CREATE INDEX idx_ventas_fecha_hora ON ventas(fecha_hora)")
+    except Exception:
+        pass
+
+    # Tickets por categoría en cada venta
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venta_id INTEGER,
+        categoria_id INTEGER,
+        producto_id INTEGER,
+        fecha_hora TEXT NOT NULL,
+        status TEXT DEFAULT 'No impreso',
+        total_ticket REAL NOT NULL,
+        identificador_ticket TEXT,
+        FOREIGN KEY (venta_id) REFERENCES ventas(id),
+        FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id),
+        FOREIGN KEY (producto_id) REFERENCES products(id)
+    )
+    ''')
+    # Índices para mejorar búsquedas y uniones en tickets
+    try:
+        c.execute("CREATE INDEX idx_tickets_venta_id ON tickets(venta_id)")
+    except Exception:
+        pass
+    try:
+        c.execute("CREATE INDEX idx_tickets_categoria_id ON tickets(categoria_id)")
+    except Exception:
+        pass
+    try:
+        c.execute("CREATE INDEX idx_tickets_status ON tickets(status)")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE tickets ADD COLUMN producto_id INTEGER REFERENCES products(id)")
+    except Exception:
+        pass
+
+    # Ítems de cada ticket
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS venta_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id INTEGER,
+        producto_id INTEGER,
+        cantidad INTEGER,
+        precio_unitario REAL,
+        subtotal REAL,
+        FOREIGN KEY (ticket_id) REFERENCES tickets(id),
+        FOREIGN KEY (producto_id) REFERENCES products(id)
+    )
+    ''')
+    # Índice para búsquedas rápidas de ítems por ticket
+    try:
+        c.execute("CREATE INDEX idx_venta_items_ticket_id ON venta_items(ticket_id)")
+    except Exception:
+        pass
+
+    # Registro de stock
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS stock_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        producto_id INTEGER,
+        cantidad INTEGER,
+        fecha_hora TEXT NOT NULL,
+        motivo TEXT,
+        FOREIGN KEY(producto_id) REFERENCES products(id)
+    )
+    ''')
+
+    # Tabla de logueo de errores
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS error_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_hora TEXT,
+        modulo TEXT,
+        mensaje TEXT
+    )
+    ''')
+
+    # Caja diaria (apertura/cierre de jornada)
+    # --- Caja diaria ---
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS caja_diaria (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo_caja TEXT,
+        disciplina TEXT,
+        fecha TEXT NOT NULL,
+        usuario_apertura TEXT,
+        hora_apertura TEXT NOT NULL,
+        fondo_inicial REAL NOT NULL,
+        observaciones_apertura TEXT,
+        estado TEXT NOT NULL CHECK (estado IN ('abierta','cerrada')),
+        hora_cierre TEXT,
+        usuario_cierre TEXT,
+        apertura_dt TEXT,
+        cierre_dt TEXT,
+        total_ventas REAL,
+        total_efectivo_teorico REAL,
+        conteo_efectivo_final REAL,
+        transferencias_final REAL DEFAULT 0,
+        ingresos REAL DEFAULT 0,
+        retiros REAL DEFAULT 0,
+        diferencia REAL,
+        total_tickets INTEGER,
+        obs_cierre TEXT
+    )
+    ''')
+    try:
+        c.execute("ALTER TABLE caja_diaria ADD COLUMN codigo_caja TEXT")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE caja_diaria ADD COLUMN disciplina TEXT")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE caja_diaria ADD COLUMN transferencias_final REAL DEFAULT 0")
+    except Exception:
+        pass
+
+
+    # Movimientos manuales (ingreso / retiro) por caja
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS caja_movimiento (
+      id          INTEGER PRIMARY KEY,
+      caja_id     INTEGER NOT NULL,
+      tipo        TEXT NOT NULL CHECK (tipo IN ('INGRESO','RETIRO')),
+      monto       NUMERIC NOT NULL CHECK (monto > 0),
+      observacion TEXT,
+      creado_ts   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (caja_id, tipo)
+    )
+    ''')
+
+
+    # --- Columna caja_id en ventas ---
+    try:
+        c.execute("ALTER TABLE ventas ADD COLUMN caja_id INTEGER REFERENCES caja_diaria(id)")
+    except Exception:
+        pass
+    # Índices para acelerar filtros por caja en ventas
+    try:
+        c.execute("CREATE INDEX idx_ventas_caja_id ON ventas(caja_id)")
+    except Exception:
+        pass
+
+    # Asegura un único registro con estado 'abierta'
+    try:
+        c.execute("CREATE UNIQUE INDEX idx_caja_diaria_abierta ON caja_diaria(estado) WHERE estado='abierta'")
+    except Exception:
+        pass
+
+    # Columnas de fecha/hora completa para apertura y cierre
+    for columna in ("apertura_dt", "cierre_dt"):
+        try:
+            c.execute(f"ALTER TABLE caja_diaria ADD COLUMN {columna} TEXT")
+        except Exception:
+            pass
+
+
+    # Usuarios del sistema
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        rol TEXT NOT NULL
+    )
+    ''')
+
+    # Tabla de disciplinas
+    c.execute('''
+    CREATE TABLE IF NOT EXISTS disciplinas (
+        codigo TEXT PRIMARY KEY,
+        descripcion TEXT NOT NULL
+    )
+    ''')
+    # Insertar disciplinas por defecto si la tabla está vacía
+    c.execute("SELECT COUNT(*) FROM disciplinas")
+    if c.fetchone()[0] == 0:
+        disciplinas = [
+            ("BAR", "BAR"),
+            ("FUTI", "Futbol Infantil"),
+            ("FUTM", "Futbol Mayor"),
+            ("PAT", "Patin"),
+            ("VOL", "Voley"),
+        ]
+        c.executemany(
+            "INSERT INTO disciplinas (codigo, descripcion) VALUES (?, ?)",
+            disciplinas,
+        )
+   
+
+    # Insertar productos si no hay nada
+    c.execute("SELECT COUNT(*) FROM products")
+    if c.fetchone()[0] == 0:
+        # Insertar categorías
+        categorias = [
+            ('Comida',),
+            ('Bebida',),
+            ('Otros',)
+        ]
+        c.executemany("INSERT INTO Categoria_Producto (descripcion) VALUES (?)", categorias)
+        # Obtener IDs de categorías
+        c.execute("SELECT id FROM Categoria_Producto WHERE descripcion='Comida'")
+        id_comida = c.fetchone()[0]
+        c.execute("SELECT id FROM Categoria_Producto WHERE descripcion='Bebida'")
+        id_bebida = c.fetchone()[0]
+        c.execute("SELECT id FROM Categoria_Producto WHERE descripcion='Otros'")
+        id_otros = c.fetchone()[0]
+
+        productos = [
+            # codigo, nombre, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id
+            ('CHOR', 'Choripán', 1500, 3000, 50, 3, id_comida),
+            ('HAMB', 'Hamburguesa', 1600, 3000, 50, 3, id_comida),
+            ('VASO', 'Vaso Gaseosa', 300, 1500, 999, 5, id_bebida),
+            ('JARR', 'Jarra Gaseosa', 800, 2000, 999, 5, id_bebida),
+            ('AGUA', 'Agua', 600, 1000, 50, 3, id_bebida),
+            ('CERV', 'Cerveza', 1000, 2000, 999, 3, id_bebida),
+            ('VINO', 'Vino', 1000, 2000, 999, 3, id_bebida),
+            ('FERN', 'Fernet', 3000, 5000, 999, 3, id_bebida),
+            ('AGMT', 'Agua Mate', 200, 1000, 50, 3, id_bebida),
+            ('GATO', 'Gatorade', 1000, 2500, 50, 3, id_bebida)
+        ]
+        c.executemany("INSERT INTO products (codigo_producto, nombre, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id) VALUES (?, ?, ?, ?, ?, ?, ?)", productos)
+        print("Productos y categorías cargados")
+
+    # Insertar usuarios por defecto si no existen
+    c.execute("SELECT COUNT(*) FROM usuarios")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO usuarios (usuario, password, rol) VALUES (?, ?, ?)", ("admin", "admin123", "administrador"))
+        c.execute("INSERT INTO usuarios (usuario, password, rol) VALUES (?, ?, ?)", ("cajero", "cajero123", "cajero"))
+
+    conn.commit()
+    conn.close()
+    print("Base de datos inicializada.")
+
+# Función para registrar errores
+def log_error(fecha_hora, modulo, mensaje):
+
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO error_log (fecha_hora, modulo, mensaje) VALUES (?, ?, ?)", (fecha_hora, modulo, mensaje))
+            conn.commit()
+        finally:
+            try:
+                cursor.close()
+                conn.close()
+            except Exception as e:
+                pass
+

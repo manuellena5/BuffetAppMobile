@@ -1,0 +1,54 @@
+Crear un ejecutable .exe con todas las librerías incluidas (portable)
+Sigue estos pasos desde la terminal integrada de VS Code:
+
+Prepara tu entorno
+
+python -m venv venv          # (opcional) crear entorno virtual
+venv\Scripts\activate        # activar entorno virtual
+pip install --upgrade pip
+pip install -r requirements.txt  # instala dependencias de tu proyecto
+pip install pyinstaller
+Estructura mínima de tu proyecto
+
+tu_proyecto/
+├─ main.py            # tu script principal
+├─ requirements.txt   # (opcional) lista de dependencias
+└─ recursos/          # (opcional) archivos adicionales que quieras incluir
+Comando para generar el .exe
+
+Ejecuta desde la raíz del proyecto:
+
+pyinstaller --onefile --name TuPrograma main.py
+--onefile empaqueta todo en un único .exe (portátil).
+
+--name permite darle un nombre al ejecutable.
+
+main.py es tu archivo principal; cámbialo según corresponda.
+
+Después de ejecutarlo:
+
+La carpeta dist/ contendrá TuPrograma.exe.
+
+La carpeta build/ y el archivo TuPrograma.spec son archivos intermedios que puedes conservar o eliminar.
+
+Incluir recursos adicionales (opcional)
+Si tu programa usa archivos externos (imágenes, configuraciones, etc.), agrégalos con --add-data:
+
+pyinstaller --onefile --name TuPrograma \
+    --add-data "recursos;recursos" main.py
+En Windows, los pares origen;destino se separan con ;.
+
+Probar el ejecutable
+
+Copia el .exe de dist/ a otra carpeta o máquina.
+
+Ejecuta TuPrograma.exe directamente; no debe requerir instalación adicional.
+
+Crear un script de automatización (opcional)
+Puedes colocar el comando en un archivo build_exe.bat para ejecutarlo con doble clic:
+
+@echo off
+call venv\Scripts\activate
+pyinstaller --onefile --name TuPrograma main.py
+pause
+Con esto obtendrás un ejecutable independiente que puedes distribuir sin instalar librerías en la máquina destino.
