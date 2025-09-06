@@ -44,10 +44,12 @@ class DetalleCajaFrame(tk.Frame):
         # Panel principal de KPIs
         kpi_frame = tk.Frame(self, bg=COLORS['background'])
         kpi_frame.grid(row=0, column=0, sticky="nsew", pady=(0,15))
-        
-        # Frame para los KPIs
+        # Frame para los KPIs (primera fila)
         self.kpis = tk.Frame(kpi_frame, bg=COLORS['background'])
-        self.kpis.pack(fill='x', pady=(0,10))
+        self.kpis.pack(fill='x', pady=(0,6))
+        # Segunda fila de KPIs para elementos más anchos (ventas totales)
+        self.kpis_row2 = tk.Frame(kpi_frame, bg=COLORS['background'])
+        self.kpis_row2.pack(fill='x', pady=(6,10))
         
     def create_kpi(self, parent, icon, title, value, bg_color, fg_color):
         f = tk.Frame(parent, bg=bg_color, padx=10, pady=5)
@@ -75,7 +77,7 @@ class DetalleCajaFrame(tk.Frame):
             cat_frame,
             columns=('categoria', 'monto'),
             show='headings',
-            height=6,
+            height=4,
             style='App.Treeview'
         )
         self.cat_tree.heading('categoria', text='Categoría')
@@ -93,7 +95,7 @@ class DetalleCajaFrame(tk.Frame):
             prod_frame,
             columns=('producto', 'cant', 'monto'),
             show='headings',
-            height=8,
+            height=12,
             style='App.Treeview'
         )
         self.prod_tree.heading('producto', text='Producto')
@@ -155,8 +157,7 @@ class DetalleCajaFrame(tk.Frame):
         self.btn_imprimir.pack(fill='x', pady=2)
         themed_button(btn_frame, text="📊 Exportar Excel",
                      command=self._exportar_excel).pack(fill='x', pady=2)
-        themed_button(btn_frame, text="📄 Exportar PDF",
-                     command=self._exportar_pdf).pack(fill='x', pady=2)
+    # Export PDF button removed from closure panel; export available from preview
 
         # Bind para cálculo en vivo
         self.conteo_entry.bind('<KeyRelease>', self._calcular_diferencia)
@@ -411,10 +412,11 @@ class DetalleCajaFrame(tk.Frame):
                     pass
             # Ventas totales (destacado)
             try:
-                ventas_frame = tk.Frame(self.kpis, bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')))
-                ventas_frame.pack(side='left', padx=5, fill='y')
-                tk.Label(ventas_frame, text="📊 Ventas totales", bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), fg=FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')), font=FONTS.get('title')).pack(padx=10, pady=(5,0))
-                tk.Label(ventas_frame, text=format_currency(getattr(self, 'total_ventas', total_ventas)), bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), fg=FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')), font=FONTS.get('title')).pack(padx=10, pady=(0,5))
+                # Mostrar ventas totales en su propio renglón (ancho completo)
+                ventas_frame = tk.Frame(self.kpis_row2, bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')))
+                ventas_frame.pack(side='top',  padx=5, pady=(5,0))
+                tk.Label(ventas_frame, text="📊 Ventas totales", bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), fg=FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')), font=FONTS.get('title')).pack(anchor='w', padx=10, pady=(5,0))
+                tk.Label(ventas_frame, text=format_currency(getattr(self, 'total_ventas', total_ventas)), bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), fg=FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')), font=FONTS.get('title')).pack(anchor='w', padx=10, pady=(0,5))
             except Exception:
                 pass
             # Cargar tablas: categorías
@@ -750,7 +752,17 @@ class DetalleCajaFrame(tk.Frame):
                 y -= 20
                 c.drawString(50, y, f"Transferencias: {getattr(self, 'transferencias_final', self.transf_entry.get())}")
                 y -= 20
-                c.drawString(50, y, f"Diferencia: {self.diff_label.cget('text')}")
+                # Mostrar diferencia con signo (usar valor numérico si es posible)
+                try:
+                    dlab = getattr(self, 'diferencia_db', None)
+                    if dlab is None:
+                        # intentar extraer del label
+                        lbl = self.diff_label.cget('text')
+                        dlab = lbl.split()[-1]
+                    dnum = float(str(dlab).replace('$','').replace(',', '.'))
+                except Exception:
+                    dnum = 0.0
+                c.drawString(50, y, f"Diferencia: {format_currency(dnum, include_sign=True)}")
                 y -= 20
                 try:
                     c.drawString(50, y, f"Tickets anulados: {getattr(self, 'tickets_anulados', 0)}")
@@ -778,7 +790,7 @@ class DetalleCajaFrame(tk.Frame):
                         y -= 18
                         c.setFont("Helvetica", 10)
                         for r in items_rows_pdf:
-                            line = f"{r[0]} ({int(r[1])} x {format_currency(r[2])})"
+                            line = f"({r[0]} x {int(r[1])}) = {format_currency(r[2])}"
                             c.drawString(60, y, line)
                             y -= 14
                             if y < 60:
@@ -794,7 +806,16 @@ class DetalleCajaFrame(tk.Frame):
                     f.write(f"Codigo Caja: {getattr(self, 'codigo_caja', self.caja_id)}\n")
                     f.write(f"Fondo inicial: {getattr(self, 'fondo_inicial', self.conteo_entry.get())}\n")
                     f.write(f"Transferencias: {getattr(self, 'transferencias_final', self.transf_entry.get())}\n")
-                    f.write(f"Diferencia: {self.diff_label.cget('text')}\n")
+                    # intentar escribir diferencia con signo
+                    try:
+                        dlab2 = getattr(self, 'diferencia_db', None)
+                        if dlab2 is None:
+                            lbl2 = self.diff_label.cget('text')
+                            dlab2 = lbl2.split()[-1]
+                        dnum2 = float(str(dlab2).replace('$','').replace(',', '.'))
+                    except Exception:
+                        dnum2 = 0.0
+                    f.write(f"Diferencia: {format_currency(dnum2, include_sign=True)}\n")
                     try:
                         f.write(f"Tickets anulados: {getattr(self, 'tickets_anulados', 0)}\n")
                     except Exception:
@@ -816,7 +837,7 @@ class DetalleCajaFrame(tk.Frame):
                             if trows:
                                 f.write('\nItems vendidos:\n')
                                 for r in trows:
-                                    f.write(f"- {r[0]} ({int(r[1])} x {format_currency(r[2])})\n")
+                                    f.write(f"({r[0]} x {int(r[1])}) = {format_currency(r[2])}\n")
                     except Exception:
                         pass
             # abrir automaticamente
@@ -838,30 +859,17 @@ class DetalleCajaFrame(tk.Frame):
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()
-                
-                # Obtener datos de la caja
-                cursor.execute("""
-                    SELECT cd.*, d.descripcion as disciplina
-                    FROM caja_diaria cd
-                    LEFT JOIN disciplinas d ON d.codigo = cd.disciplina
-                    WHERE cd.id = ?
-                """, (self.caja_id,))
-                caja = cursor.fetchone()
-                
-                if not caja:
-                    messagebox.showerror("Error", "No se encontró la caja")
-                    return
-                
-                # Componer el ticket
+                # Build ticket using attributes already loaded in the frame (safe fallbacks)
                 ticket = []
                 ticket.append("=" * 40)
                 ticket.append("CIERRE DE CAJA".center(40))
                 ticket.append("=" * 40)
-                ticket.append(f"Fecha: {caja[1]}")
-                ticket.append(f"Apertura: {caja[2]}")
-                ticket.append(f"Cierre: {caja[3]}")
-                ticket.append(f"Responsable: {caja[5]}")
-                ticket.append(f"Disciplina: {caja[-1]}")
+                ticket.append(f"Codigo caja: {getattr(self, 'codigo_caja', '')}")
+                ticket.append(f"Fecha apertura: {getattr(self, 'fecha', '')} {getattr(self, 'hora_apertura', '')}")
+                ticket.append(f"Usuario apertura: {getattr(self, 'usuario_apertura', '')}")
+                ticket.append(f"Disciplina: {getattr(self, 'nombre_disciplina', '')}")
+                ticket.append(f"Fecha cierre: {getattr(self, 'fecha', '')} {getattr(self, 'hora_cierre', '')}")
+                ticket.append(f"Usuario cierre: {getattr(self, 'usuario_cierre', '')}")
                 ticket.append("-" * 40)
                 
                 # Totales por método de pago
@@ -885,22 +893,131 @@ class DetalleCajaFrame(tk.Frame):
                 ticket.append(f"TOTAL: {format_currency(total_general)}")
                 ticket.append("-" * 40)
                 
-                # Información de cierre
-                ticket.append(f"Fondo inicial: {format_currency(caja[8])}")
-                ticket.append(f"Conteo final: {format_currency(caja[10])}")
-                ticket.append(f"Transferencias: {format_currency(caja[11])}")
-                ticket.append(f"Diferencia: {format_currency(caja[12])}")
-                # intentar añadir anulados si la columna existe/está presente
+                # Información de cierre (usar atributos para robustez)
                 try:
-                    ticket.append(f"Tickets anulados: {getattr(self, 'tickets_anulados', '0')}")
+                    ticket.append(f"Fondo inicial: {format_currency(getattr(self, 'fondo_inicial', 0))}")
+                    ticket.append(f"Conteo final: {format_currency(getattr(self, 'conteo_efectivo_final', getattr(self, 'conteo_entry', '') or 0))}")
+                    ticket.append(f"Transferencias: {format_currency(getattr(self, 'transferencias_final', 0))}")
+                    # preferir diferencia almacenada si existe
+                    diff_val = getattr(self, 'diferencia_db', None)
+                    if diff_val is None:
+                        # intentar parsear del label (fallback)
+                        try:
+                            # label tiene formato '🧮 Diferencia: $ 0,00' o similar
+                            label = self.diff_label.cget('text')
+                            # extraer último token
+                            diff_val = label.split()[-1]
+                        except Exception:
+                            diff_val = 0
+                    # Mostrar diferencia con signo
+                    try:
+                        dnum = float(diff_val)
+                    except Exception:
+                        try:
+                            # parsear texto con moneda
+                            dnum = float(str(diff_val).replace('$', '').replace(',', '.'))
+                        except Exception:
+                            dnum = 0.0
+                    ticket.append(f"Diferencia: {format_currency(dnum, include_sign=True)}")
                 except Exception:
                     pass
+                # Tickets anulados (desde atributo calculado)
+                ticket.append(f"Tickets anulados: {getattr(self, 'tickets_anulados', 0)}")
                 ticket.append("=" * 40)
                 
-                # TODO: Implementar impresión física
-                # Por ahora solo mostrar vista previa
+                # Items vendidos: Producto, Cantidad, Monto
+                try:
+                    cursor.execute("""
+                        SELECT p.nombre, SUM(vi.cantidad) as cant, SUM(vi.cantidad * vi.precio_unitario) as total
+                        FROM venta_items vi
+                        JOIN tickets t ON t.id = vi.ticket_id
+                        JOIN ventas v ON v.id = t.venta_id
+                        JOIN products p ON p.id = vi.producto_id
+                        WHERE v.caja_id = ?
+                        GROUP BY p.nombre
+                        ORDER BY total DESC
+                    """, (self.caja_id,))
+                    items = cursor.fetchall()
+                    if items:
+                        ticket.append("ITEMS VENDIDOS:")
+                        ticket.append("(Producto x Cant) = Monto Total")
+                        ticket.append("-" * 40)
+                        for nombre, cant, total in items:
+                            ticket.append(f"({nombre} x {int(cant)}) = {format_currency(total)}")
+                except Exception:
+                    pass
+
+                # Mostrar vista previa en ventana con acciones: Imprimir / Exportar a PDF
                 preview = "\n".join(ticket)
-                messagebox.showinfo("Vista previa del ticket", preview)
+                try:
+                    win = tk.Toplevel(self)
+                    win.title('Vista previa ticket')
+                    txt = tk.Text(win, width=60, height=30, wrap='none')
+                    txt.insert('1.0', preview)
+                    txt.config(state='disabled')
+                    txt.pack(fill='both', expand=True)
+                    btn_frame = tk.Frame(win)
+                    btn_frame.pack(fill='x', pady=6)
+
+                    def do_print():
+                        # Escribir archivo temporal y lanzar impresión en Windows
+                        try:
+                            import tempfile, os, sys
+                            fd, path = tempfile.mkstemp(suffix='.txt')
+                            os.close(fd)
+                            with open(path, 'w', encoding='utf-8') as f:
+                                f.write(preview)
+                            if sys.platform.startswith('win'):
+                                # use default print verb
+                                os.startfile(path, 'print')
+                            else:
+                                # fallback: open in default app
+                                import subprocess
+                                subprocess.Popen(['lp', path])
+                        except Exception as e:
+                            messagebox.showerror('Imprimir', f'Error al imprimir: {e}')
+
+                    def do_export_pdf():
+                        # Exportar a PDF: usar reportlab si está disponible
+                        try:
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.pdfgen import canvas
+                            import tempfile, os
+                            fd, path = tempfile.mkstemp(suffix='.pdf')
+                            os.close(fd)
+                            c = canvas.Canvas(path, pagesize=A4)
+                            y = 800
+                            c.setFont('Helvetica', 10)
+                            for line in ticket:
+                                c.drawString(40, y, str(line))
+                                y -= 14
+                                if y < 60:
+                                    c.showPage()
+                                    y = 800
+                            c.save()
+                            # abrir el pdf generado
+                            if os.name == 'nt':
+                                os.startfile(path)
+                            else:
+                                import subprocess
+                                subprocess.Popen(['xdg-open', path])
+                        except Exception:
+                            # fallback: guardar como .txt
+                            try:
+                                from tkinter import filedialog as _fd
+                                fpath = _fd.asksaveasfilename(defaultextension='.txt', filetypes=[('Text','*.txt')])
+                                if fpath:
+                                    with open(fpath, 'w', encoding='utf-8') as f:
+                                        f.write(preview)
+                                    messagebox.showinfo('Exportar', f'Archivo guardado: {fpath}')
+                            except Exception as e:
+                                messagebox.showerror('Exportar', f'Error exportando: {e}')
+
+                    tk.Button(btn_frame, text='Imprimir', command=do_print).pack(side='left', padx=6)
+                    tk.Button(btn_frame, text='Exportar a PDF', command=do_export_pdf).pack(side='left', padx=6)
+                except Exception:
+                    # Fallback simple si no se puede abrir Toplevel
+                    messagebox.showinfo('Vista previa del ticket', preview)
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error al imprimir: {str(e)}")
