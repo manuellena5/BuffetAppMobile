@@ -959,21 +959,84 @@ class DetalleCajaFrame(tk.Frame):
                     btn_frame = tk.Frame(win)
                     btn_frame.pack(fill='x', pady=6)
 
+                    # (Se omite control de 'no cortar' — la impresión añadirá corte automáticamente)
+
                     def do_print():
-                        # Escribir archivo temporal y lanzar impresión en Windows
+                        # Intentar imprimir directamente a una impresora POS en Windows usando win32print (pywin32).
+                        # Si no está disponible o falla, caer al flujo anterior que genera un PDF y lo envía a imprimir.
                         try:
-                            import tempfile, os, sys
-                            fd, path = tempfile.mkstemp(suffix='.txt')
-                            os.close(fd)
-                            with open(path, 'w', encoding='utf-8') as f:
-                                f.write(preview)
+                            import sys, tempfile, os
+                            # Solo intentamos escritura directa en Windows (POS normalmente conectado/instalado allí)
                             if sys.platform.startswith('win'):
-                                # use default print verb
-                                os.startfile(path, 'print')
+                                try:
+                                    import win32print
+                                    # Obtener impresora por defecto
+                                    printer_name = win32print.GetDefaultPrinter()
+                                    hPrinter = win32print.OpenPrinter(printer_name)
+                                    try:
+                                        # Preparar texto del ticket como bytes; al final añadiremos
+                                        # secuencias ESC/POS para forzar corte del papel.
+                                        text = "\n".join(ticket) + "\n\n"
+                                        # Probar codificaciones comunes para impresoras POS
+                                        try:
+                                            data = text.encode('cp437', errors='replace')
+                                        except Exception:
+                                            try:
+                                                data = text.encode('cp1252', errors='replace')
+                                            except Exception:
+                                                data = text.encode('utf-8', errors='replace')
+
+                                        # Añadir secuencias comunes de corte de papel (ESC/POS)
+                                        try:
+                                            # GS V 0 (partial cut) or GS V 1 (full) — algunos drivers usan 0
+                                            cut_seqs = [b'\x1dV\x00', b'\x1dV\x01', b'\x1b\x69', b'\x1b\x6d']
+                                            # añadir nuevas líneas y luego la primera secuencia válida
+                                            data = data + b'\n\n\n'
+                                            # concatenar una secuencia de corte (no todas para evitar duplicados extremos)
+                                            data = data + cut_seqs[0]
+                                        except Exception:
+                                            pass
+
+                                        # Enviar como RAW al spooler
+                                        win32print.StartDocPrinter(hPrinter, 1, ("Ticket", None, "RAW"))
+                                        win32print.StartPagePrinter(hPrinter)
+                                        win32print.WritePrinter(hPrinter, data)
+                                        win32print.EndPagePrinter(hPrinter)
+                                        win32print.EndDocPrinter(hPrinter)
+                                        messagebox.showinfo('Imprimir', f'Enviado a impresora: {printer_name}')
+                                        return
+                                    finally:
+                                        try:
+                                            win32print.ClosePrinter(hPrinter)
+                                        except Exception:
+                                            pass
+                                except ImportError:
+                                    # pywin32 no disponible: caemos a PDF
+                                    pass
+                                except Exception as e:
+                                    # Error al usar win32print: mostrar aviso y caer a PDF
+                                    messagebox.showwarning('Imprimir', f'No se pudo imprimir directamente: {e}\nSe intentará por PDF.')
+
+                            # Fallback: generar un PDF temporal y enviarlo a imprimir (método seguro)
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.pdfgen import canvas
+                            fd, pdf_path = tempfile.mkstemp(suffix='.pdf')
+                            os.close(fd)
+                            c = canvas.Canvas(pdf_path, pagesize=A4)
+                            y = 800
+                            c.setFont('Helvetica', 10)
+                            for line in ticket:
+                                c.drawString(40, y, str(line))
+                                y -= 14
+                                if y < 60:
+                                    c.showPage()
+                                    y = 800
+                            c.save()
+                            if sys.platform.startswith('win'):
+                                os.startfile(pdf_path, 'print')
                             else:
-                                # fallback: open in default app
                                 import subprocess
-                                subprocess.Popen(['lp', path])
+                                subprocess.Popen(['lp', pdf_path])
                         except Exception as e:
                             messagebox.showerror('Imprimir', f'Error al imprimir: {e}')
 
