@@ -20,6 +20,17 @@ FONTS = {
     'button_bold': (FONT_FAMILY, 12, 'bold')
 }
 
+# Parámetros específicos para la vista de ventas / carrito (fáciles de ajustar desde aquí)
+CART = {
+    'button_font': (FONT_FAMILY, 20, 'bold'),   # botones principales (Cobrar/Cancelar)
+    'button_padx': 20,
+    'button_pady': 10,
+    'total_font': (FONT_FAMILY, 22, 'bold'),    # etiqueta Total
+    'item_font': (FONT_FAMILY, 14),             # texto de items en carrito
+    'subtotal_font': (FONT_FAMILY, 14, 'bold'), # subtotal por item
+    'qty_button_font': (FONT_FAMILY, 12),       # botones +/-
+}
+
 # Fuentes predefinidas para compatibilidad
 TITLE_FONT = FONTS['title']
 TEXT_FONT = FONTS['normal']
@@ -72,7 +83,7 @@ _BASE_BUTTON_STYLE = {
 
 # Variant styles for specific screens
 BUTTON_STYLES = {
-    "ventas": {"font": (FONT_FAMILY, 18, "bold"), "width": 12},
+    "ventas": {"font": CART['button_font'], "padx": CART['button_padx'], "pady": CART['button_pady'], "width": 12},
     "productos": {"width": 7, "height": 1},
 }
 

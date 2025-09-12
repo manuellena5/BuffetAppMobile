@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 from db_utils import get_connection
-from theme import FONT_FAMILY
+from theme import FONT_FAMILY, CART
 
 # Utilidad para cargar productos
 
@@ -135,6 +135,7 @@ class VentasViewNew(tk.Frame):
         for widget in self.panel_carrito.winfo_children():
             widget.destroy()
         tk.Label(self.panel_carrito, text="Carrito", font=(FONT_FAMILY, 16, "bold"), bg="#FFFFFF").pack(anchor="w", padx=12, pady=(8,0))
+
         # Encabezados alineados con columnas (izquierda expand, centro para cantidad, derecha para subtotal)
         header = tk.Frame(self.panel_carrito, bg="#FFFFFF")
         header.pack(fill="x", padx=12, pady=(8,0))
@@ -147,9 +148,13 @@ class VentasViewNew(tk.Frame):
         tk.Label(left_h, text="Ítem", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF", anchor="w").pack(anchor="w")
         tk.Label(mid_h, text="Cant.", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF").pack()
         tk.Label(right_h, text="Subtotal", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF").pack(anchor="e")
+
+        # Frame que contendrá los items
         self.items_frame = tk.Frame(self.panel_carrito, bg="#FFFFFF")
         self.items_frame.pack(fill="both", expand=True, padx=12, pady=(0,8))
-        self.label_total = tk.Label(self.panel_carrito, text="Total: $0", font=(FONT_FAMILY, 15, "bold"), bg="#FFFFFF", fg="#1E293B")
+
+        # Label Total más grande para facilidad de lectura en pantalla táctil
+        self.label_total = tk.Label(self.panel_carrito, text="Total: $0", font=CART['total_font'], bg="#FFFFFF", fg="#1E293B")
         self.label_total.pack(anchor="e", padx=12, pady=(0,8))
 
         # Checkbox imprimir ticket
@@ -159,18 +164,19 @@ class VentasViewNew(tk.Frame):
         # Acciones: Cobrar (izquierda) y Cancelar (derecha) con leyenda de atajo pequeña
         acciones = tk.Frame(self.panel_carrito, bg="#FFFFFF")
         acciones.pack(fill="x", padx=12, pady=(0,8))
+
         # Cobrar: botón + pequeña etiqueta de atajo debajo
         cobrar_box = tk.Frame(acciones, bg="#FFFFFF")
         cobrar_box.pack(side="left", padx=(0,8))
-        btn_cobrar = tk.Button(cobrar_box, text="Cobrar", command=self._cobrar, bg="#10B981", fg="#fff", font=(FONT_FAMILY, 12, "bold"))
+        btn_cobrar = tk.Button(cobrar_box, text="Cobrar", command=self._cobrar, bg="#10B981", fg="#fff", font=CART['button_font'], padx=CART['button_padx'], pady=CART['button_pady'])
         btn_cobrar.pack()
-        tk.Label(cobrar_box, text="Ctrl+Enter", font=(FONT_FAMILY, 9), bg="#FFFFFF", fg="#1E293B").pack()
+        tk.Label(cobrar_box, text="Ctrl+Enter", font=(FONT_FAMILY, 10), bg="#FFFFFF", fg="#1E293B").pack()
 
         cancelar_box = tk.Frame(acciones, bg="#FFFFFF")
         cancelar_box.pack(side="right")
-        btn_cancelar = tk.Button(cancelar_box, text="Cancelar", command=self._cancelar, bg="#F43F5E", fg="#fff", font=(FONT_FAMILY, 12, "bold"))
+        btn_cancelar = tk.Button(cancelar_box, text="Cancelar", command=self._cancelar, bg="#F43F5E", fg="#fff", font=CART['button_font'], padx=CART['button_padx'], pady=CART['button_pady'])
         btn_cancelar.pack()
-        tk.Label(cancelar_box, text="Ctrl+<-", font=(FONT_FAMILY, 9), bg="#FFFFFF", fg="#1E293B").pack()
+        tk.Label(cancelar_box, text="Ctrl+<-", font=(FONT_FAMILY, 10), bg="#FFFFFF", fg="#1E293B").pack()
 
         # Finalmente actualizar la lista de items
         self._actualizar_carrito()
@@ -186,13 +192,14 @@ class VentasViewNew(tk.Frame):
             row = tk.Frame(self.items_frame, bg="#F8FAFC" if idx%2==0 else "#FFFFFF")
             row.pack(fill="x")
             # aumentar tamaño de letra en items del carrito (+2 puntos)
-            tk.Label(row, text=nombre, font=(FONT_FAMILY, 12), bg=row['bg']).pack(side="left", padx=4, fill="x", expand=True)
+            tk.Label(row, text=nombre, font=CART['item_font'], bg=row['bg']).pack(side="left", padx=8, fill="x", expand=True)
             qty_frame = tk.Frame(row, bg=row['bg'])
             qty_frame.pack(side="left")
-            tk.Button(qty_frame, text="-", command=lambda i=idx: self._restar_item(i), width=2).pack(side="left")
-            tk.Label(qty_frame, text=str(cantidad), width=3, anchor="center", bg=row['bg']).pack(side="left")
-            tk.Button(qty_frame, text="+", command=lambda i=idx: self._sumar_item(i), width=2).pack(side="left")
-            tk.Label(row, text=f"$ {subtotal:,.0f}", font=(FONT_FAMILY, 10), bg=row['bg'], anchor="e", width=10).pack(side="right", padx=4)
+            # Botones +/- más grandes para facilidad táctil
+            tk.Button(qty_frame, text="-", command=lambda i=idx: self._restar_item(i), width=3, font=CART['qty_button_font']).pack(side="left", padx=2, pady=2)
+            tk.Label(qty_frame, text=str(cantidad), width=4, anchor="center", bg=row['bg'], font=CART['qty_button_font']).pack(side="left", padx=2)
+            tk.Button(qty_frame, text="+", command=lambda i=idx: self._sumar_item(i), width=3, font=CART['qty_button_font']).pack(side="left", padx=2, pady=2)
+            tk.Label(row, text=f"$ {subtotal:,.0f}", font=CART['subtotal_font'], bg=row['bg'], anchor="e", width=12).pack(side="right", padx=8)
         self.label_total.config(text=f"Total: $ {self.total:,.0f}")
 
     def _get_stock(self, prod_id):
