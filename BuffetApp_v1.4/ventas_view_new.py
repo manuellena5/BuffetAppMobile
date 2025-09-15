@@ -115,11 +115,52 @@ class VentasViewNew(tk.Frame):
             display_stock = '∞' if self.stock_dict.get(prod_id, 0) == 999 else self.stock_dict.get(prod_id, 0)
             stock_lbl = tk.Label(card, text=f"Stock: {display_stock}", font=(FONT_FAMILY, 11), fg="#475569", bg="#FFFFFF")
             stock_lbl.pack(side="top", anchor="w", padx=16)
-            btn_add = tk.Button(card, text="Agregar", command=lambda p=prod: self._agregar_al_carrito(p), bg="#6366F1", fg="#fff", font=(FONT_FAMILY, 12, "bold"), relief="raised")
-            btn_add.pack(side="right", padx=16, pady=10)
+            # (El botón "Agregar" fue removido; la tarjeta es clicable)
             tecla_lbl = tk.Label(card, text=tecla, font=(FONT_FAMILY,10), fg="#475569", bg="#FFFFFF")
             tecla_lbl.pack(side="right", padx=8, pady=10)
-            self.botones_funcion.append(lambda p=prod: self._agregar_al_carrito(p))
+            # Estilizar la tarjeta para que parezca un botón
+            try:
+                card.config(relief='raised', bd=2, highlightthickness=0, cursor='hand2')
+            except Exception:
+                pass
+
+            # Animación visual: cambio de fondo al hover y al click
+            def _on_click(e, p=prod, widget=card):
+                try:
+                    # Animación simple al click (cambiar fondo y restaurar después)
+                    orig = getattr(widget, '_orig_bg', widget.cget('bg'))
+                    widget.config(bg='#E6EEF8')
+                    self.after(120, lambda w=widget, o=orig: (w.config(bg=o) if (hasattr(w, 'winfo_exists') and w.winfo_exists()) else None))
+                except Exception:
+                    pass
+                # Agregar producto
+                try:
+                    self._agregar_al_carrito(p)
+                except Exception:
+                    pass
+
+            # Bind only click on the card and its children. Removed Enter/Leave hover handlers to avoid resizes/flicker.
+            try:
+                card.unbind('<Enter>')
+                card.unbind('<Leave>')
+            except Exception:
+                pass
+            try:
+                card.bind('<Button-1>', _on_click)
+            except Exception:
+                pass
+            for w in (name_lbl, price_lbl, stock_lbl, tecla_lbl,):
+                try:
+                    w.unbind('<Enter>')
+                    w.unbind('<Leave>')
+                except Exception:
+                    pass
+                try:
+                    w.bind('<Button-1>', lambda e, p=prod, widget=card: _on_click(e, p, widget))
+                except Exception:
+                    pass
+            # Guardar referencia por si se quiere usar más adelante
+            self.botones_funcion.append(lambda e=None, p=prod: self._agregar_al_carrito(p))
 
     def recargar_productos(self):
         """Recargar listado de productos desde la DB y redibujar únicamente las tarjetas."""
@@ -136,36 +177,74 @@ class VentasViewNew(tk.Frame):
             widget.destroy()
         tk.Label(self.panel_carrito, text="Carrito", font=(FONT_FAMILY, 16, "bold"), bg="#FFFFFF").pack(anchor="w", padx=12, pady=(8,0))
 
-        # Encabezados alineados con columnas (izquierda expand, centro para cantidad, derecha para subtotal)
-        header = tk.Frame(self.panel_carrito, bg="#FFFFFF")
-        header.pack(fill="x", padx=12, pady=(8,0))
-        left_h = tk.Frame(header, bg="#FFFFFF")
-        left_h.pack(side="left", fill="x", expand=True)
-        mid_h = tk.Frame(header, bg="#FFFFFF", width=80)
-        mid_h.pack(side="left")
-        right_h = tk.Frame(header, bg="#FFFFFF", width=110)
-        right_h.pack(side="right")
-        tk.Label(left_h, text="Ítem", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF", anchor="w").pack(anchor="w")
-        tk.Label(mid_h, text="Cant.", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF").pack()
-        tk.Label(right_h, text="Subtotal", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF").pack(anchor="e")
+        # Contenedor que agrupa el encabezado (fixed) y el area scrollable (canvas)
+        list_wrap = tk.Frame(self.panel_carrito, bg="#FFFFFF")
+        list_wrap.pack(fill="both", expand=True, padx=12, pady=(8,0))
 
-        # Frame que contendrá los items
-        self.items_frame = tk.Frame(self.panel_carrito, bg="#FFFFFF")
-        self.items_frame.pack(fill="both", expand=True, padx=12, pady=(0,8))
+        # Encabezados alineados con columnas (usamos grid dentro de list_wrap)
+        header = tk.Frame(list_wrap, bg="#FFFFFF")
+        header.grid(row=0, column=0, columnspan=3, sticky="we")
+        header.grid_columnconfigure(0, weight=1)
+        # dar un espacio fijo a la columna de cantidad para centrar el encabezado
+        header.grid_columnconfigure(1, weight=0, minsize=320)
+        header.grid_columnconfigure(2, weight=0)
+        tk.Label(header, text="Ítem", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF", anchor="w").grid(row=0, column=0, sticky="w", padx=8)
+        # Centrar 'Cant.' sobre la columna de cantidad
+        tk.Label(header, text="Cant.", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF").grid(row=0, column=1)
+        tk.Label(header, text="Subtotal", font=(FONT_FAMILY, 11, "bold"), bg="#FFFFFF").grid(row=0, column=2, sticky="e", padx=8)
 
-        # Label Total más grande para facilidad de lectura en pantalla táctil
+        # Area scrollable para items: canvas con frame interno y scrollbar vertical.
+        items_canvas = tk.Canvas(list_wrap, bg="#FFFFFF", highlightthickness=0, height=240)
+        items_vscroll = tk.Scrollbar(list_wrap, orient=tk.VERTICAL, command=items_canvas.yview)
+        items_canvas.configure(yscrollcommand=items_vscroll.set)
+        list_wrap.grid_rowconfigure(1, weight=1)
+        list_wrap.grid_columnconfigure(0, weight=1)
+        items_canvas.grid(row=1, column=0, sticky="nsew")
+        items_vscroll.grid(row=1, column=2, sticky="ns")
+        self.items_frame = tk.Frame(items_canvas, bg="#FFFFFF")
+        items_window = items_canvas.create_window((0, 0), window=self.items_frame, anchor="nw")
+
+        def _on_canvas_config(e):
+            try:
+                items_canvas.itemconfig(items_window, width=e.width)
+            except Exception:
+                pass
+
+        items_canvas.bind('<Configure>', _on_canvas_config)
+
+        def _on_items_config(event):
+            try:
+                items_canvas.configure(scrollregion=items_canvas.bbox("all"))
+            except Exception:
+                pass
+
+        self.items_frame.bind('<Configure>', _on_items_config)
+
+        def _on_items_mousewheel(event):
+            delta = 0
+            try:
+                if event.delta:
+                    delta = -1 if event.delta > 0 else 1
+            except Exception:
+                if getattr(event, 'num', None) == 4:
+                    delta = -1
+                elif getattr(event, 'num', None) == 5:
+                    delta = 1
+            items_canvas.yview_scroll(delta, "units")
+
+        items_canvas.bind('<Enter>', lambda e: items_canvas.bind_all('<MouseWheel>', _on_items_mousewheel))
+        items_canvas.bind('<Leave>', lambda e: items_canvas.unbind_all('<MouseWheel>'))
+
+        # Colocar Total, checkbox y botones en la parte inferior del panel de carrito
         self.label_total = tk.Label(self.panel_carrito, text="Total: $0", font=CART['total_font'], bg="#FFFFFF", fg="#1E293B")
-        self.label_total.pack(anchor="e", padx=12, pady=(0,8))
+        self.label_total.pack(side="bottom", anchor="e", padx=12, pady=(8,12))
 
-        # Checkbox imprimir ticket
         chk = tk.Checkbutton(self.panel_carrito, text="Imprimir ticket al cobrar", variable=self.imprimir_ticket_var, bg="#FFFFFF", font=(FONT_FAMILY, 10))
-        chk.pack(anchor="w", padx=12, pady=(0,8))
+        chk.pack(side="bottom", anchor="w", padx=12, pady=(0,8))
 
-        # Acciones: Cobrar (izquierda) y Cancelar (derecha) con leyenda de atajo pequeña
         acciones = tk.Frame(self.panel_carrito, bg="#FFFFFF")
-        acciones.pack(fill="x", padx=12, pady=(0,8))
+        acciones.pack(side="bottom", fill="x", padx=12, pady=(0,12))
 
-        # Cobrar: botón + pequeña etiqueta de atajo debajo
         cobrar_box = tk.Frame(acciones, bg="#FFFFFF")
         cobrar_box.pack(side="left", padx=(0,8))
         btn_cobrar = tk.Button(cobrar_box, text="Cobrar", command=self._cobrar, bg="#10B981", fg="#fff", font=CART['button_font'], padx=CART['button_padx'], pady=CART['button_pady'])
@@ -189,17 +268,25 @@ class VentasViewNew(tk.Frame):
             prod_id, nombre, precio, cantidad = item
             subtotal = cantidad * precio
             self.total += subtotal
+            # Usar grid para asegurar alineación: nombre | qty controls | subtotal
             row = tk.Frame(self.items_frame, bg="#F8FAFC" if idx%2==0 else "#FFFFFF")
             row.pack(fill="x")
-            # aumentar tamaño de letra en items del carrito (+2 puntos)
-            tk.Label(row, text=nombre, font=CART['item_font'], bg=row['bg']).pack(side="left", padx=8, fill="x", expand=True)
+            row.grid_columnconfigure(0, weight=1)
+            row.grid_columnconfigure(1, weight=0)
+            row.grid_columnconfigure(2, weight=0)
+            # Nombre a la izquierda y expandible
+            lbl_name = tk.Label(row, text=nombre, font=CART['item_font'], bg=row['bg'], anchor="w")
+            lbl_name.grid(row=0, column=0, sticky="we", padx=8)
+            # Contenedor de cantidad y botones (columna 1)
             qty_frame = tk.Frame(row, bg=row['bg'])
-            qty_frame.pack(side="left")
-            # Botones +/- más grandes para facilidad táctil
-            tk.Button(qty_frame, text="-", command=lambda i=idx: self._restar_item(i), width=3, font=CART['qty_button_font']).pack(side="left", padx=2, pady=2)
+            qty_frame.grid(row=0, column=1, sticky="e", padx=8)
+            # Quiet +/- buttons: flat, no border, background matches row to avoid gray fill
+            tk.Button(qty_frame, text="-", command=lambda i=idx: self._restar_item(i), width=3, font=CART['qty_button_font'], relief='flat', bd=0, highlightthickness=0, bg=row['bg'], activebackground=row['bg']).pack(side="left", padx=1, pady=1)
             tk.Label(qty_frame, text=str(cantidad), width=4, anchor="center", bg=row['bg'], font=CART['qty_button_font']).pack(side="left", padx=2)
-            tk.Button(qty_frame, text="+", command=lambda i=idx: self._sumar_item(i), width=3, font=CART['qty_button_font']).pack(side="left", padx=2, pady=2)
-            tk.Label(row, text=f"$ {subtotal:,.0f}", font=CART['subtotal_font'], bg=row['bg'], anchor="e", width=12).pack(side="right", padx=8)
+            tk.Button(qty_frame, text="+", command=lambda i=idx: self._sumar_item(i), width=3, font=CART['qty_button_font'], relief='flat', bd=0, highlightthickness=0, bg=row['bg'], activebackground=row['bg']).pack(side="left", padx=1, pady=1)
+            # Subtotal a la derecha (columna 2)
+            lbl_sub = tk.Label(row, text=f"$ {subtotal:,.0f}", font=CART['subtotal_font'], bg=row['bg'], anchor="e", width=12)
+            lbl_sub.grid(row=0, column=2, sticky="e", padx=8)
         self.label_total.config(text=f"Total: $ {self.total:,.0f}")
 
     def _get_stock(self, prod_id):

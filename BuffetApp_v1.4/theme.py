@@ -28,7 +28,7 @@ CART = {
     'total_font': (FONT_FAMILY, 22, 'bold'),    # etiqueta Total
     'item_font': (FONT_FAMILY, 14),             # texto de items en carrito
     'subtotal_font': (FONT_FAMILY, 14, 'bold'), # subtotal por item
-    'qty_button_font': (FONT_FAMILY, 12),       # botones +/-
+    'qty_button_font': (FONT_FAMILY, 12),       # botones +/- (aumentado 1 punto)
 }
 
 # Fuentes predefinidas para compatibilidad
