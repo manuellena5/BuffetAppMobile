@@ -43,8 +43,7 @@ class CajaListadoView(tk.Frame):
 		self.btn_frame.pack(side=tk.TOP, fill=tk.X, padx=6, pady=6)
 		tk.Button(self.btn_frame, text='Ver detalle', command=self._btn_ver_detalle).pack(side=tk.LEFT, padx=4)
 		tk.Button(self.btn_frame, text='Refrescar', command=self.cargar_cajas).pack(side=tk.LEFT, padx=4)
-		tk.Button(self.btn_frame, text='Export CSV', command=self.export_csv).pack(side=tk.LEFT, padx=4)
-		tk.Button(self.btn_frame, text='Export Excel', command=self.export_excel).pack(side=tk.LEFT, padx=4)
+		# Export buttons removed per UX request
 
 		# Treeview
 		cols = [c[0] for c in self.COLUMNS]
@@ -206,49 +205,5 @@ class CajaListadoView(tk.Frame):
 		except Exception:
 			pass
 
-	def export_csv(self):
-		if not self.tree.get_children():
-			messagebox.showinfo('Export', 'No hay datos para exportar')
-			return
-		fpath = filedialog.asksaveasfilename(defaultextension='.csv', filetypes=[('CSV files','*.csv')], title='Guardar CSV')
-		if not fpath:
-			return
-		try:
-			with open(fpath, 'w', newline='', encoding='utf-8') as f:
-				writer = csv.writer(f)
-				headers = [h for (_, h) in self.COLUMNS]
-				writer.writerow(headers)
-				for iid in self.tree.get_children():
-					vals = self.tree.item(iid, 'values')
-					writer.writerow(vals)
-			messagebox.showinfo('Export', f'CSV guardado en: {fpath}')
-		except Exception as e:
-			messagebox.showerror('Export', f'Error guardando CSV: {e}')
-
-	def export_excel(self):
-		# Intentar usar openpyxl si está disponible, si no, fallback a CSV
-		try:
-			import openpyxl
-		except Exception:
-			messagebox.showinfo('Export', 'openpyxl no disponible, usando CSV en su lugar')
-			return self.export_csv()
-		fpath = filedialog.asksaveasfilename(defaultextension='.xlsx', filetypes=[('Excel files','*.xlsx')], title='Guardar Excel')
-		if not fpath:
-			return
-		try:
-			wb = openpyxl.Workbook()
-			ws = wb.active
-			headers = [h for (_, h) in self.COLUMNS]
-			ws.append(headers)
-			for iid in self.tree.get_children():
-				vals = list(self.tree.item(iid, 'values'))
-				ws.append(vals)
-			wb.save(fpath)
-			messagebox.showinfo('Export', f'Excel guardado en: {fpath}')
-		except Exception as e:
-			messagebox.showerror('Export', f'Error guardando Excel: {e}')
-
-
-
-
-
+	# def export_csv(self):
+	# 	# Export functions removed: export_csv and export_excel

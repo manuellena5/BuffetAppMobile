@@ -73,7 +73,7 @@ applyTo: '*BuffetApp_v1.4*'
 
 
 * **Listado de cajas** con columnas que hagan wrap para textos largos.
-* **Detalle de caja/Cierre de caja** Brindar kpi y valores de la caja, imprimir tickets y exportar archivos con todos los mismos datos.
+* **Detalle de caja/Cierre de caja** Brindar kpi y valores de la caja, imprimir tickets y exportar archivos con todos los mismos datos. Diferenciar entre caja Local y visitante. 
 * **Ingresos/Retiros**: CRUD mínimo, almacenamiento en DB y visualización en el cierre.
 * **Impresión de tickets**: fijar alto, alinear contenido, aumentar tamaño titular, cortar papel sin espacio extra.
 * **PyInstaller**: ajustar `BuffetApp.spec`/comando para empaquetar; reducir tamaño final si es posible.

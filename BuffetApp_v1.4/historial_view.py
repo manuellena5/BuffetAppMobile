@@ -186,6 +186,11 @@ class HistorialView(tk.Frame):
 
     def cargar_historial(self, fecha_filtrada=None, caja_filtrada=None, pagina=1):
         try:
+            # Refresh caja combo to reflect current caja states (may have changed elsewhere)
+            try:
+                self.actualizar_cajas_combo()
+            except Exception:
+                pass
             self.filtro_fecha = fecha_filtrada
             self.filtro_caja = caja_filtrada
             conn = get_connection()

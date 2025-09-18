@@ -342,6 +342,12 @@ class DetalleCajaFrame(tk.Frame):
 
             btn_add = themed_button(form, text='Agregar movimiento', command=_add_movimiento)
             btn_add.grid(row=2, column=0, columnspan=4, pady=8)
+            # If this caja is closed, disable the add button
+            try:
+                if str(getattr(self, 'estado', '')).lower() == 'cerrada':
+                    btn_add.config(state='disabled')
+            except Exception:
+                pass
 
             _refresh_list()
 
@@ -881,6 +887,26 @@ class DetalleCajaFrame(tk.Frame):
                     items_joined = ' | '.join(f"{r[0]} ({int(r[1])} x {format_currency(r[2])})" for r in items_rows)
                 except Exception:
                     items_joined = ''
+                # compute ingresos/retiros for export (prefer attributes; fall back to summing caja_movimiento)
+                try:
+                    ingresos_val = getattr(self, 'ingresos', None)
+                    retiros_val = getattr(self, 'retiros', None)
+                    if ingresos_val is None or retiros_val is None:
+                        try:
+                            cur2.execute("SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0), COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto ELSE 0 END),0) FROM caja_movimiento WHERE caja_id=?", (self.caja_id,))
+                            mv = cur2.fetchone()
+                            if mv:
+                                if ingresos_val is None:
+                                    ingresos_val = mv[0] or 0
+                                if retiros_val is None:
+                                    retiros_val = mv[1] or 0
+                        except Exception:
+                            ingresos_val = ingresos_val if ingresos_val is not None else 0
+                            retiros_val = retiros_val if retiros_val is not None else 0
+                except Exception:
+                    ingresos_val = getattr(self, 'ingresos', 0) or 0
+                    retiros_val = getattr(self, 'retiros', 0) or 0
+
                 row = [
                     getattr(self, 'codigo_caja', self.caja_id),
                     getattr(self, 'fecha', ''),
@@ -894,8 +920,8 @@ class DetalleCajaFrame(tk.Frame):
                     getattr(self, 'total_teorico', ''),
                     getattr(self, 'conteo_efectivo_final', self.conteo_entry.get()),
                     getattr(self, 'transferencias_final', self.transf_entry.get()),
-                    getattr(self, 'ingresos', ''),
-                    getattr(self, 'retiros', ''),
+                    ingresos_val,
+                    retiros_val,
                     getattr(self, 'diferencia_db', self.diff_label.cget('text')),
                     getattr(self, 'total_tickets', ''),
                     getattr(self, 'observaciones_apertura', ''),
@@ -921,6 +947,28 @@ class DetalleCajaFrame(tk.Frame):
                         items_joined_val = items_joined
                     except Exception:
                         items_joined_val = ''
+                    # compute ingresos/retiros for fallback export
+                    try:
+                        ingresos_val = getattr(self, 'ingresos', None)
+                        retiros_val = getattr(self, 'retiros', None)
+                        if ingresos_val is None or retiros_val is None:
+                            try:
+                                with get_connection() as _conn_tmp:
+                                    _cur_tmp = _conn_tmp.cursor()
+                                    _cur_tmp.execute("SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0), COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto ELSE 0 END),0) FROM caja_movimiento WHERE caja_id=?", (self.caja_id,))
+                                    _mv = _cur_tmp.fetchone()
+                                    if _mv:
+                                        if ingresos_val is None:
+                                            ingresos_val = _mv[0] or 0
+                                        if retiros_val is None:
+                                            retiros_val = _mv[1] or 0
+                            except Exception:
+                                ingresos_val = ingresos_val if ingresos_val is not None else 0
+                                retiros_val = retiros_val if retiros_val is not None else 0
+                    except Exception:
+                        ingresos_val = getattr(self, 'ingresos', 0) or 0
+                        retiros_val = getattr(self, 'retiros', 0) or 0
+
                     values = [
                         str(getattr(self, 'codigo_caja', self.caja_id)),
                         str(getattr(self, 'fecha', '')),
@@ -934,8 +982,8 @@ class DetalleCajaFrame(tk.Frame):
                         str(getattr(self, 'total_teorico', '')),
                         str(getattr(self, 'conteo_efectivo_final', self.conteo_entry.get())),
                         str(getattr(self, 'transferencias_final', self.transf_entry.get())),
-                        str(getattr(self, 'ingresos', '')),
-                        str(getattr(self, 'retiros', '')),
+                        str(ingresos_val),
+                        str(retiros_val),
                         str(getattr(self, 'diferencia_db', self.diff_label.cget('text'))),
                         str(getattr(self, 'total_tickets', '')),
                         str(getattr(self, 'observaciones_apertura', '')),
@@ -986,6 +1034,34 @@ class DetalleCajaFrame(tk.Frame):
                 y -= 20
                 c.drawString(50, y, f"Transferencias: {getattr(self, 'transferencias_final', self.transf_entry.get())}")
                 y -= 20
+                # Mostrar Ingresos y Retiros
+                try:
+                    _ing = getattr(self, 'ingresos', None)
+                    _ret = getattr(self, 'retiros', None)
+                    if _ing is None or _ret is None:
+                        try:
+                            with get_connection() as _conn_tmp:
+                                _cur_tmp = _conn_tmp.cursor()
+                                _cur_tmp.execute("SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0), COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto ELSE 0 END),0) FROM caja_movimiento WHERE caja_id=?", (self.caja_id,))
+                                _m = _cur_tmp.fetchone()
+                                if _m:
+                                    if _ing is None:
+                                        _ing = _m[0] or 0
+                                    if _ret is None:
+                                        _ret = _m[1] or 0
+                        except Exception:
+                            _ing = _ing if _ing is not None else 0
+                            _ret = _ret if _ret is not None else 0
+                except Exception:
+                    _ing = getattr(self, 'ingresos', 0) or 0
+                    _ret = getattr(self, 'retiros', 0) or 0
+                try:
+                    c.drawString(50, y, f"Ingresos: {format_currency(_ing)}")
+                    y -= 20
+                    c.drawString(50, y, f"Retiros: {format_currency(-abs(float(_ret)))}")
+                    y -= 20
+                except Exception:
+                    pass
                 # Mostrar diferencia con signo (usar valor numérico si es posible)
                 try:
                     dlab = getattr(self, 'diferencia_db', None)
@@ -1040,6 +1116,29 @@ class DetalleCajaFrame(tk.Frame):
                     f.write(f"Codigo Caja: {getattr(self, 'codigo_caja', self.caja_id)}\n")
                     f.write(f"Fondo inicial: {getattr(self, 'fondo_inicial', self.conteo_entry.get())}\n")
                     f.write(f"Transferencias: {getattr(self, 'transferencias_final', self.transf_entry.get())}\n")
+                    # Incluir Ingresos y Retiros en texto
+                    try:
+                        _ing = getattr(self, 'ingresos', None)
+                        _ret = getattr(self, 'retiros', None)
+                        if _ing is None or _ret is None:
+                            with get_connection() as _c:
+                                _cur = _c.cursor()
+                                _cur.execute("SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0), COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto ELSE 0 END),0) FROM caja_movimiento WHERE caja_id=?", (self.caja_id,))
+                                _r = _cur.fetchone()
+                                if _r:
+                                    if _ing is None:
+                                        _ing = _r[0] or 0
+                                    if _ret is None:
+                                        _ret = _r[1] or 0
+                    except Exception:
+                        _ing = getattr(self, 'ingresos', 0) or 0
+                        _ret = getattr(self, 'retiros', 0) or 0
+                    try:
+                        f.write(f"Ingresos: {_ing}\n")
+                        f.write(f"Retiros: {-abs(float(_ret))}\n")
+                    except Exception:
+                        f.write(f"Ingresos: {getattr(self, 'ingresos', 0)}\n")
+                        f.write(f"Retiros: {-abs(getattr(self, 'retiros', 0) or 0)}\n")
                     # intentar escribir diferencia con signo
                     try:
                         dlab2 = getattr(self, 'diferencia_db', None)
@@ -1132,6 +1231,27 @@ class DetalleCajaFrame(tk.Frame):
                     ticket.append(f"Fondo inicial: {format_currency(getattr(self, 'fondo_inicial', 0))}")
                     ticket.append(f"Conteo final: {format_currency(getattr(self, 'conteo_efectivo_final', getattr(self, 'conteo_entry', '') or 0))}")
                     ticket.append(f"Transferencias: {format_currency(getattr(self, 'transferencias_final', 0))}")
+                    # Ingresos / Retiros (mostrar retiros como negativo)
+                    try:
+                        ingresos_val = getattr(self, 'ingresos', None)
+                        retiros_val = getattr(self, 'retiros', None)
+                        if ingresos_val is None or retiros_val is None:
+                            cursor.execute("SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0), COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto ELSE 0 END),0) FROM caja_movimiento WHERE caja_id=?", (self.caja_id,))
+                            _mv = cursor.fetchone()
+                            if _mv:
+                                if ingresos_val is None:
+                                    ingresos_val = _mv[0] or 0
+                                if retiros_val is None:
+                                    retiros_val = _mv[1] or 0
+                    except Exception:
+                        ingresos_val = getattr(self, 'ingresos', 0) or 0
+                        retiros_val = getattr(self, 'retiros', 0) or 0
+                    try:
+                        ticket.append(f"Ingresos: {format_currency(ingresos_val)}")
+                        ticket.append(f"Retiros: {format_currency(-abs(float(retiros_val)))}")
+                    except Exception:
+                        ticket.append(f"Ingresos: {format_currency(getattr(self, 'ingresos', 0))}")
+                        ticket.append(f"Retiros: {format_currency(-abs(getattr(self, 'retiros', 0) or 0))}")
                     # preferir diferencia almacenada si existe
                     diff_val = getattr(self, 'diferencia_db', None)
                     if diff_val is None:

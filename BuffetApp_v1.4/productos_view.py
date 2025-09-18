@@ -68,29 +68,9 @@ class ProductosView(tk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
         self.tree.bind("<Double-1>", self.abrir_edicion_producto)
 
+        # Replace inline product form with a compact action bar; product fields are handled in modals
         self.frame_form = tk.Frame(self)
         self.frame_form.pack(pady=10)
-        tk.Label(self.frame_form, text="Código:", font=TEXT_FONT).grid(row=0, column=0, padx=3, pady=3, sticky="e")
-
-        self.entry_codigo = tk.Entry(self.frame_form, width=6, font=TEXT_FONT, state='disabled')
-        self.entry_codigo.grid(row=0, column=1, padx=3, pady=3)
-        self.entry_codigo.bind("<KeyRelease>", self._codigo_keyrelease)
-
-        tk.Label(self.frame_form, text="Descripción:", font=TEXT_FONT).grid(row=1, column=0, padx=3, pady=3, sticky="e")
-        self.entry_nombre = tk.Entry(self.frame_form, width=18, font=TEXT_FONT, state='disabled')
-        self.entry_nombre.grid(row=1, column=1, padx=3, pady=3)
-        tk.Label(self.frame_form, text="Precio Venta:", font=TEXT_FONT).grid(row=2, column=0, padx=3, pady=3, sticky="e")
-        self.entry_precio = tk.Entry(self.frame_form, width=8, font=TEXT_FONT, state='disabled')
-        self.entry_precio.grid(row=2, column=1, padx=3, pady=3)
-        tk.Label(self.frame_form, text="Stock: ", font=TEXT_FONT).grid(row=3, column=0, padx=3, pady=3, sticky="e")
-        self.entry_stock = tk.Entry(self.frame_form, width=8, font=TEXT_FONT, state='disabled')
-        self.entry_stock.grid(row=3, column=1, padx=3, pady=3)
-        tk.Label(self.frame_form, text="Categoría:", font=TEXT_FONT).grid(row=4, column=0, padx=3, pady=3, sticky="e")
-        self.combo_categoria = ttk.Combobox(self.frame_form, state="disabled", width=12, font=TEXT_FONT)
-        self.combo_categoria.grid(row=4, column=1, padx=3, pady=3)
-        self.var_visible = tk.IntVar()
-        self.check_visible = tk.Checkbutton(self.frame_form, text="Visible", variable=self.var_visible, state='disabled', font=TEXT_FONT)
-        self.check_visible.grid(row=5, column=1, padx=3, pady=3, sticky="w")
 
         self.btn_agregar = tk.Button(
             self.frame_form,
@@ -108,7 +88,6 @@ class ProductosView(tk.Frame):
         self.btn_agregar.grid(row=6, column=0, pady=6, padx=3)
         self.btn_editar = tk.Button(self.frame_form, text="Editar", command=self.abrir_edicion_producto_btn)
         apply_button_style(self.btn_editar, style="productos")
-
         self.btn_editar.grid(row=6, column=1, pady=6, padx=3)
         self.btn_eliminar = tk.Button(self.frame_form, text="Eliminar", command=self.eliminar_producto)
         apply_button_style(
@@ -118,25 +97,14 @@ class ProductosView(tk.Frame):
             fg="white",
             activebackground="#B71C1C",
         )
+
         self.btn_eliminar.grid(row=6, column=2, pady=6, padx=3)
 
-        self.btn_confirmar = tk.Button(self.frame_form, text="Confirmar", command=self.confirmar_accion)
-        apply_button_style(
-            self.btn_confirmar,
-            style="productos",
-            bg="#4CAF50",
-            fg="white",
-            activebackground="#45A049",
-        )
-        self.btn_cancelar = tk.Button(self.frame_form, text="Cancelar", command=self.cancelar_accion)
-        apply_button_style(self.btn_cancelar, style="productos")
-        self.btn_confirmar.grid(row=7, column=0, pady=6, padx=3)
-        self.btn_cancelar.grid(row=7, column=1, pady=6, padx=3)
-        self.btn_confirmar.grid_remove()
-        self.btn_cancelar.grid_remove()
-
+        # Inicializar estado
         self.producto_seleccionado = None
-        self.modo = None # 'editar' o 'agregar'
+        self.modo = None # not used for inline mode anymore
+        self.btn_editar.config(state='disabled')
+        self.btn_eliminar.config(state='disabled')
         self.label_stock_info = tk.Label(self, text="Si el Stock es 999, no se descuenta al realizar una venta.", font=TEXT_FONT, fg="#555")
         self.label_stock_info.pack(pady=(0,8))
         self.cargar_categorias()
@@ -149,7 +117,6 @@ class ProductosView(tk.Frame):
         cats = cursor.fetchall()
         conn.close()
         self.categorias = {str(cid): desc for cid, desc in cats}
-        self.combo_categoria['values'] = list(self.categorias.values())
 
     def cargar_productos(self):
         self.tree.delete(*self.tree.get_children())
@@ -167,187 +134,54 @@ class ProductosView(tk.Frame):
 
             self.tree.insert("", tk.END, values=(pid, (codigo or '').upper(), nombre, precio, stock, categoria, 'Sí' if activo > 0 else 'No', 'Sí' if visible else 'No'), tags=(tag,))
 
-        self.cancelar_accion()
+        # Reset selection and disable edit/delete until a row is selected
+        self.producto_seleccionado = None
+        self.btn_editar.config(state='disabled')
+        self.btn_eliminar.config(state='disabled')
 
     def on_select(self, event):
         seleccion = self.tree.selection()
         if not seleccion:
             self.producto_seleccionado = None
-            self.cancelar_accion()
+            self.btn_editar.config(state='disabled')
+            self.btn_eliminar.config(state='disabled')
             return
         item = self.tree.item(seleccion[0])['values']
         self.producto_seleccionado = item[0]
-        self.entry_codigo.config(state='disabled')
-        self.entry_nombre.config(state='disabled')
-        self.entry_precio.config(state='disabled')
-        self.entry_stock.config(state='disabled')
-        self.combo_categoria.config(state='disabled')
-        self.check_visible.config(state='disabled')
-        self.entry_codigo.delete(0, tk.END)
-
-        self.entry_codigo.insert(0, str(item[1]).upper())
-
-        self.entry_nombre.delete(0, tk.END)
-        self.entry_nombre.insert(0, item[2])
-        self.entry_precio.delete(0, tk.END)
-        self.entry_precio.insert(0, item[3])
-        self.entry_stock.delete(0, tk.END)
-        self.entry_stock.insert(0, item[4])
-        cat_desc = item[5]
-        idx = list(self.categorias.values()).index(cat_desc) if cat_desc in self.categorias.values() else 0
-        self.combo_categoria.current(idx)
-        self.var_visible.set(1 if item[7] == 'Sí' else 0)
-        self.btn_confirmar.grid_remove()
-        self.btn_cancelar.grid_remove()
-        self.modo = None
-        self.btn_agregar.config(state='normal', fg='black')
-        self.btn_editar.config(state='normal', fg='black')
-        self.btn_eliminar.config(state='normal', fg='black')
+        # Enable edit/delete now that a product is selected
+        self.btn_editar.config(state='normal')
+        self.btn_eliminar.config(state='normal')
 
     def bloquear_botones_accion(self, modo):
-        # Solo deja habilitados Confirmar y Cancelar
-        self.btn_agregar.config(state='disabled', fg='gray')
-        self.btn_editar.config(state='disabled', fg='gray')
-        self.btn_eliminar.config(state='disabled', fg='gray')
-        self.btn_confirmar.config(state='normal', fg='black')
-        self.btn_cancelar.config(state='normal', fg='black')
+        # left for compatibility; no-op in modal workflow
+        return
 
     def desbloquear_botones_accion(self):
-        self.btn_agregar.config(state='normal', fg='black')
-        self.btn_editar.config(state='normal', fg='black')
-        self.btn_eliminar.config(state='normal', fg='black')
-        self.btn_confirmar.config(state='disabled', fg='gray')
-        self.btn_cancelar.config(state='disabled', fg='gray')
+        # no-op in modal workflow
+        return
 
     def iniciar_editar(self):
+        # Open the edit modal for the selected product (reuse existing flow)
         if not self.producto_seleccionado:
             messagebox.showwarning("Edición", "Seleccione un producto para editar.")
             return
-        self.entry_nombre.config(state='normal')
-        self.entry_precio.config(state='normal')
-        self.entry_stock.config(state='normal')
-        self.combo_categoria.config(state='readonly')
-        self.check_visible.config(state='normal')
-        self.btn_confirmar.grid()
-        self.btn_cancelar.grid()
-        self.modo = 'editar'
-        self.bloquear_botones_accion('editar')
-        # Completar campos con valores del producto seleccionado
-        seleccion = self.tree.selection()
-        if seleccion:
-            item = self.tree.item(seleccion[0])['values']
-            self.entry_nombre.delete(0, tk.END)
-            self.entry_nombre.insert(0, item[1])
-            self.entry_precio.delete(0, tk.END)
-            self.entry_precio.insert(0, item[2])
-            self.entry_stock.delete(0, tk.END)
-            self.entry_stock.insert(0, item[3])
-            cat_desc = item[4]
-            idx = list(self.categorias.values()).index(cat_desc) if cat_desc in self.categorias.values() else 0
-            self.combo_categoria.current(idx)
-            self.var_visible.set(1 if item[6] == 'Sí' else 0)
+        self.abrir_edicion_producto_btn()
 
     def iniciar_agregar(self):
-        self.producto_seleccionado = None
-        self.entry_codigo.config(state='normal')
-        self.entry_nombre.config(state='normal')
-        self.entry_precio.config(state='normal')
-        self.entry_stock.config(state='normal')
-        self.combo_categoria.config(state='readonly')
-        self.check_visible.config(state='normal')
-        self.entry_codigo.delete(0, tk.END)
-        self.entry_nombre.delete(0, tk.END)
-        self.entry_precio.delete(0, tk.END)
-        self.entry_stock.delete(0, tk.END)
-        self.combo_categoria.set('')
-        self.var_visible.set(1)
-        self.btn_confirmar.grid()
-        self.btn_cancelar.grid()
-        self.modo = 'agregar'
-        self.bloquear_botones_accion('agregar')
+        # Open the add-product modal
+        self._abrir_agregar_producto()
 
-    def _codigo_keyrelease(self, event):
-        valor = self.entry_codigo.get().upper()[:4]
-        if self.entry_codigo.get() != valor:
-            self.entry_codigo.delete(0, tk.END)
-            self.entry_codigo.insert(0, valor)
+    # removed inline codigo key handler; new modals handle code input locally
 
     def cancelar_accion(self):
-        self.entry_codigo.config(state='disabled')
-        self.entry_nombre.config(state='disabled')
-        self.entry_precio.config(state='disabled')
-        self.entry_stock.config(state='disabled')
-        self.combo_categoria.config(state='disabled')
-        self.check_visible.config(state='disabled')
-        self.btn_confirmar.grid_remove()
-        self.btn_cancelar.grid_remove()
-        self.modo = None
+        # kept for compatibility; in modal workflow simply reset selection
         self.producto_seleccionado = None
-        self.entry_codigo.delete(0, tk.END)
-        self.entry_nombre.delete(0, tk.END)
-        self.entry_precio.delete(0, tk.END)
-        self.entry_stock.delete(0, tk.END)
-        self.combo_categoria.set('')
-        self.var_visible.set(1)
-        self.desbloquear_botones_accion()
+        self.btn_editar.config(state='disabled')
+        self.btn_eliminar.config(state='disabled')
 
     def confirmar_accion(self):
-
-        codigo = self.entry_codigo.get().strip().upper()
-        if len(codigo) > 4:
-            messagebox.showwarning("Datos incompletos", "El código debe tener hasta 4 caracteres.")
-            return
-
-        nombre = self.entry_nombre.get().strip()
-        precio = self.entry_precio.get().strip()
-        stock = self.entry_stock.get().strip()
-        cat_desc = self.combo_categoria.get().strip()
-        visible = self.var_visible.get()
-        if not codigo or not nombre or not precio or not stock or not cat_desc:
-            messagebox.showwarning("Datos incompletos", "Complete todos los campos.")
-            return
-        try:
-            precio_val = float(precio)
-            stock_val = int(stock)
-        except Exception:
-            messagebox.showerror("Error", "Precio y Stock deben ser valores numéricos.")
-            return
-        if stock_val > 999:
-            messagebox.showerror("Error", "El stock máximo permitido es 999.")
-            return
-        if precio_val > 999999:
-            messagebox.showerror("Error", "El precio máximo permitido es 999999.")
-            return
-        categoria_id = [k for k, v in self.categorias.items() if v == cat_desc][0]
-        conn = get_connection()
-        cursor = conn.cursor()
-        # Validar que no exista el producto en la misma categoría
-        cursor.execute("SELECT COUNT(*) FROM products WHERE nombre=? AND categoria_id=?", (nombre, categoria_id))
-        existe = cursor.fetchone()[0]
-        if self.modo == 'agregar' and existe:
-            conn.close()
-            messagebox.showerror("Error", "Ya existe un producto con esa descripción en la misma categoría.")
-            return
-        if self.modo == 'editar' and existe and nombre != self.tree.item(self.tree.selection()[0])['values'][1]:
-            conn.close()
-            messagebox.showerror("Error", "Ya existe un producto con esa descripción en la misma categoría.")
-            return
-        try:
-            if self.modo == 'agregar':
-                cursor.execute("INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, precio_compra, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                               (codigo, nombre, precio_val, stock_val, 3, int(categoria_id), 0, visible))
-                messagebox.showinfo("Producto", "Producto agregado correctamente.")
-            elif self.modo == 'editar':
-                cursor.execute("UPDATE products SET codigo_producto=?, nombre=?, precio_venta=?, stock_actual=?, categoria_id=?, visible=? WHERE id=?",
-                               (codigo, nombre, precio_val, stock_val, int(categoria_id), visible, self.producto_seleccionado))
-                messagebox.showinfo("Producto", "Producto editado correctamente.")
-            conn.commit()
-            conn.close()
-            self.cargar_productos()
-            self.cancelar_accion()
-        except Exception as e:
-            conn.close()
-            messagebox.showerror("Error", f"No se pudo guardar el producto.\n{e}")
+        # Confirm handled inside modals now
+        return
 
     def eliminar_producto(self):
         if not self.producto_seleccionado:
@@ -379,7 +213,99 @@ class ProductosView(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo eliminar el producto.\n{e}")
         self.cancelar_accion()
-        self.bloquear_botones(self.btn_eliminar)
+        # buttons already updated by cancelar_accion
+
+    def _abrir_agregar_producto(self):
+        add_win = tk.Toplevel(self)
+        add_win.title("Agregar Producto")
+        add_win.transient(self)
+        add_win.grab_set()
+        ancho = 350
+        alto = 480
+        x = self.winfo_screenwidth() // 2 - ancho // 2
+        y = self.winfo_screenheight() // 2 - alto // 2
+        add_win.geometry(f"{ancho}x{alto}+{x}+{y}")
+        tk.Label(add_win, text="Código:", font=("Arial", 12)).pack(pady=6)
+        entry_codigo = tk.Entry(add_win, font=("Arial", 12))
+        entry_codigo.pack(pady=2)
+        tk.Label(add_win, text="Descripción:", font=("Arial", 12)).pack(pady=6)
+        entry_nombre = tk.Entry(add_win, font=("Arial", 12))
+        entry_nombre.pack(pady=2)
+        tk.Label(add_win, text="Precio Venta:", font=("Arial", 12)).pack(pady=6)
+        entry_precio = tk.Entry(add_win, font=("Arial", 12))
+        entry_precio.pack(pady=2)
+        tk.Label(add_win, text="Stock:", font=("Arial", 12)).pack(pady=6)
+        entry_stock = tk.Entry(add_win, font=("Arial", 12))
+        entry_stock.pack(pady=2)
+        tk.Label(add_win, text="Categoría:", font=("Arial", 12)).pack(pady=6)
+        from tkinter import ttk
+        combo_categoria = ttk.Combobox(add_win, values=list(self.categorias.values()), state="readonly", font=("Arial", 12))
+        combo_categoria.pack(pady=2)
+        combo_categoria.set('')
+        var_visible = tk.IntVar(value=1)
+        check_visible = tk.Checkbutton(add_win, text="Visible", variable=var_visible, font=("Arial", 12))
+        check_visible.pack(pady=6)
+        frame_btns = tk.Frame(add_win)
+        frame_btns.pack(pady=18)
+        def confirmar():
+            codigo = entry_codigo.get().strip().upper()
+            if len(codigo) > 4:
+                messagebox.showwarning("Datos incompletos", "El código debe tener hasta 4 caracteres.")
+                return
+            nombre = entry_nombre.get().strip()
+            precio = entry_precio.get().strip()
+            stock = entry_stock.get().strip()
+            cat_desc_sel = combo_categoria.get().strip()
+            visible = var_visible.get()
+            if not codigo or not nombre or not precio or not stock or not cat_desc_sel:
+                messagebox.showwarning("Datos incompletos", "Complete todos los campos.")
+                return
+            # Validar que el código no exista ya
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products WHERE codigo_producto=?", (codigo,))
+            existe_codigo = cursor.fetchone()[0]
+            if existe_codigo:
+                conn.close()
+                messagebox.showerror("Error", "El código ingresado ya existe. Use otro código.")
+                return
+            try:
+                precio_val = float(precio)
+                stock_val = int(stock)
+            except Exception:
+                messagebox.showerror("Error", "Precio y Stock deben ser valores numéricos.")
+                return
+            if stock_val > 999:
+                messagebox.showerror("Error", "El stock máximo permitido es 999.")
+                return
+            if precio_val > 999999:
+                messagebox.showerror("Error", "El precio máximo permitido es 999999.")
+                return
+            categoria_id = [k for k, v in self.categorias.items() if v == cat_desc_sel][0]
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products WHERE nombre=? AND categoria_id=?", (nombre, categoria_id))
+            existe = cursor.fetchone()[0]
+            if existe:
+                conn.close()
+                messagebox.showerror("Error", "Ya existe un producto con esa descripción en la misma categoría.")
+                return
+            try:
+                cursor.execute("INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, precio_compra, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                               (codigo, nombre, precio_val, stock_val, 3, int(categoria_id), 0, visible))
+                conn.commit()
+                conn.close()
+                self.cargar_productos()
+                add_win.destroy()
+                messagebox.showinfo("Producto", "Producto agregado correctamente.")
+            except Exception as e:
+                conn.close()
+                messagebox.showerror("Error", f"No se pudo guardar el producto.\n{e}")
+        def cancelar():
+            add_win.destroy()
+        btn_confirmar = tk.Button(frame_btns, text="Confirmar", command=confirmar, bg="#4CAF50", fg="white", font=("Arial", 12), width=10)
+        btn_confirmar.pack(side=tk.LEFT, padx=8)
+        btn_cancelar = tk.Button(frame_btns, text="Cancelar", command=cancelar, font=("Arial", 12), width=10)
+        btn_cancelar.pack(side=tk.LEFT, padx=8)
 
     def abrir_edicion_producto(self, event=None):
         seleccion = self.tree.selection()
@@ -437,7 +363,10 @@ class ProductosView(tk.Frame):
         frame_btns = tk.Frame(edit_win)
         frame_btns.pack(pady=18)
         def confirmar():
-            codigo = entry_codigo.get().strip()
+            codigo = entry_codigo.get().strip().upper()
+            if len(codigo) > 4:
+                messagebox.showwarning("Datos incompletos", "El código debe tener hasta 4 caracteres.")
+                return
             nombre = entry_nombre.get().strip()
             precio = entry_precio.get().strip()
             stock = entry_stock.get().strip()
@@ -445,6 +374,15 @@ class ProductosView(tk.Frame):
             visible = var_visible.get()
             if not codigo or not nombre or not precio or not stock or not cat_desc_sel:
                 messagebox.showwarning("Datos incompletos", "Complete todos los campos.")
+                return
+            # Validar que el código no exista en otro producto (excluyendo el actual)
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products WHERE codigo_producto=? AND id<>?", (codigo, item[0]))
+            existe_codigo = cursor.fetchone()[0]
+            if existe_codigo:
+                conn.close()
+                messagebox.showerror("Error", "El código ingresado ya existe en otro producto. Use otro código.")
                 return
             try:
                 precio_val = float(precio)
