@@ -72,31 +72,18 @@ class ProductosView(tk.Frame):
         self.frame_form = tk.Frame(self)
         self.frame_form.pack(pady=10)
 
-        self.btn_agregar = tk.Button(
-            self.frame_form,
-            text="Agregar\nNuevo",
-            command=self.iniciar_agregar,
-        )
-        apply_button_style(
-            self.btn_agregar,
-            style="productos",
-            bg="white",
-            fg="#388E3C",
-            activebackground="#E8F5E9",
-            activeforeground="#388E3C",
-        )
+        self.btn_agregar = tk.Button(self.frame_form, text="Agregar\nNuevo", command=self.iniciar_agregar)
+        # success variant (verde) + tamaño productos
+        apply_button_style(self.btn_agregar, style="productos")
+        apply_button_style(self.btn_agregar, style="success")
         self.btn_agregar.grid(row=6, column=0, pady=6, padx=3)
         self.btn_editar = tk.Button(self.frame_form, text="Editar", command=self.abrir_edicion_producto_btn)
         apply_button_style(self.btn_editar, style="productos")
+        apply_button_style(self.btn_editar, style="primary")  # azul
         self.btn_editar.grid(row=6, column=1, pady=6, padx=3)
         self.btn_eliminar = tk.Button(self.frame_form, text="Eliminar", command=self.eliminar_producto)
-        apply_button_style(
-            self.btn_eliminar,
-            style="productos",
-            bg="#E53935",
-            fg="white",
-            activebackground="#B71C1C",
-        )
+        apply_button_style(self.btn_eliminar, style="productos")
+        apply_button_style(self.btn_eliminar, style="danger")  # rojo
 
         self.btn_eliminar.grid(row=6, column=2, pady=6, padx=3)
 

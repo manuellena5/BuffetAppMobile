@@ -318,7 +318,25 @@ class HistorialView(tk.Frame):
         try:
             import pandas as pd
         except ImportError:
-            messagebox.showerror("Error", "Falta instalar pandas. Ejecuta 'pip install pandas' en la terminal.")
+            messagebox.showwarning(
+                "Exportar",
+                "La exportación a Excel requiere 'pandas' (no incluido en la versión ligera).\n"
+                "Opciones:\n"
+                " 1) Instalar: pip install pandas (y volver a generar el exe si querés redistribuir).\n"
+                " 2) Usar copiar datos: se generará un TSV provisional en el portapapeles."
+            )
+            try:
+                # Fallback: copiar al portapapeles datos visibles (solo página actual) en formato tabulado
+                filas = []
+                for item in self.tree.get_children():
+                    vals = self.tree.item(item, 'values')
+                    filas.append('\t'.join(str(v) for v in vals))
+                if filas:
+                    self.root.clipboard_clear()
+                    self.root.clipboard_append('\n'.join(filas))
+                    messagebox.showinfo("Exportar", "Datos de la página actual copiados al portapapeles (TSV).")
+            except Exception:
+                pass
             return
         import os
         import datetime

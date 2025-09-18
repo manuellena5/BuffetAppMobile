@@ -1,10 +1,12 @@
 import tkinter as tk
-from menu_view import MenuView
 import datetime
 from tkinter import simpledialog, messagebox
+
+# Núcleo ligero importado al inicio; vistas pesadas se importan lazy dentro de métodos
+from menu_view import MenuView
 from init_db import init_db, log_error
 from login_view import LoginView
-from utils_paths import CONFIG_PATH, DB_PATH
+from utils_paths import CONFIG_PATH, DB_PATH, resource_path
 from db_utils import get_connection
 
 
@@ -24,12 +26,19 @@ class BarCanchaApp:
         except Exception:
             self.root.title("Sistema de Ventas - Bar de Cancha")
         # Establecer icono de la aplicación
+        # Intentar varios iconos empaquetados
         try:
-            icon_path = os.path.join(os.path.dirname(__file__), "cdm_mitre_white_app_256.png")
-            if os.path.exists(icon_path):
-                self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+            for candidate in [
+                "cdm_mitre_white_app_256.png",
+                "cdm_mitre_white_app_2048.png",
+                "icon_salir.png"
+            ]:
+                icon_path = resource_path(candidate)
+                if os.path.exists(icon_path):
+                    self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+                    break
         except Exception as e:
-            print(f"No se pudo cargar el icono: {e}")
+            print(f"No se pudo cargar un icono: {e}")
 
         # Inicializar DB en AppData sólo si no existe
         if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
@@ -63,11 +72,12 @@ class BarCanchaApp:
         self.menu_bar.add_command(label="Ventas", command=self.mostrar_ventas, state=tk.DISABLED)
         self.menu_bar.add_command(label="Historial ventas", command=self.mostrar_historial, state=tk.DISABLED)
         self.menu_bar.add_command(label="Productos", command=self.mostrar_productos, state=tk.DISABLED)
-        from herramientas_view import HerramientasView
+        from herramientas_view import HerramientasView  # lazy-suitable (ligera)
         self.herramientas_view = HerramientasView(self)
         self.herramientas_menu = tk.Menu(self.menu_bar, tearoff=0)
+        # Usar el método de instancia para permitir dependencias internas
         self.herramientas_menu.add_command(
-            label="Test Impresora", command=HerramientasView.test_impresora, state=tk.DISABLED
+            label="Test Impresora", command=self.herramientas_view.test_impresora, state=tk.DISABLED
         )
         # Añadir opción para backup local directo (abrirá modal de confirmación)
         self.herramientas_menu.add_command(
@@ -456,10 +466,7 @@ class BarCanchaApp:
 
     def mostrar_cajas(self):
         if not self.cajas_view:
-            try:
-                from caja_listado_view import CajaListadoView
-            except Exception:
-                from caja_listado_view import CajaListadoView
+            from caja_listado_view import CajaListadoView  # lazy import
             self.cajas_view = CajaListadoView(self.root, self.on_caja_cerrada)
         self.ocultar_frames()
         self.cajas_view.pack(fill=tk.BOTH, expand=True)
@@ -496,7 +503,7 @@ class BarCanchaApp:
             messagebox.showwarning("Caja", "Debe abrir la caja antes de realizar ventas.")
             return
         if not self.ventas_view:
-            from ventas_view_new import VentasViewNew
+            from ventas_view_new import VentasViewNew  # lazy import
             self.ventas_view = VentasViewNew(
                 self.root,
                 cobrar_callback=self.on_cobrar,
@@ -646,7 +653,7 @@ class BarCanchaApp:
         }
     def mostrar_historial(self):
         if not self.historial_view:
-            from historial_view import HistorialView
+            from historial_view import HistorialView  # lazy import
             self.historial_view = HistorialView(self.root)
         self.ocultar_frames()
         self.historial_view.pack(fill=tk.BOTH, expand=True)
@@ -664,8 +671,8 @@ class BarCanchaApp:
 
     def mostrar_productos(self):
         self.ocultar_frames()
-        from productos_view import ProductosView
         if not self.productos_view:
+            from productos_view import ProductosView  # lazy import
             self.productos_view = ProductosView(self.root)
         self.productos_view.pack(fill=tk.BOTH, expand=True)
         self.productos_view.cargar_productos()

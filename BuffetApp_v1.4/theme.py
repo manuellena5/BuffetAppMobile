@@ -107,6 +107,10 @@ _BASE_BUTTON_STYLE = {
 BUTTON_STYLES = {
     "ventas": {"font": CART['button_font'], "padx": CART['button_padx'], "pady": CART['button_pady'], "width": 12},
     "productos": {"width": 7, "height": 1},
+    # Variantes semánticas reutilizables
+    "success": {"bg": COLORS['success'], "fg": COLORS['primary'], "activebackground": COLORS['success'], "activeforeground": COLORS['primary']},
+    "primary": {"bg": COLORS['accent'], "fg": COLORS['primary'], "activebackground": COLORS['accent'], "activeforeground": COLORS['primary']},
+    "danger": {"bg": COLORS['error'], "fg": COLORS['primary'], "activebackground": COLORS['error'], "activeforeground": COLORS['primary']},
 }
 
 
