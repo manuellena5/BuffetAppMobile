@@ -4,6 +4,7 @@ from tkinter import messagebox, ttk, filedialog
 import datetime
 from db_utils import get_connection
 import sqlite3
+import os
 from theme import (
     COLORS, FONTS, FINANCE_COLORS, format_currency,
     themed_button, apply_theme
@@ -13,6 +14,8 @@ class DetalleCajaFrame(tk.Frame):
         super().__init__(parent)
         self.caja_id = caja_id
         self.on_close = on_close
+        # cache for loaded KPI icons to keep PhotoImage references
+        self._kpi_icons = {}
         # Flag to indicate we want to disable ingreso/retiro while this frame is open
         self.disable_movimientos = disable_movimientos
         self.config(bg=COLORS['background'], padx=15, pady=15)
@@ -26,19 +29,7 @@ class DetalleCajaFrame(tk.Frame):
         self._create_closure_panel()
         self._load_data()
         # Ask parent (usually main app) to disable menu movimientos while detail is open
-        try:
-            if self.disable_movimientos and hasattr(self.master, 'actualizar_menu_caja'):
-                # set caja info so menu state will disable ingreso/retiro
-                # call a helper if exists to force disable
-                if hasattr(self.master, 'menu_bar') and hasattr(self.master, 'caja_menu'):
-                    # directly disable the menu entries if possible
-                    try:
-                        self.master.caja_menu.entryconfig("Ingreso de efectivo", state='disabled')
-                        self.master.caja_menu.entryconfig("Retiro de efectivo", state='disabled')
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        # Menu entries for Ingreso/Retiro were removed from the main menu; nothing to disable here.
         
     def _create_kpi_panel(self):
         # Panel principal de KPIs
@@ -52,17 +43,70 @@ class DetalleCajaFrame(tk.Frame):
         self.kpis_row2.pack(fill='x', pady=(6,10))
         
     def create_kpi(self, parent, icon, title, value, bg_color, fg_color):
-        f = tk.Frame(parent, bg=bg_color, padx=10, pady=5)
+        # use larger fonts for KPI icons/titles to improve readability on tablets
+        kpi_padx = 12
+        kpi_pady = 8
+        f = tk.Frame(parent, bg=bg_color, padx=kpi_padx, pady=kpi_pady)
         f.pack(side='left', padx=5)
-        tk.Label(f, text=f"{icon} {title}", bg=bg_color, fg=fg_color, 
-                font=FONTS['normal']).pack()
-        tk.Label(f, text=value, bg=bg_color, fg=fg_color,
-                font=FONTS['bold']).pack()
+        # icon + title: use a slightly larger font
+        try:
+            title_font = (FONTS['normal'][0], max(FONTS['normal'][1] + 2, 14))
+        except Exception:
+            title_font = FONTS['normal']
+        try:
+            value_font = (FONTS['bold'][0], max(FONTS['bold'][1] + 4, 16), 'bold')
+        except Exception:
+            value_font = FONTS['bold']
+        # Try to load a PNG icon from img/ when icon is a known key (like 'emitidos', 'anulados', 'ventas_totales', 'ingresos', 'retiros')
+        img_label_kwargs = {}
+        label_text = f"{icon} {title}"
+        try:
+            # map of known icon keys to fallback emojis
+            fallback = {
+                'ingresos': '⬆️',
+                'retiros': '⬇️',
+                'anulados': '🚫',
+                'ventas_totales': '💸',
+                'emitidos': '🎟️'
+            }
+            use_image = False
+            img_obj = None
+            if isinstance(icon, str) and icon in fallback:
+                img_name = f"{icon}.png"
+                img_path = os.path.join(os.path.dirname(__file__), 'img', img_name)
+                if os.path.exists(img_path):
+                    try:
+                        # cache PhotoImage to avoid GC
+                        if icon not in self._kpi_icons:
+                            self._kpi_icons[icon] = tk.PhotoImage(file=img_path)
+                        img_obj = self._kpi_icons[icon]
+                        use_image = True
+                    except Exception:
+                        use_image = False
+                if not use_image:
+                    # fallback to emoji
+                    label_text = f"{fallback.get(icon, '')} {title}"
+            else:
+                # if icon looks like an emoji or text, show it inline
+                label_text = f"{icon} {title}"
+
+            if use_image and img_obj is not None:
+                tk.Label(f, text=title, image=img_obj, compound='left', bg=bg_color, fg=fg_color, font=title_font).pack()
+            else:
+                tk.Label(f, text=label_text, bg=bg_color, fg=fg_color, font=title_font).pack()
+        except Exception:
+            tk.Label(f, text=f"{icon} {title}", bg=bg_color, fg=fg_color, font=title_font).pack()
+        val_lbl = tk.Label(f, text=value, bg=bg_color, fg=fg_color, font=value_font)
+        val_lbl.pack()
         return f
         
     def _create_tables_panel(self):
         tables_frame = tk.Frame(self, bg=COLORS['background'])
         tables_frame.grid(row=1, column=0, sticky="nsew")
+
+        # Button to view/add movimientos (ingresos/retiros)
+        btn_mov = themed_button(tables_frame, text="Ver Movimientos (Ingresos/Retiros)", command=self._open_movimientos_window)
+        btn_mov.pack(fill='x', pady=(0,8))
 
         # Ventas por categoría
         cat_frame = tk.LabelFrame(
@@ -77,7 +121,7 @@ class DetalleCajaFrame(tk.Frame):
             cat_frame,
             columns=('categoria', 'monto'),
             show='headings',
-            height=4,
+            height=2,
             style='App.Treeview'
         )
         self.cat_tree.heading('categoria', text='Categoría')
@@ -110,37 +154,35 @@ class DetalleCajaFrame(tk.Frame):
                                       bg=COLORS['surface'], font=FONTS['bold'])
         closure_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(15,0))
         # Observaciones de apertura (solo lectura)
+        label_bigger_font = (FONTS['normal'][0], FONTS['normal'][1] + 2)
         tk.Label(closure_frame, text="📝 Observaciones de apertura:",
-                 bg=COLORS['surface']).pack(anchor='w', pady=(10,0))
-        self.obs_apertura_text = tk.Text(closure_frame, height=2, font=FONTS['normal'], state='disabled', bg=COLORS.get('disabled_bg', '#f5f5f5'), fg=COLORS.get('disabled_fg', '#666'))
+                 bg=COLORS['surface'], font=label_bigger_font, fg=COLORS['text']).pack(anchor='w', pady=(10,0))
+        self.obs_apertura_text = tk.Text(closure_frame, height=2, font=label_bigger_font, state='disabled', bg=COLORS.get('disabled_bg', '#f5f5f5'), fg=COLORS.get('disabled_fg', '#666'))
         self.obs_apertura_text.pack(fill='x', pady=(0,10))
-        # Observaciones de movimientos (solo lectura)
-        tk.Label(closure_frame, text="📝 Observaciones de movimientos:",
-                 bg=COLORS['surface']).pack(anchor='w')
-        self.obs_movimientos_text = tk.Text(closure_frame, height=2, font=FONTS['normal'], state='disabled', bg=COLORS.get('disabled_bg', '#f5f5f5'), fg=COLORS.get('disabled_fg', '#666'))
-        self.obs_movimientos_text.pack(fill='x', pady=(0,10))
+    # Observaciones de movimientos: (field removed per UX request)
+    # The movimientos are still tracked internally for export, but the text widget was removed.
         # Campos de cierre (editables si la caja está abierta)
         self.campos_cierre_frame = tk.Frame(closure_frame, bg=COLORS['surface'])
         self.campos_cierre_frame.pack(fill='x', pady=5)
         # Conteo efectivo
         tk.Label(self.campos_cierre_frame, text="💵 Conteo efectivo final en caja:",
-                 bg=COLORS['surface']).pack(anchor='w')
-        self.conteo_entry = tk.Entry(self.campos_cierre_frame, font=FONTS['normal'], disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
+                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
+        self.conteo_entry = tk.Entry(self.campos_cierre_frame, font=label_bigger_font, disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
         self.conteo_entry.pack(fill='x', pady=(0,10))
         # Transferencias
         tk.Label(self.campos_cierre_frame, text="🔁 Monto transferencias:",
-                 bg=COLORS['surface']).pack(anchor='w')
-        self.transf_entry = tk.Entry(self.campos_cierre_frame, font=FONTS['normal'], disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
+                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
+        self.transf_entry = tk.Entry(self.campos_cierre_frame, font=label_bigger_font, disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
         self.transf_entry.pack(fill='x', pady=(0,10))
         # Usuario cierre
         tk.Label(self.campos_cierre_frame, text="👤 Usuario cierre:",
-                 bg=COLORS['surface']).pack(anchor='w')
-        self.usuario_entry = tk.Entry(self.campos_cierre_frame, font=FONTS['normal'], disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
+                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
+        self.usuario_entry = tk.Entry(self.campos_cierre_frame, font=label_bigger_font, disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
         self.usuario_entry.pack(fill='x', pady=(0,10))
         # Observaciones de cierre
         tk.Label(self.campos_cierre_frame, text="📝 Observaciones de cierre:",
-                 bg=COLORS['surface']).pack(anchor='w')
-        self.obs_text = tk.Text(self.campos_cierre_frame, height=3, font=FONTS['normal'])
+                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
+        self.obs_text = tk.Text(self.campos_cierre_frame, height=3, font=label_bigger_font)
         self.obs_text.pack(fill='x', pady=(0,10))
         # Diferencia calculada
         self.diff_label = tk.Label(closure_frame, text="🧮 Diferencia: $ 0,00",
@@ -199,6 +241,132 @@ class DetalleCajaFrame(tk.Frame):
                 fg=COLORS['text']
             )
             return 0.0
+
+    def _open_movimientos_window(self):
+        """Open a modal window listing caja_movimiento entries for this caja and allow adding new ones.
+
+        This modal centers on screen, uses larger fonts, and defers KPI reload until the
+        modal is closed. New movimientos set a flag so the main KPIs are refreshed once.
+        """
+        try:
+            win = tk.Toplevel(self)
+            win.title('Movimientos de caja')
+            # make modal and centered
+            root = self.winfo_toplevel()
+            win.transient(root)
+            win.grab_set()
+
+            # Make modal larger for easier inspection on tablets/desktops
+            w_modal, h_modal = 1000, 700
+            sw = win.winfo_screenwidth(); sh = win.winfo_screenheight()
+            x = (sw - w_modal) // 2; y = (sh - h_modal) // 2
+            win.geometry(f"{w_modal}x{h_modal}+{x}+{y}")
+
+            modal_font = (FONTS['normal'][0], max(FONTS['normal'][1] + 2, 14))
+            header_font = (FONTS['bold'][0], max(FONTS['bold'][1] + 2, 16))
+
+            # flag to indicate cambios
+            self._movements_changed = False
+
+            top_frame = tk.Frame(win)
+            top_frame.pack(fill='x', pady=8)
+            tk.Label(top_frame, text=f"Movimientos - Caja: {getattr(self,'codigo_caja', self.caja_id)}", font=header_font).pack(side='left')
+
+            list_frame = tk.Frame(win)
+            list_frame.pack(fill='both', expand=True, padx=8, pady=8)
+
+            cols = ('tipo','monto','observacion','creado_ts')
+            style = ttk.Style()
+            style.configure('Modal.Treeview', font=(FONTS['normal'][0], max(FONTS['normal'][1]+2, 13)), rowheight=28)
+            tree = ttk.Treeview(list_frame, columns=cols, show='headings', style='Modal.Treeview')
+            tree.heading('tipo', text='Tipo')
+            tree.heading('monto', text='Monto')
+            tree.heading('observacion', text='Observación')
+            tree.heading('creado_ts', text='Fecha')
+            tree.column('tipo', width=120, anchor='center')
+            tree.column('monto', width=140, anchor='e')
+            tree.column('observacion', width=520, anchor='w')
+            tree.column('creado_ts', width=260, anchor='center')
+            tree.pack(fill='both', expand=True, side='left')
+
+            sb = tk.Scrollbar(list_frame, command=tree.yview)
+            sb.pack(side='right', fill='y')
+            tree.config(yscrollcommand=sb.set)
+
+            # form to add movement (larger fonts)
+            form = tk.Frame(win)
+            form.pack(fill='x', padx=8, pady=8)
+            tk.Label(form, text='Tipo:', font=modal_font).grid(row=0, column=0, sticky='e')
+            tipo_var = tk.StringVar(value='INGRESO')
+            tipo_menu = ttk.Combobox(form, textvariable=tipo_var, values=['INGRESO','RETIRO'], width=14, state='readonly')
+            tipo_menu.grid(row=0, column=1, sticky='w', padx=6)
+            tipo_menu.configure(font=modal_font)
+            tk.Label(form, text='Monto:', font=modal_font).grid(row=0, column=2, sticky='e')
+            monto_entry = tk.Entry(form, font=modal_font)
+            monto_entry.grid(row=0, column=3, sticky='w', padx=6)
+            tk.Label(form, text='Observación:', font=modal_font).grid(row=1, column=0, sticky='e')
+            obs_entry = tk.Entry(form, width=60, font=modal_font)
+            obs_entry.grid(row=1, column=1, columnspan=3, sticky='w', padx=6)
+
+            def _refresh_list():
+                for r in tree.get_children():
+                    tree.delete(r)
+                try:
+                    with get_connection() as conn2:
+                        cur2 = conn2.cursor()
+                        cur2.execute("SELECT tipo, monto, observacion, creado_ts FROM caja_movimiento WHERE caja_id=? ORDER BY creado_ts DESC", (self.caja_id,))
+                        for tipo, monto, obs, creado in cur2.fetchall():
+                            tree.insert('', 'end', values=(tipo, format_currency(monto), obs or '', creado))
+                except Exception:
+                    pass
+
+            def _add_movimiento():
+                try:
+                    tipo = tipo_var.get()
+                    monto = float(monto_entry.get().replace(',','.'))
+                    obs = obs_entry.get().strip()
+                    with get_connection() as conn2:
+                        cur2 = conn2.cursor()
+                        cur2.execute("INSERT INTO caja_movimiento (caja_id, tipo, monto, observacion) VALUES (?, ?, ?, ?)", (self.caja_id, tipo, monto, obs))
+                        conn2.commit()
+                    monto_entry.delete(0, tk.END)
+                    obs_entry.delete(0, tk.END)
+                    _refresh_list()
+                    # mark that movements changed; defer reloading KPIs until modal close
+                    try:
+                        self._movements_changed = True
+                    except Exception:
+                        pass
+                except Exception as e:
+                    messagebox.showerror('Error', f'No se pudo agregar movimiento: {e}')
+
+            btn_add = themed_button(form, text='Agregar movimiento', command=_add_movimiento)
+            btn_add.grid(row=2, column=0, columnspan=4, pady=8)
+
+            _refresh_list()
+
+            def _on_modal_close():
+                try:
+                    win.grab_release()
+                except Exception:
+                    pass
+                try:
+                    if getattr(self, '_movements_changed', False):
+                        try:
+                            self._load_data()
+                        except Exception:
+                            pass
+                finally:
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+
+            win.protocol('WM_DELETE_WINDOW', _on_modal_close)
+            # also block until window closed
+            # win.wait_window(win)
+        except Exception as e:
+            messagebox.showerror('Error', f'No se pudo abrir ventana de movimientos: {e}')
             
     def _load_data(self):
         with get_connection() as conn:
@@ -308,21 +476,21 @@ class DetalleCajaFrame(tk.Frame):
             except Exception:
                 pass
             # Listar movimientos y sus observaciones en el textbox correspondiente
-            movimientos_text = []
+            # Listar movimientos: almacenar en lista y mostrar solo uno a la vez con navegación
+            self._movimientos_list = []
+            self._mov_index = 0
             try:
                 cursor.execute("SELECT tipo, monto, observacion, creado_ts FROM caja_movimiento WHERE caja_id=? ORDER BY creado_ts", (self.caja_id,))
                 for tipo, monto, observacion, creado in cursor.fetchall():
-                    movimientos_text.append(f"{tipo}: {monto} - {observacion or ''} ({creado})")
+                    text = f"{tipo}: {format_currency(monto)} - {observacion or ''} ({creado})"
+                    self._movimientos_list.append(text)
             except Exception:
-                movimientos_text = []
+                self._movimientos_list = []
             try:
-                self.obs_movimientos_text.config(state='normal')
-                self.obs_movimientos_text.delete('1.0', tk.END)
-                if movimientos_text:
-                    self.obs_movimientos_text.insert('1.0', '\n'.join(movimientos_text))
-                self.obs_movimientos_text.config(state='disabled')
+                self._mov_index = max(0, len(self._movimientos_list) - 1)
             except Exception:
-                pass
+                # keep internal list empty on error
+                self._movimientos_list = []
             # Colocar observacion de cierre en el campo editable
             try:
                 self.obs_text.delete('1.0', tk.END)
@@ -364,6 +532,24 @@ class DetalleCajaFrame(tk.Frame):
             except sqlite3.Error:
                 ventas_por_metodo = []
             # KPIs con valores calculados y consistentes
+            # Clear previous KPIs to avoid duplicates when reloading
+            try:
+                for c in list(self.kpis.winfo_children()):
+                    try:
+                        c.destroy()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                for c in list(self.kpis_row2.winfo_children()):
+                    try:
+                        c.destroy()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             try:
                 # Fondo inicial
                 self.create_kpi(
@@ -388,8 +574,8 @@ class DetalleCajaFrame(tk.Frame):
                 ingresos_val = getattr(self, 'ingresos', 0) or 0
                 retiros_val = getattr(self, 'retiros', 0) or 0
             try:
-                self.create_kpi(self.kpis, "⬆️", "Ingresos", format_currency(ingresos_val), FINANCE_COLORS.get('positive_bg', '#e6ffed'), FINANCE_COLORS.get('positive_fg', '#0a0'))
-                self.create_kpi(self.kpis, "⬇️", "Retiros", format_currency(retiros_val), FINANCE_COLORS.get('negative_bg', '#ffecec'), FINANCE_COLORS.get('negative_fg', '#c00'))
+                self.create_kpi(self.kpis, "ingresos", "Ingresos", format_currency(ingresos_val), FINANCE_COLORS.get('positive_bg', '#e6ffed'), FINANCE_COLORS.get('positive_fg', '#0a0'))
+                self.create_kpi(self.kpis, "retiros", "Retiros", format_currency(retiros_val), FINANCE_COLORS.get('negative_bg', '#ffecec'), FINANCE_COLORS.get('negative_fg', '#c00'))
             except Exception:
                 self.create_kpi(self.kpis, "⬆️", "Ingresos", format_currency(ingresos_val), '#ffffff', '#000000')
                 self.create_kpi(self.kpis, "⬇️", "Retiros", format_currency(retiros_val), '#ffffff', '#000000')
@@ -397,26 +583,46 @@ class DetalleCajaFrame(tk.Frame):
             total_efectivo = sum(total for metodo, cant, total in ventas_por_metodo if (metodo or '').lower() == 'efectivo') if ventas_por_metodo else 0
             total_transf = sum(total for metodo, cant, total in ventas_por_metodo if (metodo or '').lower() != 'efectivo') if ventas_por_metodo else 0
             try:
-                self.create_kpi(self.kpis, "💵", "Efectivo", format_currency(total_efectivo), FINANCE_COLORS.get('transfer_bg', '#fff'), FINANCE_COLORS.get('transfer_fg', '#000'))
-                self.create_kpi(self.kpis, "🔁", "Transferencias", format_currency(total_transf), FINANCE_COLORS.get('transfer_bg', '#fff'), FINANCE_COLORS.get('transfer_fg', '#000'))
+                self.create_kpi(self.kpis_row2, "💵", "Efectivo", format_currency(total_efectivo), FINANCE_COLORS.get('transfer_bg', '#fff'), FINANCE_COLORS.get('transfer_fg', '#000'))
+                self.create_kpi(self.kpis_row2, "🔁", "Transferencias", format_currency(total_transf), FINANCE_COLORS.get('transfer_bg', '#fff'), FINANCE_COLORS.get('transfer_fg', '#000'))
             except Exception:
-                self.create_kpi(self.kpis, "💵", "Efectivo", format_currency(total_efectivo), '#ffffff', '#000000')
-                self.create_kpi(self.kpis, "🔁", "Transferencias", format_currency(total_transf), '#ffffff', '#000000')
-            # KPI: tickets anulados
+                self.create_kpi(self.kpis_row2, "💵", "Efectivo", format_currency(total_efectivo), '#ffffff', '#000000')
+                self.create_kpi(self.kpis_row2, "🔁", "Transferencias", format_currency(total_transf), '#ffffff', '#000000')
+            # # KPI: tickets anulados
+            # try:
+            #     self.create_kpi(self.kpis, "🚫", "Anulados", str(getattr(self, 'tickets_anulados', 0)), COLORS.get('surface'), COLORS.get('text'))
+            # except Exception:
+            #     try:
+            #         self.create_kpi(self.kpis, "🚫", "Anulados", str(getattr(self, 'tickets_anulados', 0)), '#ffffff', '#000')
+            #     except Exception:
+            #         pass
+            # Replace single "Ventas totales" highlight with three KPIs in the second row:
+            # Anulados | Emitidos | Ventas totales
             try:
-                self.create_kpi(self.kpis, "🚫", "Anulados", str(getattr(self, 'tickets_anulados', 0)), COLORS.get('surface'), COLORS.get('text'))
-            except Exception:
+                # compute tickets emitted (status != 'Anulado')
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=? AND t.status != 'Anulado'", (self.caja_id,))
+                    tickets_emitidos = cursor.fetchone()[0] or 0
+                except Exception:
+                    tickets_emitidos = getattr(self, 'total_tickets', 0) or 0
+
+                # Anulados KPI
                 try:
                     self.create_kpi(self.kpis, "🚫", "Anulados", str(getattr(self, 'tickets_anulados', 0)), '#ffffff', '#000')
                 except Exception:
                     pass
-            # Ventas totales (destacado)
-            try:
-                # Mostrar ventas totales en su propio renglón (ancho completo)
-                ventas_frame = tk.Frame(self.kpis_row2, bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')))
-                ventas_frame.pack(side='top',  padx=5, pady=(5,0))
-                tk.Label(ventas_frame, text="📊 Ventas totales", bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), fg=FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')), font=FONTS.get('title')).pack(anchor='w', padx=10, pady=(5,0))
-                tk.Label(ventas_frame, text=format_currency(getattr(self, 'total_ventas', total_ventas)), bg=FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), fg=FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')), font=FONTS.get('title')).pack(anchor='w', padx=10, pady=(0,5))
+
+                # Emitidos KPI (simple display)
+                try:
+                    self.create_kpi(self.kpis, "🎟️", "Emitidos", str(tickets_emitidos), '#ffffff', '#000')
+                except Exception:
+                    pass
+
+                # Ventas totales KPI (destacado a la derecha)
+                try:
+                    self.create_kpi(self.kpis_row2, "📊", "Ventas totales", format_currency(getattr(self, 'total_ventas', total_ventas)), FINANCE_COLORS.get('total_sales_bg', COLORS.get('surface', '#f5f5f5')), FINANCE_COLORS.get('total_sales_fg', COLORS.get('text', '#000')))
+                except Exception:
+                    pass
             except Exception:
                 pass
             # Cargar tablas: categorías
@@ -594,6 +800,33 @@ class DetalleCajaFrame(tk.Frame):
         except ValueError:
             messagebox.showerror("Error", 
                                "Los montos deben ser números válidos")
+
+    # Navigation helpers for movimientos list shown in the closure panel
+    def _show_current_movimiento(self):
+        # Navigation helper removed: we no longer display movimientos inline in the closure panel.
+        # Keeping method as no-op for compatibility.
+        try:
+            return
+        except Exception:
+            pass
+
+    def _mov_prev(self):
+        try:
+            if not getattr(self, '_movimientos_list', None):
+                return
+            self._mov_index = max(0, self._mov_index - 1)
+            self._show_current_movimiento()
+        except Exception:
+            pass
+
+    def _mov_next(self):
+        try:
+            if not getattr(self, '_movimientos_list', None):
+                return
+            self._mov_index = min(len(self._movimientos_list)-1, self._mov_index + 1)
+            self._show_current_movimiento()
+        except Exception:
+            pass
     
     def _exportar_excel(self):
         try:
@@ -626,8 +859,9 @@ class DetalleCajaFrame(tk.Frame):
                 ]
                 ws.append(columns)
                 # Preparar valores (leer desde atributos / widgets con fallbacks)
+                # Use internal movimientos list to build export string
                 try:
-                    movimientos_joined = self.obs_movimientos_text.get('1.0', tk.END).strip().replace('\n', ' | ')
+                    movimientos_joined = ' | '.join(self._movimientos_list)
                 except Exception:
                     movimientos_joined = ''
                 # Construir cadena con items vendidos: Producto (Cant x subtotal)
@@ -680,7 +914,7 @@ class DetalleCajaFrame(tk.Frame):
                     cols = ['Codigo Caja','Fecha','Hora Apertura','Hora Cierre','Usuario Apertura','Usuario Cierre','Disciplina','Fondo inicial','Total ventas','Total efectivo teorico','Conteo efectivo final','Transferencias final','Ingresos','Retiros','Diferencia','Total tickets','Observacion apertura','Observacion cierre','Movimientos','Items vendidos']
                     f.write(';'.join(cols) + '\n')
                     try:
-                        mov = self.obs_movimientos_text.get('1.0', tk.END).strip().replace('\n', ' | ')
+                        mov = ' | '.join(self._movimientos_list)
                     except Exception:
                         mov = ''
                     try:

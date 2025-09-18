@@ -18,7 +18,11 @@ class BarCanchaApp:
     def __init__(self, root):
         import json, os
         self.root = root
-        self.root.title("Sistema de Ventas - Bar de Cancha")
+        try:
+            from theme import APP_VERSION
+            self.root.title(f"Sistema de Ventas - Bar de Cancha - {APP_VERSION}")
+        except Exception:
+            self.root.title("Sistema de Ventas - Bar de Cancha")
         # Establecer icono de la aplicación
         try:
             icon_path = os.path.join(os.path.dirname(__file__), "cdm_mitre_white_app_256.png")
@@ -51,7 +55,8 @@ class BarCanchaApp:
             x = (self.root.winfo_screenwidth() // 2) - (ancho // 2)
             y = (self.root.winfo_screenheight() // 2) - (alto // 2)
             self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
-        self.menu_bar = tk.Menu(self.root)
+        # Increase menu font size for easier access
+        self.menu_bar = tk.Menu(self.root, font=("Arial", 16))
         # No mostrar la barra de menú hasta que el usuario se loguee
         self.root.config(menu=None)
         self.menu_bar.add_command(label="Menú Principal", command=self.mostrar_menu_principal, state=tk.DISABLED)
@@ -65,16 +70,17 @@ class BarCanchaApp:
             label="Test Impresora", command=self.herramientas_view.test_impresora, state=tk.DISABLED
         )
 
-        self.menu_bar.add_cascade(label="Herramientas", menu=self.herramientas_menu)
-
         # Menú de caja: permite abrir y cerrar la caja diaria
         self.caja_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.caja_menu.add_command(label="Abrir Caja", command=self.abrir_caja_window)
         self.caja_menu.add_command(label="Cerrar Caja", command=self.cerrar_caja_window, state=tk.DISABLED)
-        self.caja_menu.add_command(label="Ingreso de efectivo", command=self.informar_ingreso, state=tk.DISABLED)
-        self.caja_menu.add_command(label="Retiro de efectivo", command=self.informar_retiro, state=tk.DISABLED)
+        # Ingreso/Retiro de efectivo se manejan desde la pantalla de Detalle/Cierre de caja.
+        # Eliminamos las entradas del menú para evitar duplicación de flujos.
         self.caja_menu.add_command(label="Listado de Cajas", command=self.mostrar_listado_cajas)
         self.menu_bar.add_cascade(label="Cajas", menu=self.caja_menu)
+
+        # Herramientas como último elemento del menú
+        self.menu_bar.add_cascade(label="Herramientas", menu=self.herramientas_menu)
 
         self.logged_user = None
         self.logged_role = None
@@ -85,6 +91,7 @@ class BarCanchaApp:
             on_cerrar_caja=self.cerrar_caja_window,
             on_ver_cierre=self.ver_cierre_caja,
             on_abrir_caja=self.abrir_caja_window,
+            controller=self
         )
 
         # Vistas cargadas a demanda
@@ -127,18 +134,8 @@ class BarCanchaApp:
         abierta = bool(info)
         self.caja_menu.entryconfig("Abrir Caja",  state=(tk.DISABLED if abierta else tk.NORMAL))
         self.caja_menu.entryconfig("Cerrar Caja", state=(tk.NORMAL if abierta else tk.DISABLED))
-        # Reponer estados de Ingreso/Retiro en el menú de Cajas
-        try:
-            self.caja_menu.entryconfig(
-                "Ingreso de efectivo",
-                state=(tk.NORMAL if abierta and not info.get('tiene_ingreso') else tk.DISABLED)
-            )
-            self.caja_menu.entryconfig(
-                "Retiro de efectivo",
-                state=(tk.NORMAL if abierta and not info.get('tiene_retiro') else tk.DISABLED)
-            )
-        except Exception:
-            pass
+        # Las operaciones de Ingreso/Retiro se gestionan desde Detalle/Cierre de Caja
+        # por lo que ya no existen entradas dedicadas en este menú.
         self.menu_bar.entryconfig("Ventas", state=(tk.NORMAL if abierta else tk.DISABLED))
 
     def on_caja_cerrada(self):

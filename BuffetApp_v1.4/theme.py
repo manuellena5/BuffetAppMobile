@@ -20,6 +20,28 @@ FONTS = {
     'button_bold': (FONT_FAMILY, 12, 'bold')
 }
 
+# Estilos para la pantalla de Login (responsive / mobile-friendly)
+LOGIN = {
+    'title_font': (FONT_FAMILY, 28, 'bold'),
+    'label_font': (FONT_FAMILY, 16),
+    'entry_font': (FONT_FAMILY, 16),
+    'button_font': (FONT_FAMILY, 16, 'bold'),
+    'padding_x': 24,
+    'padding_y': 12,
+    'width': 36,
+}
+
+# Tamaños de iconos usados en la aplicación (ajustables desde tema)
+ICON_SIZES = {
+    'small': 16,
+    'normal': 24,
+    'large': 48,
+    'kpi': 56,
+}
+
+# Versión de la aplicación (se mostrará en el título de la ventana)
+APP_VERSION = "BuffetApp_v1.4"
+
 # Parámetros específicos para la vista de ventas / carrito (fáciles de ajustar desde aquí)
 CART = {
     'button_font': (FONT_FAMILY, 20, 'bold'),   # botones principales (Cobrar/Cancelar)

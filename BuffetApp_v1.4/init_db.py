@@ -179,10 +179,104 @@ def init_db():
       tipo        TEXT NOT NULL CHECK (tipo IN ('INGRESO','RETIRO')),
       monto       NUMERIC NOT NULL CHECK (monto > 0),
       observacion TEXT,
-      creado_ts   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE (caja_id, tipo)
+      creado_ts   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+
+    # Migration: prior versions had a UNIQUE constraint on (caja_id, tipo)
+    # which prevented multiple ingresos/retiros per caja. If an old index
+    # exists, migrate data to a new table without that UNIQUE constraint.
+    try:
+        cur = conn.cursor()
+        # detect an index that enforces uniqueness on caja_movimiento(caja_id, tipo)
+        cur.execute("PRAGMA index_list('caja_movimiento')")
+        indexes = cur.fetchall()
+        unique_index = None
+        for idx in indexes:
+            # idx: (seq, name, unique, origin, partial)
+            if idx[2] == 1:
+                # inspect index info
+                name = idx[1]
+                cur.execute(f"PRAGMA index_info('{name}')")
+                cols = [r[2] for r in cur.fetchall()]
+                if cols == ['caja_id', 'tipo'] or cols == ['tipo', 'caja_id']:
+                    unique_index = name
+                    break
+        if unique_index:
+            # perform migration: create new table, copy data, drop old, rename new
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS caja_movimiento_new (
+                    id INTEGER PRIMARY KEY,
+                    caja_id INTEGER NOT NULL,
+                    tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','RETIRO')),
+                    monto NUMERIC NOT NULL CHECK (monto > 0),
+                    observacion TEXT,
+                    creado_ts DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cur.execute("INSERT INTO caja_movimiento_new (id, caja_id, tipo, monto, observacion, creado_ts) SELECT id, caja_id, tipo, monto, observacion, creado_ts FROM caja_movimiento")
+            cur.execute("DROP TABLE caja_movimiento")
+            cur.execute("ALTER TABLE caja_movimiento_new RENAME TO caja_movimiento")
+            conn.commit()
+    except Exception:
+        # if migration fails, continue silently (we prefer not to break install)
+        pass
+
+
+    # --- Triggers to keep caja_diaria.ingresos and retiros consistent ---
+    try:
+        # AFTER INSERT: add monto to the corresponding field
+        c.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_caja_mov_insert
+        AFTER INSERT ON caja_movimiento
+        BEGIN
+            UPDATE caja_diaria
+            SET ingresos = COALESCE(ingresos,0) + CASE WHEN NEW.tipo='INGRESO' THEN NEW.monto ELSE 0 END,
+                retiros  = COALESCE(retiros,0)  + CASE WHEN NEW.tipo='RETIRO'  THEN NEW.monto ELSE 0 END
+            WHERE id = NEW.caja_id;
+        END;
+        ''')
+
+        # AFTER DELETE: subtract monto from the corresponding field
+        c.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_caja_mov_delete
+        AFTER DELETE ON caja_movimiento
+        BEGIN
+            UPDATE caja_diaria
+            SET ingresos = COALESCE(ingresos,0) - CASE WHEN OLD.tipo='INGRESO' THEN OLD.monto ELSE 0 END,
+                retiros  = COALESCE(retiros,0)  - CASE WHEN OLD.tipo='RETIRO'  THEN OLD.monto ELSE 0 END
+            WHERE id = OLD.caja_id;
+        END;
+        ''')
+
+        # AFTER UPDATE: remove OLD values and add NEW values (covers tipo/caja_id/monto changes)
+        c.execute('''
+        CREATE TRIGGER IF NOT EXISTS trg_caja_mov_update
+        AFTER UPDATE ON caja_movimiento
+        BEGIN
+            -- subtract OLD
+            UPDATE caja_diaria
+            SET ingresos = COALESCE(ingresos,0) - CASE WHEN OLD.tipo='INGRESO' THEN OLD.monto ELSE 0 END,
+                retiros  = COALESCE(retiros,0)  - CASE WHEN OLD.tipo='RETIRO'  THEN OLD.monto ELSE 0 END
+            WHERE id = OLD.caja_id;
+            -- add NEW
+            UPDATE caja_diaria
+            SET ingresos = COALESCE(ingresos,0) + CASE WHEN NEW.tipo='INGRESO' THEN NEW.monto ELSE 0 END,
+                retiros  = COALESCE(retiros,0)  + CASE WHEN NEW.tipo='RETIRO'  THEN NEW.monto ELSE 0 END
+            WHERE id = NEW.caja_id;
+        END;
+        ''')
+
+        # Recompute totals once to normalize any legacy data (idempotent)
+        c.execute('''
+        UPDATE caja_diaria
+        SET ingresos = (SELECT COALESCE(SUM(monto),0) FROM caja_movimiento WHERE caja_id = caja_diaria.id AND tipo='INGRESO'),
+            retiros  = (SELECT COALESCE(SUM(monto),0) FROM caja_movimiento WHERE caja_id = caja_diaria.id AND tipo='RETIRO')
+        ''')
+        conn.commit()
+    except Exception:
+        # Do not fail install if triggers cannot be created
+        pass
 
 
     # --- Columna caja_id en ventas ---
