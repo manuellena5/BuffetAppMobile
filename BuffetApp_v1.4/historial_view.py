@@ -418,11 +418,11 @@ class HistorialView(tk.Frame):
                 cursor.execute("SELECT nombre FROM products WHERE id=?", (producto_id,))
                 nombre = cursor.fetchone()[0]
                 productos.append((cantidad, nombre, categoria))
-            from ventas_view import VentasView
+            from ventas_view_new import VentasViewNew
             exito = True
             for cantidad, nombre, _ in productos:
                 for _ in range(cantidad):
-                    ok = VentasView.imprimir_ticket_por_item_win32_static(
+                    ok = VentasViewNew.imprimir_ticket_por_item_win32_static(
                         fecha_hora,
                         nombre,
                         ticket_id,

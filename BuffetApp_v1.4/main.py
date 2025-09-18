@@ -67,7 +67,11 @@ class BarCanchaApp:
         self.herramientas_view = HerramientasView(self)
         self.herramientas_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.herramientas_menu.add_command(
-            label="Test Impresora", command=self.herramientas_view.test_impresora, state=tk.DISABLED
+            label="Test Impresora", command=HerramientasView.test_impresora, state=tk.DISABLED
+        )
+        # Añadir opción para backup local directo (abrirá modal de confirmación)
+        self.herramientas_menu.add_command(
+            label="Backup local (AppData)", command=self.abrir_backup_confirm, state=tk.DISABLED
         )
 
         # Menú de caja: permite abrir y cerrar la caja diaria
@@ -127,6 +131,7 @@ class BarCanchaApp:
         self.menu_bar.entryconfig("Historial ventas", state=tk.NORMAL)
         self.menu_bar.entryconfig("Productos", state=tk.NORMAL)
         self.herramientas_menu.entryconfig("Test Impresora", state=tk.NORMAL)
+        self.herramientas_menu.entryconfig("Backup local (AppData)", state=tk.NORMAL)
 
 
     def actualizar_menu_caja(self):
@@ -182,9 +187,9 @@ class BarCanchaApp:
     def ver_cierre_caja(self):
 
         """Muestra la pantalla de informe del día."""
-        if not self.informe_view:
-            from informe_dia_view import InformeDiaView
-            self.informe_view = InformeDiaView(self.root)
+        # if not self.informe_view:
+        #     from informe_dia_view import InformeDiaView
+        #     self.informe_view = InformeDiaView(self.root)
         self.ocultar_frames()
         self.informe_view.reset()
         self.informe_view.pack(fill=tk.BOTH, expand=True)
@@ -306,6 +311,60 @@ class BarCanchaApp:
         self.actualizar_menu_caja()
         self.mostrar_menu_principal()
 
+    def abrir_backup_confirm(self):
+        """Muestra un modal de confirmación para realizar un backup local inmediato."""
+        try:
+            win = tk.Toplevel(self.root)
+            win.title('Confirmar Backup local')
+            win.transient(self.root)
+            win.grab_set()
+            ancho, alto = 420, 160
+            x = self.root.winfo_screenwidth() // 2 - ancho // 2
+            y = self.root.winfo_screenheight() // 2 - alto // 2
+            win.geometry(f"{ancho}x{alto}+{x}+{y}")
+            tk.Label(win, text='¿Desea generar un backup local ahora?\nSe guardará en %APPDATA%\\LOCAL\\BuffetApp\\backup', wraplength=380, justify='left').pack(padx=12, pady=12)
+
+            def do_backup():
+                try:
+                    # llamar al método de herramientas (módulo maneja import defensivo)
+                    try:
+                        self.herramientas_view.backup_local(parent=win)
+                    except Exception:
+                        # fallback: intentar llamar a backup_db directamente
+                        try:
+                            from db_migrations import backup_db
+                            if callable(backup_db):
+                                backup_db()
+                        except Exception:
+                            pass
+                finally:
+                    try:
+                        win.grab_release()
+                    except Exception:
+                        pass
+                    try:
+                        win.destroy()
+                    except Exception:
+                        pass
+
+            btn_frame = tk.Frame(win)
+            btn_frame.pack(pady=8)
+            # Use themed buttons and apply green/red overrides for Confirm/Cancel
+            try:
+                from theme import themed_button, apply_button_style, COLORS
+                btn_confirm = themed_button(btn_frame, text='Confirmar', command=do_backup)
+                apply_button_style(btn_confirm, bg=COLORS.get('success', '#22C55E'), fg='white')
+                btn_confirm.pack(side=tk.LEFT, padx=8)
+
+                btn_cancel = themed_button(btn_frame, text='Cancelar', command=lambda: (win.grab_release(), win.destroy()))
+                apply_button_style(btn_cancel, bg=COLORS.get('error', '#F43F5E'), fg='white')
+                btn_cancel.pack(side=tk.RIGHT, padx=8)
+            except Exception:
+                tk.Button(btn_frame, text='Confirmar', command=do_backup, width=14).pack(side=tk.LEFT, padx=8)
+                tk.Button(btn_frame, text='Cancelar', command=lambda: (win.grab_release(), win.destroy()), width=14).pack(side=tk.RIGHT, padx=8)
+        except Exception as e:
+            messagebox.showerror('Backup', f'No se pudo abrir el diálogo de backup: {e}')
+
     def verificar_caja_abierta(self):
         conn = get_connection()
         cursor = conn.cursor()
@@ -398,7 +457,7 @@ class BarCanchaApp:
     def mostrar_cajas(self):
         if not self.cajas_view:
             try:
-                from BuffetApp.caja_listado_view import CajaListadoView
+                from caja_listado_view import CajaListadoView
             except Exception:
                 from caja_listado_view import CajaListadoView
             self.cajas_view = CajaListadoView(self.root, self.on_caja_cerrada)
@@ -1014,7 +1073,7 @@ class BarCanchaApp:
 
         # Crear una nueva instancia de CajaListadoView especficamente para cerrar la caja
         try:
-            from BuffetApp.caja_listado_view import CajaListadoView
+            from caja_listado_view import CajaListadoView
         except Exception:
             from caja_listado_view import CajaListadoView
         self.ocultar_frames()

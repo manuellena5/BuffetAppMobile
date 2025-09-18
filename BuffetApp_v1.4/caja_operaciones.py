@@ -3,8 +3,14 @@ import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
 import datetime
 from db_utils import get_connection
+try:
+    from db_migrations import backup_db
+except Exception:
+    # best-effort import; backup may not be available in some packaging contexts
+    backup_db = None
 import sqlite3
 import os
+import shutil
 from theme import (
     COLORS, FONTS, FINANCE_COLORS, format_currency,
     themed_button, apply_theme
@@ -794,6 +800,107 @@ class DetalleCajaFrame(tk.Frame):
                         self.caja_id
                     ))
                     conn.commit()
+                    # Create a timestamped backup after successful close. Use best-effort call.
+                    try:
+                        if callable(backup_db):
+                            # Run backup and inform the user. Use best-effort and log result to AppData
+                            try:
+                                path = backup_db()
+                                try:
+                                    # write a small log entry for auditing
+                                    from utils_paths import appdata_dir
+                                    log_dir = appdata_dir()
+                                    log_path = os.path.join(log_dir, 'backup_logs.txt')
+                                    with open(log_path, 'a', encoding='utf-8') as lf:
+                                        lf.write(f"{datetime.datetime.now().isoformat()} - backup created: {path}\n")
+                                except Exception:
+                                    pass
+                                # Inform the user that backup was created
+                                try:
+                                    messagebox.showinfo('Backup', f'Backup creado: {path}')
+                                except Exception:
+                                    pass
+                            except Exception as _e:
+                                try:
+                                    from utils_paths import appdata_dir
+                                    log_dir = appdata_dir()
+                                    log_path = os.path.join(log_dir, 'backup_logs.txt')
+                                    with open(log_path, 'a', encoding='utf-8') as lf:
+                                        lf.write(f"{datetime.datetime.now().isoformat()} - backup failed: {_e}\n")
+                                except Exception:
+                                    pass
+                                try:
+                                    messagebox.showwarning('Backup', f'No se pudo crear backup: {_e}')
+                                except Exception:
+                                    pass
+                        else:
+                            # backup function not available: attempt inline backup using DB_PATH
+                            try:
+                                from utils_paths import DB_PATH, appdata_dir
+                                ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                                bdir = os.path.join(appdata_dir(), 'backup')
+                                os.makedirs(bdir, exist_ok=True)
+                                dst = os.path.join(bdir, f'barcancha_{ts}.db')
+                                try:
+                                    src_conn = sqlite3.connect(DB_PATH)
+                                    dest_conn = sqlite3.connect(dst)
+                                    with dest_conn:
+                                        src_conn.backup(dest_conn)
+                                    try:
+                                        dest_conn.close()
+                                    except Exception:
+                                        pass
+                                    try:
+                                        src_conn.close()
+                                    except Exception:
+                                        pass
+                                    # log + notify
+                                    try:
+                                        log_path = os.path.join(appdata_dir(), 'backup_logs.txt')
+                                        with open(log_path, 'a', encoding='utf-8') as lf:
+                                            lf.write(f"{datetime.datetime.now().isoformat()} - inline backup created: {dst}\n")
+                                    except Exception:
+                                        pass
+                                    try:
+                                        messagebox.showinfo('Backup', f'Backup creado: {dst}')
+                                    except Exception:
+                                        pass
+                                except Exception as _e2:
+                                    # fallback to file copy
+                                    try:
+                                        shutil.copy2(DB_PATH, dst)
+                                        try:
+                                            log_path = os.path.join(appdata_dir(), 'backup_logs.txt')
+                                            with open(log_path, 'a', encoding='utf-8') as lf:
+                                                lf.write(f"{datetime.datetime.now().isoformat()} - inline backup copied: {dst}\n")
+                                        except Exception:
+                                            pass
+                                        try:
+                                            messagebox.showinfo('Backup', f'Backup creado (copiado): {dst}')
+                                        except Exception:
+                                            pass
+                                    except Exception as _e3:
+                                        try:
+                                            log_path = os.path.join(appdata_dir(), 'backup_logs.txt')
+                                            with open(log_path, 'a', encoding='utf-8') as lf:
+                                                lf.write(f"{datetime.datetime.now().isoformat()} - inline backup failed: {_e3}\n")
+                                        except Exception:
+                                            pass
+                                        try:
+                                            messagebox.showwarning('Backup', f'No se pudo crear backup local: {_e3}')
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                # if even utils_paths import fails, give up silently but log if possible
+                                try:
+                                    from utils_paths import appdata_dir
+                                    log_path = os.path.join(appdata_dir(), 'backup_logs.txt')
+                                    with open(log_path, 'a', encoding='utf-8') as lf:
+                                        lf.write(f"{datetime.datetime.now().isoformat()} - inline backup fallback failed.\n")
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
                     messagebox.showinfo("Éxito", "Caja cerrada correctamente")
                     # Notify caller that the caja was actually closed
                     if self.on_close:

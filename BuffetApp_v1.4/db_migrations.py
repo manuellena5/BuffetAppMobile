@@ -13,7 +13,23 @@ def backup_db(db_path: str = None) -> str:
     db_path = db_path or DB_PATH
     ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     dst = os.path.join(BACKUP_DIR, f'barcancha_{ts}.db')
-    shutil.copy2(db_path, dst)
+    # Prefer sqlite online backup API for a consistent copy while DB may be in use
+    try:
+        src_conn = sqlite3.connect(db_path)
+        dest_conn = sqlite3.connect(dst)
+        with dest_conn:
+            src_conn.backup(dest_conn)
+        try:
+            dest_conn.close()
+        except Exception:
+            pass
+        try:
+            src_conn.close()
+        except Exception:
+            pass
+    except Exception:
+        # fallback to filesystem copy
+        shutil.copy2(db_path, dst)
     return dst
 
 
