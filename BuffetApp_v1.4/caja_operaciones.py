@@ -333,7 +333,19 @@ class DetalleCajaFrame(tk.Frame):
                     obs = obs_entry.get().strip()
                     with get_connection() as conn2:
                         cur2 = conn2.cursor()
-                        cur2.execute("INSERT INTO caja_movimiento (caja_id, tipo, monto, observacion) VALUES (?, ?, ?, ?)", (self.caja_id, tipo, monto, obs))
+                        # Insertar SIEMPRE un nuevo movimiento; triggers mantienen caja_diaria
+                        try:
+                            cur2.execute(
+                                "INSERT INTO caja_movimiento (caja_id, tipo, monto, observacion) VALUES (?, ?, ?, ?)",
+                                (self.caja_id, tipo.upper(), monto, obs)
+                            )
+                        except sqlite3.IntegrityError as e:
+                            conn2.rollback()
+                            messagebox.showerror(
+                                'BD antigua',
+                                'Tu base tiene una restricción única en (caja_id, tipo) que impide múltiples ingresos/retiros. Hay que quitarla para continuar.'
+                            )
+                            return
                         conn2.commit()
                     monto_entry.delete(0, tk.END)
                     obs_entry.delete(0, tk.END)
@@ -477,8 +489,27 @@ class DetalleCajaFrame(tk.Frame):
                     efectivo_ventas = cursor.fetchone()[0] or 0
                 except Exception:
                     efectivo_ventas = total_ventas
+                # Para evitar depender de posibles valores desactualizados en caja_diaria,
+                # obtener ingresos y retiros sumados directamente desde caja_movimiento
+                try:
+                    cursor.execute(
+                        "SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0),\n                                COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto END),0)\n                         FROM caja_movimiento WHERE caja_id=?",
+                        (self.caja_id,)
+                    )
+                    _mv = cursor.fetchone() or (0, 0)
+                    ingresos_sum = _mv[0] or 0
+                    retiros_sum = _mv[1] or 0
+                except Exception:
+                    ingresos_sum = getattr(self, 'ingresos', 0) or 0
+                    retiros_sum = getattr(self, 'retiros', 0) or 0
+                # Actualizar atributos para mantener consistencia en el resto de la vista/exports
+                try:
+                    self.ingresos = ingresos_sum
+                    self.retiros = retiros_sum
+                except Exception:
+                    pass
                 # Estimación: fondo inicial + efectivo ventas + ingresos - retiros + transferencias
-                self.total_teorico = self.fondo_inicial + efectivo_ventas + self.ingresos - self.retiros + self.transferencias_final
+                self.total_teorico = self.fondo_inicial + efectivo_ventas + ingresos_sum - retiros_sum + self.transferencias_final
             # Poblamos observaciones de apertura
             try:
                 self.obs_apertura_text.config(state='normal')
@@ -572,19 +603,24 @@ class DetalleCajaFrame(tk.Frame):
                 )
             except Exception:
                 self.create_kpi(self.kpis, "💰", "Fondo Inicial", format_currency(getattr(self, 'fondo_inicial', 0)), '#ffffff', '#000000')
-            # Obtener ingresos y retiros preferentemente desde caja_movimiento si no vienen en la fila
+            # Ingresos y Retiros: siempre sumar desde caja_movimiento para reflejar los movimientos reales
             try:
-                ingresos_val = getattr(self, 'ingresos', None)
-                retiros_val = getattr(self, 'retiros', None)
-                if ingresos_val is None:
-                    cursor.execute("SELECT COALESCE(SUM(monto),0) FROM caja_movimiento WHERE caja_id = ? AND tipo = 'INGRESO'", (self.caja_id,))
-                    ingresos_val = cursor.fetchone()[0] or 0
-                if retiros_val is None:
-                    cursor.execute("SELECT COALESCE(SUM(monto),0) FROM caja_movimiento WHERE caja_id = ? AND tipo = 'RETIRO'", (self.caja_id,))
-                    retiros_val = cursor.fetchone()[0] or 0
+                cursor.execute(
+                    "SELECT COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0),\n                            COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto END),0)\n                     FROM caja_movimiento WHERE caja_id=?",
+                    (self.caja_id,)
+                )
+                mv = cursor.fetchone() or (0, 0)
+                ingresos_val = mv[0] or 0
+                retiros_val = mv[1] or 0
             except Exception:
                 ingresos_val = getattr(self, 'ingresos', 0) or 0
                 retiros_val = getattr(self, 'retiros', 0) or 0
+            # Mantener atributos sincronizados con los valores mostrados
+            try:
+                self.ingresos = ingresos_val
+                self.retiros = retiros_val
+            except Exception:
+                pass
             try:
                 self.create_kpi(self.kpis, "ingresos", "Ingresos", format_currency(ingresos_val), FINANCE_COLORS.get('positive_bg', '#e6ffed'), FINANCE_COLORS.get('positive_fg', '#0a0'))
                 self.create_kpi(self.kpis, "retiros", "Retiros", format_currency(retiros_val), FINANCE_COLORS.get('negative_bg', '#ffecec'), FINANCE_COLORS.get('negative_fg', '#c00'))

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from db_utils import get_connection
+from theme import apply_treeview_style, format_currency
 # Permitir import tanto como paquete (BuffetApp.*) como módulo suelto (tests)
 try:
     from .caja_operaciones import DetalleCajaFrame  # type: ignore
@@ -23,13 +24,14 @@ class CajaListadoView(tk.Frame):
 		('usuario', 'Usuario Apertura'),
 		('fondo_inicial', 'Fondo Inicial'),
 		('total_ventas', 'Total Ventas'),
-		('total_tickets', 'Tickets'),
-		('tickets_anulados', 'Tickets Anulados'),
+		('ventas_efectivo', 'Ventas Efectivo'),
 		('transferencias_final', 'Transferencias'),
 		('ingresos', 'Ingresos'),
 		('retiros', 'Retiros'),
 		('conteo_efectivo_final', 'Conteo Efectivo Final'),
 		('diferencia', 'Diferencia'),
+		('total_tickets', 'Tickets'),
+		('tickets_anulados', 'Tickets Anulados'),
 		('estado', 'Estado'),
 	]
 
@@ -48,7 +50,6 @@ class CajaListadoView(tk.Frame):
 		# Treeview
 		cols = [c[0] for c in self.COLUMNS]
 		headings = [c[1] for c in self.COLUMNS]
-		from theme import apply_treeview_style
 		style = apply_treeview_style()
 		self.tree = ttk.Treeview(self, columns=cols, show='headings', selectmode='browse', style='App.Treeview')
 		for cid, head in zip(cols, headings):
@@ -79,16 +80,36 @@ class CajaListadoView(tk.Frame):
 			query = (
 				"SELECT cd.id, cd.codigo_caja, cd.fecha, cd.usuario_apertura, COALESCE(cd.fondo_inicial,0),"
 				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_ventas,"
+				# Ventas en efectivo: si abierta, suma en vivo medio de pago efectivo; si cerrada, usa conteo_efectivo_final si corresponde? No: queremos ventas en efectivo (tickets) no el conteo; por lo tanto, siempre sumar por medio de pago 'efectivo'
+				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id LEFT JOIN metodos_pago mp ON mp.id=v.metodo_pago_id WHERE v.caja_id=cd.id AND t.status!='Anulado' AND (LOWER(mp.descripcion) LIKE 'efectivo%' OR LOWER(mp.descripcion)='efectivo')) as ventas_efectivo,"
+				# Transferencias: si la caja está abierta, mostrar suma en vivo por método de pago Transferencia; si está cerrada, usar el valor final si existe, sino la suma en vivo
+				" CASE WHEN LOWER(COALESCE(cd.estado,''))='abierta' THEN ("
+				"   SELECT COALESCE(SUM(t.total_ticket),0)"
+				"     FROM tickets t"
+				"     JOIN ventas v ON v.id=t.venta_id"
+				"     LEFT JOIN metodos_pago mp ON mp.id=v.metodo_pago_id"
+				"    WHERE v.caja_id=cd.id AND t.status!='Anulado' AND LOWER(mp.descripcion) LIKE 'transfer%'"
+				")"
+				" ELSE COALESCE(cd.transferencias_final, ("
+				"   SELECT COALESCE(SUM(t.total_ticket),0)"
+				"     FROM tickets t"
+				"     JOIN ventas v ON v.id=t.venta_id"
+				"     LEFT JOIN metodos_pago mp ON mp.id=v.metodo_pago_id"
+				"    WHERE v.caja_id=cd.id AND t.status!='Anulado' AND LOWER(mp.descripcion) LIKE 'transfer%')) END AS transferencias_final,"
+				" (SELECT COALESCE(SUM(m.monto),0) FROM caja_movimiento m WHERE m.caja_id=cd.id AND m.tipo='INGRESO') as ingresos,"
+				" (SELECT COALESCE(SUM(m.monto),0) FROM caja_movimiento m WHERE m.caja_id=cd.id AND m.tipo='RETIRO') as retiros,"
+				" COALESCE(cd.conteo_efectivo_final,0),"
+				" COALESCE(cd.diferencia,0),"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_tickets,"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status='Anulado') as tickets_anulados,"
-				" COALESCE(cd.transferencias_final,0), COALESCE(cd.ingresos,0), COALESCE(cd.retiros,0), COALESCE(cd.conteo_efectivo_final,0), cd.diferencia, COALESCE(cd.estado, '')"
+				" COALESCE(cd.estado, '')"
 				" FROM caja_diaria cd ORDER BY cd.fecha DESC LIMIT 200"
 			)
 			cur.execute(query)
 			rows = cur.fetchall()
 
 			for row in rows:
-				(cid, codigo, fecha, usuario, fondo_inicial, total_ventas, total_tickets, tickets_anulados, transfer, ingresos, retiros, conteo_final, diferencia_db, estado) = row
+				(cid, codigo, fecha, usuario, fondo_inicial, total_ventas, ventas_efectivo,  transfer, ingresos, retiros, conteo_final, diferencia_db,total_tickets, tickets_anulados, estado) = row
 
 				# Si diferencia guardada es NULL => calcular por la fórmula del negocio
 				if diferencia_db is None:
@@ -104,11 +125,18 @@ class CajaListadoView(tk.Frame):
 					diferencia = diferencia_db or 0
 
 				# Build visible values (omit internal id, append estado)
-				values = [codigo, fecha, usuario, fondo_inicial, total_ventas, total_tickets, tickets_anulados, transfer, ingresos, retiros, conteo_final, diferencia, estado]
+				values = [codigo, fecha, usuario, fondo_inicial, total_ventas, ventas_efectivo,  transfer, ingresos, retiros, conteo_final, diferencia,total_tickets, tickets_anulados, estado]
 				tags = ()
 				if str(estado).lower() == 'abierta':
 					tags = ('abierta',)
 				self.tree.insert('', 'end', iid=str(cid), values=values, tags=tags)
+
+		# Pedir al controlador que refresque el pie global si este frame está contenido en la app principal
+		try:
+			if hasattr(self.master, 'mostrar_pie_caja'):
+				self.master.mostrar_pie_caja(self)
+		except Exception:
+			pass
 
 	def _selected_caja_id(self):
 		sel = self.tree.selection()

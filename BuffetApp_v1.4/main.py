@@ -8,6 +8,7 @@ from init_db import init_db, log_error
 from login_view import LoginView
 from utils_paths import CONFIG_PATH, DB_PATH, resource_path
 from db_utils import get_connection
+import sqlite3
 
 
 
@@ -20,6 +21,11 @@ class BarCanchaApp:
     def __init__(self, root):
         import json, os
         self.root = root
+        # Confirmación al cerrar la aplicación desde la 'X'
+        try:
+            self.root.protocol("WM_DELETE_WINDOW", self._confirm_exit)
+        except Exception:
+            pass
         try:
             from theme import APP_VERSION
             self.root.title(f"Sistema de Ventas - Bar de Cancha - {APP_VERSION}")
@@ -121,6 +127,19 @@ class BarCanchaApp:
         self.ocultar_frames()
         self.login_view = LoginView(self.root, self.on_login)
         self.login_view.pack(fill=tk.BOTH, expand=True)
+
+
+    def _confirm_exit(self):
+        """Pregunta confirmación antes de cerrar la aplicación."""
+        try:
+            if messagebox.askyesno("Salir", "¿Realmente desea cerrar la aplicación?"):
+                self.root.destroy()
+        except Exception:
+            # Fallback: cerrar
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
 
 
     def caja_abierta_bool(self):
@@ -266,21 +285,23 @@ class BarCanchaApp:
                 return
 
             conn = get_connection(); cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO caja_movimiento (caja_id, tipo, monto, observacion)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(caja_id, tipo) DO UPDATE SET
-                  monto=excluded.monto,
-                  observacion=excluded.observacion,
-                  creado_ts=CURRENT_TIMESTAMP
-                """,
-                (caja_id, tipo.upper(), monto, obs)
-            )
-            if tipo == 'ingreso':
-                cur.execute("UPDATE caja_diaria SET ingresos=? WHERE id=?", (monto, caja_id))
-            else:
-                cur.execute("UPDATE caja_diaria SET retiros=? WHERE id=?", (monto, caja_id))
+            # Siempre insertamos un nuevo movimiento; los triggers (init_db) actualizan caja_diaria
+            try:
+                cur.execute(
+                    "INSERT INTO caja_movimiento (caja_id, tipo, monto, observacion) VALUES (?, ?, ?, ?)",
+                    (caja_id, tipo.upper(), monto, obs)
+                )
+            except sqlite3.IntegrityError as e:
+                conn.rollback(); conn.close()
+                messagebox.showerror(
+                    "Base de datos",
+                    "No se pudo guardar el movimiento.\n\nTu base tiene una restricción única en (caja_id, tipo). Para permitir múltiples ingresos/retiros por caja, hay que quitarla."
+                )
+                return
+            except Exception as e:
+                conn.rollback(); conn.close()
+                messagebox.showerror("Error", f"No se pudo guardar el movimiento: {e}")
+                return
             conn.commit(); conn.close()
             win.destroy()
             messagebox.showinfo("Caja", f"{tipo.capitalize()} registrado.")
@@ -484,7 +505,28 @@ class BarCanchaApp:
             widget.destroy()
         info = self.get_caja_info()
         if info:
-            texto = f"🟢 Caja {info['codigo']} abierta - Apertura: {info['hora_apertura']}"
+            # Calcular ventas actuales de la caja abierta
+            total_ventas = 0
+            try:
+                with get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT COALESCE(SUM(t.total_ticket),0)
+                          FROM tickets t JOIN ventas v ON v.id=t.venta_id
+                         WHERE v.caja_id=? AND t.status!='Anulado'
+                        """,
+                        (getattr(self, 'caja_abierta_id', None),)
+                    )
+                    total_ventas = cur.fetchone()[0] or 0
+            except Exception:
+                total_ventas = 0
+            try:
+                from theme import format_currency
+                ventas_txt = format_currency(total_ventas)
+            except Exception:
+                ventas_txt = f"$ {total_ventas:,.2f}"
+            texto = f"🟢 Caja {info['codigo']} abierta - Apertura: {info['hora_apertura']}  •  Ventas al momento: {ventas_txt}"
             pie = tk.Label(parent, text=texto, font=("Arial", 11), bg="#e8f5e9", anchor="w", justify="left")
         else:
             pie = tk.Label(parent, text="🔴 Caja cerrada", font=("Arial", 11), bg="#ffebee", anchor="w", justify="left")
@@ -837,6 +879,20 @@ class BarCanchaApp:
             except Exception:
                 descripcion_mp = str(metodo_pago)
             messagebox.showinfo("Venta registrada", f"Venta guardada correctamente.\nMétodo de pago: {descripcion_mp}")
+            # Refrescar pie global con ventas al momento
+            try:
+                # Actualizar pie en la vista actual si existe
+                current_parent = None
+                if self.ventas_view and self.ventas_view.winfo_manager():
+                    current_parent = self.ventas_view
+                elif self.menu_view and self.menu_view.winfo_manager():
+                    current_parent = self.menu_view
+                elif self.cajas_view and self.cajas_view.winfo_manager():
+                    current_parent = self.cajas_view
+                if current_parent is not None:
+                    self.mostrar_pie_caja(current_parent)
+            except Exception:
+                pass
             return {'venta_id': venta_id, 'tickets': tickets_info}
         except Exception as e:
             messagebox.showerror("Error al guardar venta", str(e))

@@ -9,10 +9,9 @@ class HistorialView(tk.Frame):
         super().__init__(master)
         self.label_historial = tk.Label(self, text="Historial de Ventas", font=("Arial", 18))
         self.label_historial.pack(pady=10)
-
         # Filtros debajo del título
         self.frame_filtro_fecha = tk.Frame(self)
-        self.frame_filtro_fecha.pack(pady=(0,8))
+        self.frame_filtro_fecha.pack(fill=tk.X, pady=(0,8))
         tk.Label(self.frame_filtro_fecha, text="Filtrar por fecha:", font=("Arial", 11)).pack(side=tk.LEFT, padx=5)
         self.var_fecha = tk.StringVar()
         self.combo_fecha = None
@@ -33,11 +32,13 @@ class HistorialView(tk.Frame):
         # asegúrate de usar el style namespaced 'App.Treeview' para este Treeview
         style.configure('App.Treeview', font=FONTS['normal'])
         style.configure('App.Treeview.Heading', font=FONTS['bold'])
+        # Contenedor principal del listado (árbol + scrollbar) para permitir expansión
+        self.content_frame = tk.Frame(self)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=(4, 4))
         self.tree = ttk.Treeview(
-            self,
+            self.content_frame,
             columns=("fecha_hora", "item", "total", "categoria", "status", "codigo_caja", "identificador", "metodo_pago"),
             show="headings",
-            height=15,
             style='App.Treeview',
         )
         self.tree.heading("fecha_hora", text="Fecha")
@@ -56,20 +57,20 @@ class HistorialView(tk.Frame):
         self.tree.column("codigo_caja", width=140)
         self.tree.column("identificador", width=125)
         self.tree.column("metodo_pago", width=120)
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.scrollbar = ttk.Scrollbar(self.content_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=self.scrollbar.set)
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=10)
-        self.scrollbar.pack(side=tk.LEFT, fill=tk.Y, padx=(0,10))
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
+        # Acciones horizontales (reutilizamos el nombre del frame para compatibilidad externa)
         self.frame_botones_tabla = tk.Frame(self)
-        self.frame_botones_tabla.pack(pady=5)
-        self.btn_reimprimir = tk.Button(self.frame_botones_tabla, text="Reimprimir Ticket", font=("Arial", 10), width=18, command=self.reimprimir_ticket_seleccionado)
-        self.btn_reimprimir.pack(fill=tk.X, padx=3, pady=2)
+        self.frame_botones_tabla.pack(fill=tk.X, pady=(0, 6))
+        self.btn_reimprimir = tk.Button(self.frame_botones_tabla, text="Reimprimir Ticket", font=("Arial", 10), command=self.reimprimir_ticket_seleccionado)
+        self.btn_reimprimir.pack(side=tk.LEFT, padx=4)
         self.btn_actualizar = tk.Button(
             self.frame_botones_tabla,
             text="Actualizar",
             font=("Arial", 10),
-            width=14,
             command=lambda: self.cargar_historial(
                 self.var_fecha.get() if self.var_fecha.get() != "Mostrar todo" else None,
                 self.cajas_rows[self.combo_caja.current()-1][0]
@@ -78,17 +79,15 @@ class HistorialView(tk.Frame):
                 1,
             ),
         )
-        self.btn_actualizar.pack(fill=tk.X, padx=3, pady=2)
-        # self.btn_eliminar = tk.Button(self.frame_botones_tabla, text="Eliminar Venta", font=("Arial", 10), width=16, command=self.eliminar_venta)
-        # self.btn_eliminar.pack(fill=tk.X, padx=3, pady=2)
-        self.btn_exportar = tk.Button(self.frame_botones_tabla, text="Exportar a Excel", font=("Arial", 10), width=16, command=self.exportar_excel)
-        self.btn_exportar.pack(fill=tk.X, padx=3, pady=2)
-        self.btn_anular = tk.Button(self.frame_botones_tabla, text="Anular Ticket", font=("Arial", 10), width=16, command=self.anular_ticket)
-        self.btn_anular.pack(fill=tk.X, padx=3, pady=2)
+        self.btn_actualizar.pack(side=tk.LEFT, padx=4)
+        self.btn_exportar = tk.Button(self.frame_botones_tabla, text="Exportar a Excel", font=("Arial", 10), command=self.exportar_excel)
+        self.btn_exportar.pack(side=tk.LEFT, padx=4)
+        self.btn_anular = tk.Button(self.frame_botones_tabla, text="Anular Ticket", font=("Arial", 10), command=self.anular_ticket)
+        self.btn_anular.pack(side=tk.LEFT, padx=4)
 
         # Paginación
         self.frame_paginacion = tk.Frame(self)
-        self.frame_paginacion.pack(pady=6)
+        self.frame_paginacion.pack(pady=(0, 6))
         self.btn_prev = tk.Button(self.frame_paginacion, text="<", width=3, command=self.previa, state=tk.DISABLED)
         self.btn_prev.pack(side=tk.LEFT, padx=6)
         self.lbl_pagina = tk.Label(self.frame_paginacion, text="1 de 1")
@@ -103,16 +102,7 @@ class HistorialView(tk.Frame):
         self.filtro_caja = None
 
 
-        # Botón Salir en la esquina inferior derecha
-        try:
-            from tkinter import PhotoImage
-            import os
-            icon_path = os.path.join(os.path.dirname(__file__), "icon_salir.png")
-            self.icon_salir = PhotoImage(file=icon_path)
-        except Exception:
-            self.icon_salir = None
-        self.boton_salir = tk.Button(self, text="Salir", image=self.icon_salir, compound=tk.LEFT if self.icon_salir else None, command=self.master.quit)
-        self.boton_salir.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
+        # (Removido) Botón Salir local para no interferir con el layout ni duplicar controles
 
         # cargar historial filtrando por la caja seleccionada por defecto
         self.on_filtro_cambiado()

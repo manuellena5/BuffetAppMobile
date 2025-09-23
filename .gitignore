@@ -6526,3 +6526,5 @@ dist/BuffetApp/_internal/yapf_third_party/_ylib2to3/LICENSE
 dist/BuffetApp/_internal/yapf_third_party/_ylib2to3/PatternGrammar.txt
 dist/BuffetApp/_internal/yapf_third_party/yapf_diff/LICENSE
 dist/BuffetApp/_internal/zmq/backend/cython/_zmq.cp311-win_amd64.pyd
+.vscode/tasks.json
+BuffetApp_v1.4.zip
