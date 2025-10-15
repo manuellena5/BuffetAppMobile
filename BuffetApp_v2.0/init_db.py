@@ -1,6 +1,7 @@
 # archivo: init_db.py
 import sqlite3
 from db_utils import get_connection
+from app_config import get_device_id, get_device_name
 
 def init_db():
     
@@ -378,6 +379,125 @@ def init_db():
         c.execute("INSERT INTO usuarios (usuario, password, rol) VALUES (?, ?, ?)", ("cajero", "cajero123", "cajero"))
 
     conn.commit()
+    
+    # --- POS y Settings para identificar dispositivo/Punto de Venta ---
+    try:
+        # Tabla settings KV simple (si no existiera)
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        ''')
+        # Tabla pos (puntos de venta)
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS pos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pos_uuid TEXT NOT NULL UNIQUE,
+            nombre   TEXT NOT NULL,
+            device_id TEXT,
+            hostname TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+        ''')
+        # Tabla caja_diaria ya existe; agregamos columnas pos_uuid y caja_uuid si faltan
+        c.execute("PRAGMA table_info(caja_diaria)")
+        cols = [r[1] for r in c.fetchall()]
+        if 'pos_uuid' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN pos_uuid TEXT")
+            except Exception:
+                pass
+        if 'caja_uuid' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN caja_uuid TEXT")
+            except Exception:
+                pass
+        # Índices útiles
+        try:
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_caja_uuid ON caja_diaria(caja_uuid)")
+        except Exception:
+            pass
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_caja_pos_uuid ON caja_diaria(pos_uuid)")
+        except Exception:
+            pass
+        # Agregar columnas para relacionar plantilla de caja y su prefijo
+        c.execute("PRAGMA table_info(caja_diaria)")
+        cols = [r[1] for r in c.fetchall()]
+        if 'pos_caja_id' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN pos_caja_id INTEGER")
+            except Exception:
+                pass
+        if 'caja_prefijo' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN caja_prefijo TEXT")
+            except Exception:
+                pass
+
+        # Crear/asegurar POS local basado en config (device_id/device_name)
+        device_id = get_device_id()
+        device_name = get_device_name()
+        # Buscar pos por device_id; si no existe, crearlo
+        c.execute("SELECT id, pos_uuid FROM pos WHERE device_id=?", (device_id,))
+        row = c.fetchone()
+        if not row:
+            import uuid, platform
+            pos_uuid = str(uuid.uuid4())
+            hostname = platform.node() or "Equipo"
+            c.execute(
+                "INSERT INTO pos (pos_uuid, nombre, device_id, hostname) VALUES (?, ?, ?, ?)",
+                (pos_uuid, device_name or hostname, device_id, hostname)
+            )
+            # Guardar referencia en settings
+            try:
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('device_pos_uuid', ?)", (pos_uuid,))
+            except Exception:
+                pass
+        else:
+            # Alinear nombre si cambió desde config
+            try:
+                c.execute("UPDATE pos SET nombre=? WHERE device_id=?", (device_name, device_id))
+            except Exception:
+                pass
+    except Exception:
+        # No romper la inicialización ante errores de POS/Settings
+        pass
+
+    # --- Plantillas de Cajas (pos_cajas) ---
+    try:
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS pos_cajas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descripcion TEXT NOT NULL,
+            prefijo TEXT NOT NULL,
+            predeterminada INTEGER DEFAULT 0,
+            activo INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(prefijo)
+        )
+        ''')
+        # Precarga si está vacío
+        c.execute('SELECT COUNT(*) FROM pos_cajas')
+        if (c.fetchone() or [0])[0] == 0:
+            c.execute("INSERT INTO pos_cajas (descripcion, prefijo, predeterminada) VALUES ('Caja1', 'Caj01', 1)")
+            c.execute("INSERT INTO pos_cajas (descripcion, prefijo, predeterminada) VALUES ('Caja2', 'Caj02', 0)")
+        else:
+            # Asegurar que exista exactamente una predeterminada
+            c.execute('SELECT COUNT(*) FROM pos_cajas WHERE predeterminada=1')
+            cnt = (c.fetchone() or [0])[0]
+            if cnt == 0:
+                # Marcar la primera como predeterminada
+                c.execute('UPDATE pos_cajas SET predeterminada=1 WHERE id=(SELECT id FROM pos_cajas ORDER BY id LIMIT 1)')
+            elif cnt > 1:
+                # Dejar solo la más antigua como predeterminada
+                c.execute('''
+                    UPDATE pos_cajas SET predeterminada=CASE WHEN id=(SELECT id FROM pos_cajas ORDER BY id LIMIT 1) THEN 1 ELSE 0 END
+                ''')
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
     print("Base de datos inicializada.")
 

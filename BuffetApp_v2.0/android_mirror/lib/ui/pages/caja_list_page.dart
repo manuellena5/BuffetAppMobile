@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/caja_service.dart';
+import '../../services/export_service.dart';
+import '../../services/print_service.dart';
 import '../format.dart';
 
 class CajaListPage extends StatefulWidget {
@@ -95,7 +97,35 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
     if (_caja == null) return const Scaffold(body: Center(child: Text('Caja no encontrada')));
     final resumen = _resumen!;
     return Scaffold(
-      appBar: AppBar(title: Text('Resumen ${_caja!['codigo_caja']}')),
+      appBar: AppBar(
+        title: Text('Resumen ${_caja!['codigo_caja']}'),
+        actions: [
+          IconButton(
+            tooltip: 'Imprimir',
+            icon: const Icon(Icons.print),
+            onPressed: () async {
+              try {
+                await PrintService().printCajaResumen(_caja!['id'] as int);
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo imprimir')));
+              }
+            },
+          ),
+          IconButton(
+            tooltip: 'Exportar/Compartir',
+            icon: const Icon(Icons.ios_share),
+            onPressed: () async {
+              try {
+                await ExportService().shareCajaFile(_caja!['id'] as int);
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo exportar la caja')));
+              }
+            },
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(

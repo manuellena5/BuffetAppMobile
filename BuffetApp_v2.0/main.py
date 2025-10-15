@@ -3,12 +3,13 @@ import datetime
 from tkinter import simpledialog, messagebox
 
 # Núcleo ligero importado al inicio; vistas pesadas se importan lazy dentro de métodos
-from menu_view import MenuView
 from init_db import init_db, log_error
-from login_view import LoginView
+from app_config import get_config
 from utils_paths import CONFIG_PATH, DB_PATH, resource_path
 from db_utils import get_connection
 import sqlite3
+import uuid
+from db_utils import get_current_pos_uuid
 
 
 
@@ -19,7 +20,7 @@ class BarCanchaApp:
         print("[DEBUG] imprimir_ticket llamado con carrito:", carrito)
         # Aquí puedes llamar a la lógica de impresión real si existe
     def __init__(self, root):
-        import json, os
+        import json, os, threading
         self.root = root
         # Confirmación al cerrar la aplicación desde la 'X'
         try:
@@ -34,21 +35,35 @@ class BarCanchaApp:
         # Establecer icono de la aplicación
         # Intentar varios iconos empaquetados
         try:
-            for candidate in [
-                "cdm_mitre_white_app_256.png",
-                "cdm_mitre_white_app_2048.png",
-                "icon_salir.png"
-            ]:
-                icon_path = resource_path(candidate)
-                if os.path.exists(icon_path):
-                    self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
-                    break
+            # Preferir .ico (más liviano en arranque) y fallback a PNGs
+            ico = resource_path("app.ico")
+            if os.path.exists(ico):
+                try:
+                    self.root.iconbitmap(ico)
+                except Exception:
+                    pass
+            if not os.path.exists(ico):
+                for candidate in [
+                    "cdm_mitre_white_app_256.png",
+                    "cdm_mitre_white_app_2048.png",
+                    "icon_salir.png"
+                ]:
+                    icon_path = resource_path(candidate)
+                    if os.path.exists(icon_path):
+                        self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+                        break
         except Exception as e:
             print(f"No se pudo cargar un icono: {e}")
 
-        # Inicializar DB en AppData sólo si no existe
-        if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
-            init_db()
+        # Inicializar DB y migraciones de POS/Settings (idempotente)
+        # Si la DB ya existe, correr en segundo plano para no bloquear el arranque
+        try:
+            if not os.path.exists(DB_PATH):
+                init_db()
+            else:
+                threading.Thread(target=init_db, daemon=True).start()
+        except Exception:
+            pass
 
         # Leer/crear config en AppData
         if not os.path.exists(CONFIG_PATH):
@@ -78,17 +93,27 @@ class BarCanchaApp:
         self.menu_bar.add_command(label="Ventas", command=self.mostrar_ventas, state=tk.DISABLED)
         self.menu_bar.add_command(label="Historial ventas", command=self.mostrar_historial, state=tk.DISABLED)
         self.menu_bar.add_command(label="Productos", command=self.mostrar_productos, state=tk.DISABLED)
-        from herramientas_view import HerramientasView  # lazy-suitable (ligera)
-        self.herramientas_view = HerramientasView(self)
+        from herramientas_view import HerramientasView  # mantener import, instanciar lazy
+        self.herramientas_view = None
+        def _hv():
+            if self.herramientas_view is None:
+                self.herramientas_view = HerramientasView(self)
+            return self.herramientas_view
         self.herramientas_menu = tk.Menu(self.menu_bar, tearoff=0)
         # Usar el método de instancia para permitir dependencias internas
+        # Configuración de impresora (nueva ventana)
         self.herramientas_menu.add_command(
-            label="Test Impresora", command=self.herramientas_view.test_impresora, state=tk.DISABLED
+            label="Config. Impresora", command=lambda: _hv().abrir_impresora_window(self.root), state=tk.DISABLED
         )
-        # Añadir opción para backup local directo (abrirá modal de confirmación)
+        # (Eliminado) Opción de backup local directo: se centraliza en "Backups y Sincronización"
+        # Abrir gestión de backups locales, importación desde .db y POS
         self.herramientas_menu.add_command(
-            label="Backup local (AppData)", command=self.abrir_backup_confirm, state=tk.DISABLED
+            label="Backups y Sincronización", command=lambda: _hv().abrir_backup_window(self.root), state=tk.DISABLED
         )
+        # Submenú Punto de Venta
+        self.pos_menu = tk.Menu(self.herramientas_menu, tearoff=0)
+        self.pos_menu.add_command(label="Gestionar Punto de Venta", command=lambda: _hv().abrir_pos_window(self.root))
+        self.herramientas_menu.add_cascade(label="Punto de Venta", menu=self.pos_menu)
 
         # Menú de caja: permite abrir y cerrar la caja diaria
         self.caja_menu = tk.Menu(self.menu_bar, tearoff=0)
@@ -105,14 +130,8 @@ class BarCanchaApp:
         self.logged_user = None
         self.logged_role = None
 
-        self.menu_view = MenuView(
-            self.root,
-            get_caja_info=self.get_caja_info,
-            on_cerrar_caja=self.cerrar_caja_window,
-            on_ver_cierre=self.ver_cierre_caja,
-            on_abrir_caja=self.abrir_caja_window,
-            controller=self
-        )
+        # Crear MenuView de forma perezosa luego del login para acelerar arranque
+        self.menu_view = None
 
         # Vistas cargadas a demanda
         self.ventas_view = None
@@ -125,6 +144,8 @@ class BarCanchaApp:
         self.caja_abierta_id = None
         
         self.ocultar_frames()
+        # Import tardío para reducir costo inicial
+        from login_view import LoginView  # noqa: E402 (import tardío intencional)
         self.login_view = LoginView(self.root, self.on_login)
         self.login_view.pack(fill=tk.BOTH, expand=True)
 
@@ -159,8 +180,9 @@ class BarCanchaApp:
         self.menu_bar.entryconfig("Ventas", state=tk.NORMAL)
         self.menu_bar.entryconfig("Historial ventas", state=tk.NORMAL)
         self.menu_bar.entryconfig("Productos", state=tk.NORMAL)
-        self.herramientas_menu.entryconfig("Test Impresora", state=tk.NORMAL)
-        self.herramientas_menu.entryconfig("Backup local (AppData)", state=tk.NORMAL)
+        self.herramientas_menu.entryconfig("Config. Impresora", state=tk.NORMAL)
+        # (Eliminado) habilitación de "Backup local (AppData)"
+        self.herramientas_menu.entryconfig("Backups y Sincronización", state=tk.NORMAL)
 
 
     def actualizar_menu_caja(self):
@@ -342,59 +364,7 @@ class BarCanchaApp:
         self.actualizar_menu_caja()
         self.mostrar_menu_principal()
 
-    def abrir_backup_confirm(self):
-        """Muestra un modal de confirmación para realizar un backup local inmediato."""
-        try:
-            win = tk.Toplevel(self.root)
-            win.title('Confirmar Backup local')
-            win.transient(self.root)
-            win.grab_set()
-            ancho, alto = 420, 160
-            x = self.root.winfo_screenwidth() // 2 - ancho // 2
-            y = self.root.winfo_screenheight() // 2 - alto // 2
-            win.geometry(f"{ancho}x{alto}+{x}+{y}")
-            tk.Label(win, text='¿Desea generar un backup local ahora?\nSe guardará en %APPDATA%\\LOCAL\\BuffetApp\\backup', wraplength=380, justify='left').pack(padx=12, pady=12)
-
-            def do_backup():
-                try:
-                    # llamar al método de herramientas (módulo maneja import defensivo)
-                    try:
-                        self.herramientas_view.backup_local(parent=win)
-                    except Exception:
-                        # fallback: intentar llamar a backup_db directamente
-                        try:
-                            from db_migrations import backup_db
-                            if callable(backup_db):
-                                backup_db()
-                        except Exception:
-                            pass
-                finally:
-                    try:
-                        win.grab_release()
-                    except Exception:
-                        pass
-                    try:
-                        win.destroy()
-                    except Exception:
-                        pass
-
-            btn_frame = tk.Frame(win)
-            btn_frame.pack(pady=8)
-            # Use themed buttons and apply green/red overrides for Confirm/Cancel
-            try:
-                from theme import themed_button, apply_button_style, COLORS
-                btn_confirm = themed_button(btn_frame, text='Confirmar', command=do_backup)
-                apply_button_style(btn_confirm, bg=COLORS.get('success', '#22C55E'), fg='white')
-                btn_confirm.pack(side=tk.LEFT, padx=8)
-
-                btn_cancel = themed_button(btn_frame, text='Cancelar', command=lambda: (win.grab_release(), win.destroy()))
-                apply_button_style(btn_cancel, bg=COLORS.get('error', '#F43F5E'), fg='white')
-                btn_cancel.pack(side=tk.RIGHT, padx=8)
-            except Exception:
-                tk.Button(btn_frame, text='Confirmar', command=do_backup, width=14).pack(side=tk.LEFT, padx=8)
-                tk.Button(btn_frame, text='Cancelar', command=lambda: (win.grab_release(), win.destroy()), width=14).pack(side=tk.RIGHT, padx=8)
-        except Exception as e:
-            messagebox.showerror('Backup', f'No se pudo abrir el diálogo de backup: {e}')
+    # abrir_backup_confirm eliminado: backup se gestiona desde Herramientas → Backups y Sincronización
 
     def verificar_caja_abierta(self):
         conn = get_connection()
@@ -464,7 +434,11 @@ class BarCanchaApp:
                 pass
 
     def ocultar_frames(self):
-        self.menu_view.pack_forget()
+        if getattr(self, 'menu_view', None):
+            try:
+                self.menu_view.pack_forget()
+            except Exception:
+                pass
         if self.ventas_view:
             self.ventas_view.pack_forget()
         if self.historial_view:
@@ -494,8 +468,22 @@ class BarCanchaApp:
         self.mostrar_pie_caja(self.cajas_view)  # si tenés este pie en otras vistas
 
     def mostrar_menu_principal(self):
+        # Crear MenuView solo cuando sea necesario (post-login)
+        if self.menu_view is None:
+            from menu_view import MenuView  # import tardío
+            self.menu_view = MenuView(
+                self.root,
+                get_caja_info=self.get_caja_info,
+                on_cerrar_caja=self.cerrar_caja_window,
+                on_ver_cierre=self.ver_cierre_caja,
+                on_abrir_caja=self.abrir_caja_window,
+                controller=self,
+            )
         self.ocultar_frames()
-        self.menu_view.actualizar_caja_info()
+        try:
+            self.menu_view.actualizar_caja_info()
+        except Exception:
+            pass
         self.menu_view.pack(fill=tk.BOTH, expand=True)
         self.mostrar_pie_caja(self.menu_view)
 
@@ -900,10 +888,11 @@ class BarCanchaApp:
     
     def abrir_caja_window(self):
         import datetime
+        from tkinter import ttk
         win = tk.Toplevel(self.root)
         win.title("Apertura de Caja")
         ancho = 370
-        alto = 540  # Más alto para mostrar todo el contenido y botones
+        alto = 620  # Más alto para mostrar todo el contenido y botones
         x = win.winfo_screenwidth() // 2 - ancho // 2
         y = win.winfo_screenheight() // 2 - alto // 2
         win.geometry(f"{ancho}x{alto}+{x}+{y}")
@@ -947,14 +936,40 @@ class BarCanchaApp:
         tk.Label(win, text=f"Fecha: {fecha}", font=("Arial", 11)).pack(pady=4)
         tk.Label(win, text=f"Hora: {hora_apertura}", font=("Arial", 11)).pack(pady=2)
         tk.Label(win, text="Disciplina:", font=("Arial", 12)).pack(pady=6)
-        from tkinter import ttk
         conn_disc = get_connection()
         cur_disc = conn_disc.cursor()
-        cur_disc.execute("SELECT codigo FROM disciplinas ORDER BY codigo")
-        disciplinas = [r[0] for r in cur_disc.fetchall()] or [""]
+        try:
+            cur_disc.execute("SELECT codigo, COALESCE(descripcion, codigo) as desc FROM disciplinas ORDER BY desc, codigo")
+            _rows_disc = cur_disc.fetchall() or []
+        except Exception:
+            _rows_disc = []
         conn_disc.close()
-        var_disc = tk.StringVar(value=disciplinas[0] if disciplinas else "")
-        ttk.Combobox(win, values=disciplinas, textvariable=var_disc, state="readonly", width=14).pack(pady=2)
+        # Construir lista visible (descripciones) y mapa a código
+        _disc_map_desc_to_code = {}
+        _disc_descripciones = []
+        for _cd, _desc in _rows_disc:
+            _disc_map_desc_to_code[str(_desc)] = str(_cd)
+            _disc_descripciones.append(str(_desc))
+        if not _disc_descripciones:
+            _disc_descripciones = [""]
+        var_disc_desc = tk.StringVar(value=_disc_descripciones[0] if _disc_descripciones else "")
+        ttk.Combobox(win, values=_disc_descripciones, textvariable=var_disc_desc, state="readonly", width=22).pack(pady=2)
+        # Selector de Punto de venta
+        tk.Label(win, text="Punto de venta:", font=("Arial", 12)).pack(pady=6)
+        try:
+            conn_cj = get_connection(); cur_cj = conn_cj.cursor()
+            cur_cj.execute("SELECT id, descripcion, prefijo, predeterminada FROM pos_cajas WHERE activo=1 ORDER BY id")
+            _pos_cajas_rows = cur_cj.fetchall() or []
+            conn_cj.close()
+        except Exception:
+            _pos_cajas_rows = []
+        caja_items = [f"{d} ({p})" for (_id, d, p, _pred) in _pos_cajas_rows] or ["Caja1 (Caj01)"]
+        default_idx = 0
+        for idx, (_id, _d, _p, _pred) in enumerate(_pos_cajas_rows):
+            if int(_pred or 0) == 1:
+                default_idx = idx; break
+        var_caja_tpl = tk.StringVar(value=(caja_items[default_idx] if caja_items else ""))
+        ttk.Combobox(win, values=caja_items, textvariable=var_caja_tpl, state="readonly", width=18).pack(pady=2)
         tk.Label(win, text="Observaciones:", font=("Arial", 12)).pack(pady=6)
         entry_obs = tk.Text(win, font=("Arial", 12), height=3, width=32)
         entry_obs.pack(pady=2)
@@ -971,7 +986,18 @@ class BarCanchaApp:
             usuario = entry_usuario.get().strip()
             fondo = entry_fondo.get().strip().replace(",", ".")
             observaciones = entry_obs.get("1.0", tk.END).strip()
-            disciplina = var_disc.get()
+            # Obtener el código real a partir de la descripción seleccionada
+            _disc_sel_desc = var_disc_desc.get()
+            disciplina = _disc_map_desc_to_code.get(_disc_sel_desc, _disc_sel_desc)
+            # Resolver plantilla de caja
+            try:
+                sel_txt = var_caja_tpl.get()
+                sel_idx = caja_items.index(sel_txt)
+            except Exception:
+                sel_idx = default_idx
+            sel_row = _pos_cajas_rows[sel_idx] if _pos_cajas_rows else (None, 'Caja1', 'Caj01', 1)
+            pos_caja_id = sel_row[0]
+            caja_prefijo = sel_row[2]
             if not usuario or not fondo:
                 messagebox.showwarning("Datos incompletos", "Complete usuario y fondo inicial.")
                 return
@@ -988,24 +1014,40 @@ class BarCanchaApp:
                 return
             conn = get_connection()
             cursor = conn.cursor()
-            # Generar código secuencial por fecha y disciplina
+            # Generar código por prefijo + fecha + disciplina con sufijo incremental
+            base_code = f"{caja_prefijo}-{fecha.replace('-', '')}-{disciplina}"
             cursor.execute(
-                "SELECT codigo_caja FROM caja_diaria WHERE fecha=? AND disciplina=?",
-                (fecha, disciplina),
+                "SELECT codigo_caja FROM caja_diaria WHERE fecha=? AND disciplina=? AND (caja_prefijo=? OR codigo_caja LIKE ?)",
+                (fecha, disciplina, caja_prefijo, base_code + '%')
             )
-            existentes = [r[0] for r in cursor.fetchall()]
-            sec = 1
+            existentes = [r[0] for r in cursor.fetchall()] or []
+            import re as _re
+            used = set()
             for cod in existentes:
-                try:
-                    n = int(str(cod).split("-")[0].replace("CA", ""))
-                    if n >= sec:
-                        sec = n + 1
-                except Exception:
-                    pass
-            codigo_caja = f"CA{sec:02d}-{fecha.replace('-', '')}-{disciplina}"
-            cursor.execute(
-                "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, apertura_dt, fondo_inicial, observaciones_apertura, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'abierta')",
-                (codigo_caja, disciplina, fecha, usuario, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, observaciones))
+                if cod == base_code:
+                    used.add(1)
+                else:
+                    m = _re.match(_re.escape(base_code) + r"-(\d+)$", str(cod))
+                    if m:
+                        try:
+                            used.add(int(m.group(1)))
+                        except Exception:
+                            pass
+            codigo_caja = base_code if not used else f"{base_code}-{max(used)+1}"
+            # Generar identificadores
+            caja_uuid = str(uuid.uuid4())
+            pos_uuid = get_current_pos_uuid()
+            # Intentar insertar con pos_uuid y caja_uuid si las columnas existen (migración las crea)
+            try:
+                cursor.execute(
+                    "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, apertura_dt, fondo_inicial, observaciones_apertura, estado, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'abierta', ?, ?, ?, ?)",
+                    (codigo_caja, disciplina, fecha, usuario, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, observaciones, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo)
+                )
+            except Exception:
+                # Fallback: columnas no existen en bases viejas
+                cursor.execute(
+                    "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, apertura_dt, fondo_inicial, observaciones_apertura, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'abierta')",
+                    (codigo_caja, disciplina, fecha, usuario, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, observaciones))
             caja_id = cursor.lastrowid
             conn.commit()
             conn.close()
@@ -1180,13 +1222,63 @@ class BarCanchaApp:
                 if not messagebox.askyesno("Abrir caja", "Ya hay una caja ABIERA hoy. ¿Abrir otra igualmente?"):
                     conn.close(); return
 
-            codigo_caja = f"{usuario}_{fecha.replace('-', '')}_{hora.replace(':', '')}"
-            c.execute("""
-                INSERT INTO caja_diaria (codigo_caja, fecha, hora_apertura, usuario_apertura, fondo_inicial, estado,
-                                        ingresos, retiros, total_ventas, total_efectivo_teorico,
-                                        conteo_efectivo_final, diferencia, observaciones_apertura)
-                VALUES (?, ?, ?, ?, ?, 'abierta', 0, 0, 0, 0, 0, 0, '')
-            """, (codigo_caja, fecha, hora, usuario, float(fondo_inicial)))
+            # Usar caja predeterminada y generar código con prefijo
+            try:
+                c.execute("SELECT id, prefijo FROM pos_cajas WHERE predeterminada=1 AND activo=1 ORDER BY id LIMIT 1")
+                rowp = c.fetchone()
+                pos_caja_id, caja_prefijo = (rowp[0], rowp[1]) if rowp else (None, 'Caj01')
+            except Exception:
+                pos_caja_id, caja_prefijo = (None, 'Caj01')
+            # Disciplina por defecto si no hay selector en este flujo
+            disciplina = 'BAR'
+            try:
+                c.execute("SELECT codigo FROM disciplinas ORDER BY codigo LIMIT 1")
+                rowd = c.fetchone()
+                if rowd and rowd[0]:
+                    disciplina = rowd[0]
+            except Exception:
+                pass
+            base_code = f"{caja_prefijo}-{fecha.replace('-', '')}-{disciplina}"
+            c.execute(
+                "SELECT codigo_caja FROM caja_diaria WHERE fecha=? AND disciplina=? AND (caja_prefijo=? OR codigo_caja LIKE ?)",
+                (fecha, disciplina, caja_prefijo, base_code + '%')
+            )
+            existentes = [r[0] for r in c.fetchall()] or []
+            import re as _re2
+            used = set()
+            for cod in existentes:
+                if cod == base_code:
+                    used.add(1)
+                else:
+                    m = _re2.match(_re2.escape(base_code) + r"-(\d+)$", str(cod))
+                    if m:
+                        try:
+                            used.add(int(m.group(1)))
+                        except Exception:
+                            pass
+            codigo_caja = base_code if not used else f"{base_code}-{max(used)+1}"
+            caja_uuid = str(uuid.uuid4())
+            pos_uuid = get_current_pos_uuid()
+            try:
+                c.execute(
+                    """
+                    INSERT INTO caja_diaria (codigo_caja, fecha, hora_apertura, usuario_apertura, fondo_inicial, estado,
+                                            ingresos, retiros, total_ventas, total_efectivo_teorico,
+                                            conteo_efectivo_final, diferencia, observaciones_apertura, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo, disciplina)
+                    VALUES (?, ?, ?, ?, ?, 'abierta', 0, 0, 0, 0, 0, 0, '', ?, ?, ?, ?, ?)
+                """,
+                    (codigo_caja, fecha, hora, usuario, float(fondo_inicial), pos_uuid, caja_uuid, pos_caja_id, caja_prefijo, disciplina)
+                )
+            except Exception:
+                c.execute(
+                    """
+                    INSERT INTO caja_diaria (codigo_caja, fecha, hora_apertura, usuario_apertura, fondo_inicial, estado,
+                                            ingresos, retiros, total_ventas, total_efectivo_teorico,
+                                            conteo_efectivo_final, diferencia, observaciones_apertura)
+                    VALUES (?, ?, ?, ?, ?, 'abierta', 0, 0, 0, 0, 0, 0, '')
+                """,
+                    (codigo_caja, fecha, hora, usuario, float(fondo_inicial))
+                )
             caja_id = c.lastrowid
             conn.commit(); conn.close()
             # Actualizar estado de la app y la UI

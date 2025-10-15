@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/dao/db.dart';
 import '../format.dart';
+import '../../services/print_service.dart';
 
 class SaleDetailPage extends StatefulWidget {
   final int ticketId;
@@ -91,7 +92,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                         context: context,
                         builder: (ctx) => AlertDialog(
                           title: const Text('Confirmar reimpresión'),
-                          content: const Text('¿Marcás este ticket como Impreso?'),
+                          content: const Text('¿Desea reimprimir este ticket?'),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
                             ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
@@ -101,6 +102,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                       if (ok != true) return;
                       final db = await AppDatabase.instance();
                       await db.update('tickets', {'status': 'Impreso'}, where: 'id=?', whereArgs: [t['id']]);
+                      try { await PrintService().printTicket(t['id'] as int); } catch (_) {}
                       if (context.mounted) {
                         Navigator.pop(context, true);
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ticket marcado como Impreso')));

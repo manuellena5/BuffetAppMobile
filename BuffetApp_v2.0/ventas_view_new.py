@@ -418,7 +418,16 @@ class VentasViewNew(tk.Frame):
                 pass
             return False
 
-        printer_name = 'POS-80-SERIES'
+        # Resolver impresora seleccionada o predeterminada
+        try:
+            from app_config import get_printer_name
+            sel = get_printer_name()
+            printer_name = sel if sel else win32print.GetDefaultPrinter()
+        except Exception:
+            try:
+                printer_name = win32print.GetDefaultPrinter()
+            except Exception:
+                printer_name = ''
         try:
             hPrinter = win32print.OpenPrinter(printer_name)
             info = win32print.GetPrinter(hPrinter, 2)

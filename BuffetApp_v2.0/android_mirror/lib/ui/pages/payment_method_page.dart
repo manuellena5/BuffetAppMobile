@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../data/dao/db.dart';
 import '../../services/venta_service.dart';
+import '../../services/print_service.dart';
 import '../format.dart';
 import '../state/cart_model.dart';
 
@@ -45,6 +46,23 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
             Text(formatCurrency(cart.total), style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             const Text('Cantidad total a pagar'),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: cart.items.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (ctx, i) {
+                  final it = cart.items[i];
+                  return ListTile(
+                    dense: true,
+                    title: Text(it.nombre),
+                    subtitle: Text('${it.cantidad} x ${formatCurrency(it.precioUnitario)}'),
+                    trailing: Text(formatCurrency(it.precioUnitario * it.cantidad)),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 24),
             CheckboxListTile(
               value: _imprimir,
@@ -66,7 +84,13 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                       'precio_unitario': e.precioUnitario,
                       'cantidad': e.cantidad,
                     }).toList();
-                    await _ventaService.crearVenta(metodoPagoId: m['id'] as int, items: items, marcarImpreso: _imprimir);
+                    final result = await _ventaService.crearVenta(metodoPagoId: m['id'] as int, items: items, marcarImpreso: _imprimir);
+                    if (_imprimir) {
+                      try {
+                        final ventaId = result['ventaId'] as int;
+                        await PrintService().printVentaTicketsForVenta(ventaId);
+                      } catch (_) {}
+                    }
                     // ignore: use_build_context_synchronously
                     if (mounted) {
                       context.read<CartModel>().clear();

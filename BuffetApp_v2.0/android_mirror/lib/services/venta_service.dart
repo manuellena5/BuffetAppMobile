@@ -5,7 +5,8 @@ import 'caja_service.dart';
 class VentaService {
   final _uuid = const Uuid();
 
-  Future<int> crearVenta({required int metodoPagoId, required List<Map<String, dynamic>> items, bool marcarImpreso = true}) async {
+  /// Crea la venta y retorna el id de venta y los ids de tickets generados
+  Future<Map<String, dynamic>> crearVenta({required int metodoPagoId, required List<Map<String, dynamic>> items, bool marcarImpreso = true}) async {
     final db = await AppDatabase.instance();
     final caja = await CajaService().getCajaAbierta();
     return await db.transaction((txn) async {
@@ -25,6 +26,7 @@ class VentaService {
         'metodo_pago_id': metodoPagoId,
         'caja_id': caja?['id'],
       });
+      final generatedTickets = <int>[];
       for (final it in items) {
         await txn.insert('venta_items', {
           'venta_id': idVenta,
@@ -55,9 +57,10 @@ class VentaService {
           });
           final ident = '$codigo-$ddmmyyyy-$ticketId';
           await txn.update('tickets', {'identificador_ticket': ident}, where: 'id=?', whereArgs: [ticketId]);
+          generatedTickets.add(ticketId);
         }
       }
-      return idVenta;
+      return {'ventaId': idVenta, 'ticketIds': generatedTickets};
     });
   }
 }

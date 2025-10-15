@@ -25,22 +25,67 @@ class DetalleCajaFrame(tk.Frame):
         # Flag to indicate we want to disable ingreso/retiro while this frame is open
         self.disable_movimientos = disable_movimientos
         self.config(bg=COLORS['background'], padx=15, pady=15)
-        
-        # Grid configuration
-        self.columnconfigure(0, weight=3)  # KPIs y detalles
-        self.columnconfigure(1, weight=2)  # Panel de cierre
-        
-        self._create_kpi_panel()
-        self._create_tables_panel()
+
+        # Grid configuration (dar más peso al panel izquierdo)
+        self.columnconfigure(0, weight=4)  # KPIs y detalles (scrollable)
+        self.columnconfigure(1, weight=1)  # Panel de cierre más angosto
+        # Asegurar expansión vertical al maximizar
+        self.rowconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+
+        # Panel izquierdo con scroll (KPIs + tablas dentro de un Canvas)
+        self._left_container = tk.Frame(self, bg=COLORS['background'])
+        self._left_container.grid(row=0, column=0, rowspan=2, sticky='nsew')
+        self._left_canvas = tk.Canvas(self._left_container, bg=COLORS['background'], highlightthickness=0)
+        self._left_scrollbar = tk.Scrollbar(self._left_container, orient='vertical', command=self._left_canvas.yview)
+        self._left_canvas.configure(yscrollcommand=self._left_scrollbar.set)
+        self._left_canvas.pack(side='left', fill='both', expand=True)
+        self._left_scrollbar.pack(side='right', fill='y')
+        # Contenido interno scrollable
+        self._left_inner = tk.Frame(self._left_canvas, bg=COLORS['background'])
+        self._left_window = self._left_canvas.create_window((0, 0), window=self._left_inner, anchor='nw')
+
+        # Vincular tamaños para scroll
+        def _on_left_inner_config(event=None):
+            try:
+                self._left_canvas.configure(scrollregion=self._left_canvas.bbox('all'))
+            except Exception:
+                pass
+        self._left_inner.bind('<Configure>', _on_left_inner_config)
+
+        def _on_left_container_resize(event=None):
+            try:
+                self._left_canvas.itemconfig(self._left_window, width=self._left_canvas.winfo_width())
+            except Exception:
+                pass
+        self._left_canvas.bind('<Configure>', _on_left_container_resize)
+
+        # Scroll con rueda del mouse (Windows)
+        def _on_mousewheel(event):
+            try:
+                delta = int(-1*(event.delta/120))
+                self._left_canvas.yview_scroll(delta, 'units')
+            except Exception:
+                pass
+        self._left_canvas.bind('<MouseWheel>', _on_mousewheel)
+
+        # Construir paneles dentro del contenedor scrollable (izquierda)
+        self._create_kpi_panel(parent=self._left_inner)
+        self._create_tables_panel(parent=self._left_inner)
+        # Panel derecho (cierre)
         self._create_closure_panel()
         self._load_data()
         # Ask parent (usually main app) to disable menu movimientos while detail is open
         # Menu entries for Ingreso/Retiro were removed from the main menu; nothing to disable here.
         
-    def _create_kpi_panel(self):
+    def _create_kpi_panel(self, parent=None):
+        container = parent if parent is not None else self
         # Panel principal de KPIs
-        kpi_frame = tk.Frame(self, bg=COLORS['background'])
-        kpi_frame.grid(row=0, column=0, sticky="nsew", pady=(0,15))
+        kpi_frame = tk.Frame(container, bg=COLORS['background'])
+        if parent is None:
+            kpi_frame.grid(row=0, column=0, sticky="nsew", pady=(0,15))
+        else:
+            kpi_frame.pack(fill='x', pady=(0, 15))
         # Frame para los KPIs (primera fila)
         self.kpis = tk.Frame(kpi_frame, bg=COLORS['background'])
         self.kpis.pack(fill='x', pady=(0,6))
@@ -49,18 +94,19 @@ class DetalleCajaFrame(tk.Frame):
         self.kpis_row2.pack(fill='x', pady=(6,10))
         
     def create_kpi(self, parent, icon, title, value, bg_color, fg_color):
-        # use larger fonts for KPI icons/titles to improve readability on tablets
+        # Ajuste: reducir ligeramente la tipografía para KPIs del detalle
         kpi_padx = 12
         kpi_pady = 8
         f = tk.Frame(parent, bg=bg_color, padx=kpi_padx, pady=kpi_pady)
         f.pack(side='left', padx=5)
-        # icon + title: use a slightly larger font
         try:
-            title_font = (FONTS['normal'][0], max(FONTS['normal'][1] + 2, 14))
+            # Título un poco más chico que antes
+            title_font = (FONTS['normal'][0], max(FONTS['normal'][1] + 0, 12))
         except Exception:
             title_font = FONTS['normal']
         try:
-            value_font = (FONTS['bold'][0], max(FONTS['bold'][1] + 4, 16), 'bold')
+            # Valor también reducido respecto al anterior
+            value_font = (FONTS['bold'][0], max(FONTS['bold'][1] + 2, 14), 'bold')
         except Exception:
             value_font = FONTS['bold']
         # Try to load a PNG icon from img/ when icon is a known key (like 'emitidos', 'anulados', 'ventas_totales', 'ingresos', 'retiros')
@@ -106,9 +152,13 @@ class DetalleCajaFrame(tk.Frame):
         val_lbl.pack()
         return f
         
-    def _create_tables_panel(self):
-        tables_frame = tk.Frame(self, bg=COLORS['background'])
-        tables_frame.grid(row=1, column=0, sticky="nsew")
+    def _create_tables_panel(self, parent=None):
+        container = parent if parent is not None else self
+        tables_frame = tk.Frame(container, bg=COLORS['background'])
+        if parent is None:
+            tables_frame.grid(row=1, column=0, sticky="nsew")
+        else:
+            tables_frame.pack(fill='x')
 
         # Button to view/add movimientos (ingresos/retiros)
         btn_mov = themed_button(tables_frame, text="Ver Movimientos (Ingresos/Retiros)", command=self._open_movimientos_window)
@@ -156,55 +206,116 @@ class DetalleCajaFrame(tk.Frame):
         self.prod_tree.pack(fill='x', padx=5, pady=5)
         
     def _create_closure_panel(self):
-        closure_frame = tk.LabelFrame(self, text="Cierre de Caja",
-                                      bg=COLORS['surface'], font=FONTS['bold'])
-        closure_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(15,0))
-        # Observaciones de apertura (solo lectura)
-        label_bigger_font = (FONTS['normal'][0], FONTS['normal'][1] + 2)
-        tk.Label(closure_frame, text="📝 Observaciones de apertura:",
-                 bg=COLORS['surface'], font=label_bigger_font, fg=COLORS['text']).pack(anchor='w', pady=(10,0))
-        self.obs_apertura_text = tk.Text(closure_frame, height=2, font=label_bigger_font, state='disabled', bg=COLORS.get('disabled_bg', '#f5f5f5'), fg=COLORS.get('disabled_fg', '#666'))
-        self.obs_apertura_text.pack(fill='x', pady=(0,10))
-    # Observaciones de movimientos: (field removed per UX request)
-    # The movimientos are still tracked internally for export, but the text widget was removed.
+        closure_frame = tk.LabelFrame(
+            self,
+            text="Cierre de Caja",
+            bg=COLORS['surface'],
+            font=(FONTS['bold'][0], max(FONTS['bold'][1] - 1, 11)),
+        )
+        closure_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(15, 0))
+
+        # Título/observaciones de apertura (solo lectura)
+        label_bigger_font = (FONTS['normal'][0], max(FONTS['normal'][1] - 1, 10))
+        tk.Label(
+            closure_frame,
+            text="📝 Observaciones de apertura:",
+            bg=COLORS['surface'],
+            font=label_bigger_font,
+            fg=COLORS['text'],
+        ).pack(anchor='w', pady=(10, 0))
+        self.obs_apertura_text = tk.Text(
+            closure_frame,
+            height=2,
+            font=(label_bigger_font[0], max(label_bigger_font[1] - 1, 9)),
+            state='disabled',
+            bg=COLORS.get('disabled_bg', '#f5f5f5'),
+            fg=COLORS.get('disabled_fg', '#666'),
+        )
+        self.obs_apertura_text.pack(fill='x', pady=(0, 6))
+
         # Campos de cierre (editables si la caja está abierta)
         self.campos_cierre_frame = tk.Frame(closure_frame, bg=COLORS['surface'])
-        self.campos_cierre_frame.pack(fill='x', pady=5)
-        # Conteo efectivo
-        tk.Label(self.campos_cierre_frame, text="💵 Conteo efectivo final en caja:",
-                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
-        self.conteo_entry = tk.Entry(self.campos_cierre_frame, font=label_bigger_font, disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
-        self.conteo_entry.pack(fill='x', pady=(0,10))
-        # Transferencias
-        tk.Label(self.campos_cierre_frame, text="🔁 Monto transferencias:",
-                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
-        self.transf_entry = tk.Entry(self.campos_cierre_frame, font=label_bigger_font, disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
-        self.transf_entry.pack(fill='x', pady=(0,10))
-        # Usuario cierre
-        tk.Label(self.campos_cierre_frame, text="👤 Usuario cierre:",
-                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
-        self.usuario_entry = tk.Entry(self.campos_cierre_frame, font=label_bigger_font, disabledbackground=COLORS.get('disabled_bg'), disabledforeground=COLORS.get('disabled_fg'))
-        self.usuario_entry.pack(fill='x', pady=(0,10))
-        # Observaciones de cierre
-        tk.Label(self.campos_cierre_frame, text="📝 Observaciones de cierre:",
-                 bg=COLORS['surface'], font=label_bigger_font).pack(anchor='w')
-        self.obs_text = tk.Text(self.campos_cierre_frame, height=3, font=label_bigger_font)
-        self.obs_text.pack(fill='x', pady=(0,10))
+        self.campos_cierre_frame.pack(fill='x', pady=4)
+
+        tk.Label(
+            self.campos_cierre_frame,
+            text="💵 Conteo efectivo final en caja:",
+            bg=COLORS['surface'],
+            font=label_bigger_font,
+        ).pack(anchor='w')
+        self.conteo_entry = tk.Entry(
+            self.campos_cierre_frame,
+            font=(label_bigger_font[0], max(label_bigger_font[1] - 1, 9)),
+            disabledbackground=COLORS.get('disabled_bg'),
+            disabledforeground=COLORS.get('disabled_fg'),
+        )
+        self.conteo_entry.pack(fill='x', pady=(0, 6))
+
+        tk.Label(
+            self.campos_cierre_frame,
+            text="🔁 Monto transferencias:",
+            bg=COLORS['surface'],
+            font=label_bigger_font,
+        ).pack(anchor='w')
+        self.transf_entry = tk.Entry(
+            self.campos_cierre_frame,
+            font=(label_bigger_font[0], max(label_bigger_font[1] - 1, 9)),
+            disabledbackground=COLORS.get('disabled_bg'),
+            disabledforeground=COLORS.get('disabled_fg'),
+        )
+        self.transf_entry.pack(fill='x', pady=(0, 6))
+
+        tk.Label(
+            self.campos_cierre_frame,
+            text="👤 Usuario cierre:",
+            bg=COLORS['surface'],
+            font=label_bigger_font,
+        ).pack(anchor='w')
+        self.usuario_entry = tk.Entry(
+            self.campos_cierre_frame,
+            font=(label_bigger_font[0], max(label_bigger_font[1] - 1, 9)),
+            disabledbackground=COLORS.get('disabled_bg'),
+            disabledforeground=COLORS.get('disabled_fg'),
+        )
+        self.usuario_entry.pack(fill='x', pady=(0, 6))
+
+        tk.Label(
+            self.campos_cierre_frame,
+            text="📝 Observaciones de cierre:",
+            bg=COLORS['surface'],
+            font=label_bigger_font,
+        ).pack(anchor='w')
+        self.obs_text = tk.Text(
+            self.campos_cierre_frame,
+            height=2,
+            font=(label_bigger_font[0], max(label_bigger_font[1] - 1, 9)),
+        )
+        self.obs_text.pack(fill='x', pady=(0, 6))
+
         # Diferencia calculada
-        self.diff_label = tk.Label(closure_frame, text="🧮 Diferencia: $ 0,00",
-                                   font=FONTS['bold'], bg=COLORS['surface'])
-        self.diff_label.pack(pady=10)
-        # Botones
+        self.diff_label = tk.Label(
+            closure_frame,
+            text="🧮 Diferencia: $ 0,00",
+            font=(FONTS['bold'][0], max(FONTS['bold'][1] - 1, 12), 'bold'),
+            bg=COLORS['surface'],
+        )
+        self.diff_label.pack(pady=6)
+
+        # Botones de acción
         btn_frame = tk.Frame(closure_frame, bg=COLORS['surface'])
-        btn_frame.pack(fill='x', pady=10)
-        self.btn_cerrar = themed_button(btn_frame, text="⚠️ Cerrar Caja", command=self._cerrar_caja,
-                                        bg='#F44336', fg='white')
-        self.btn_cerrar.pack(fill='x', pady=(0,5))
-        self.btn_imprimir = themed_button(btn_frame, text="🖨️ Imprimir Ticket",
-                                          command=self._imprimir_ticket)
+        btn_frame.pack(fill='x', pady=6)
+        self.btn_cerrar = themed_button(
+            btn_frame, text="⚠️ Cerrar Caja", command=self._cerrar_caja,
+            bg='#F44336', fg='white'
+        )
+        self.btn_cerrar.pack(fill='x', pady=(0, 4))
+        self.btn_imprimir = themed_button(
+            btn_frame, text="🖨️ Imprimir Ticket",
+            command=self._imprimir_ticket
+        )
         self.btn_imprimir.pack(fill='x', pady=2)
         themed_button(btn_frame, text="📊 Exportar Excel",
-                     command=self._exportar_excel).pack(fill='x', pady=2)
+                      command=self._exportar_excel).pack(fill='x', pady=2)
     # Export PDF button removed from closure panel; export available from preview
 
         # Bind para cálculo en vivo
@@ -1467,8 +1578,13 @@ class DetalleCajaFrame(tk.Frame):
                             if sys.platform.startswith('win'):
                                 try:
                                     import win32print
-                                    # Obtener impresora por defecto
-                                    printer_name = win32print.GetDefaultPrinter()
+                                    # Resolver impresora seleccionada o predeterminada
+                                    try:
+                                        from app_config import get_printer_name
+                                        sel = get_printer_name()
+                                        printer_name = sel if sel else win32print.GetDefaultPrinter()
+                                    except Exception:
+                                        printer_name = win32print.GetDefaultPrinter()
                                     hPrinter = win32print.OpenPrinter(printer_name)
                                     try:
                                         # Preparar texto del ticket como bytes; al final añadiremos

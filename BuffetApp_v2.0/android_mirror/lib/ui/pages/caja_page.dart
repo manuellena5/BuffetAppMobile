@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../services/caja_service.dart';
 import '../format.dart';
 import 'home_page.dart';
+import '../../services/export_service.dart';
+import '../../services/print_service.dart';
 
 class CajaPage extends StatefulWidget {
   const CajaPage({super.key});
@@ -16,8 +18,8 @@ class _CajaPageState extends State<CajaPage> {
   bool _loading = true;
 
   final _usuario = TextEditingController();
-  final _efectivo = TextEditingController(text: '0');
-  final _transfer = TextEditingController(text: '0');
+  final _efectivo = TextEditingController(text: formatCurrency(0));
+  final _transfer = TextEditingController(text: formatCurrency(0));
   final _obs = TextEditingController();
 
   @override
@@ -79,20 +81,23 @@ class _CajaPageState extends State<CajaPage> {
             const SizedBox(height: 6),
             TextField(controller: _usuario, decoration: const InputDecoration(labelText: 'Usuario cierre')),
             const SizedBox(height: 6),
-            TextField(controller: _efectivo, decoration: const InputDecoration(labelText: 'Efectivo en caja'), keyboardType: TextInputType.number),
+            TextField(controller: _efectivo, decoration: const InputDecoration(labelText: 'Efectivo en caja'), keyboardType: TextInputType.number, inputFormatters: [CurrencyInputFormatter()]),
             const SizedBox(height: 6),
-            TextField(controller: _transfer, decoration: const InputDecoration(labelText: 'Transferencias'), keyboardType: TextInputType.number),
+            TextField(controller: _transfer, decoration: const InputDecoration(labelText: 'Transferencias'), keyboardType: TextInputType.number, inputFormatters: [CurrencyInputFormatter()]),
             const SizedBox(height: 6),
             TextField(controller: _obs, decoration: const InputDecoration(labelText: 'Observación')),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () async {
-                final eff = double.tryParse(_efectivo.text.trim()) ?? 0;
-                final tr = double.tryParse(_transfer.text.trim()) ?? 0;
+                final eff = parseCurrencyToDouble(_efectivo.text);
+                final tr = parseCurrencyToDouble(_transfer.text);
                 if ((_usuario.text.trim()).isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Usuario cierre requerido'))); return; }
                 // calcular diferencia antes de confirmar (ya excluye anulados desde resumen)
                 final totalVentas = (resumen['total'] as num?)?.toDouble() ?? 0.0;
-                final diferencia = (eff + tr) - totalVentas;
+                // Fórmula pedida: Total Ventas = (Efectivo - Fondo Inicial) + Transferencias
+                final fondo = (_caja!['fondo_inicial'] as num?)?.toDouble() ?? 0.0;
+                final totalPorFormula = (eff - fondo) + tr;
+                final diferencia = totalPorFormula - totalVentas;
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
@@ -101,8 +106,11 @@ class _CajaPageState extends State<CajaPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Total ventas sistema: ${formatCurrency(totalVentas)}'),
-                        Text('Declarado por usuario: ${formatCurrency(eff + tr)}'),
+                        Text('Total ventas (sistema): ${formatCurrency(totalVentas)}'),
+                        Text('Efectivo declarado: ${formatCurrency(eff)}'),
+                        Text('Fondo inicial: ${formatCurrency(fondo)}'),
+                        Text('Transferencias: ${formatCurrency(tr)}'),
+                        Text('Total por fórmula: ${formatCurrency(totalPorFormula)}'),
                         Text('Diferencia: ${formatCurrency(diferencia)}'),
                         const SizedBox(height: 8),
                         const Text('¿Deseás cerrar la caja?'),
@@ -122,6 +130,31 @@ class _CajaPageState extends State<CajaPage> {
                   usuarioCierre: _usuario.text.trim(),
                   observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim(),
                 );
+                // Intentar imprimir el cierre/resumen
+                try {
+                  await PrintService().printCajaResumen(_caja!['id'] as int);
+                } catch (_) {}
+                // Export automático y opción de compartir
+                try {
+                  final file = await ExportService().exportCajaToJson(_caja!['id'] as int);
+                  if (!mounted) return;
+                  final share = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Caja exportada'),
+                      content: Text('Se generó el archivo:\n${file.path}\n\n¿Compartir ahora?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cerrar')),
+                        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Compartir')),
+                      ],
+                    ),
+                  );
+                  if (share == true) {
+                    await ExportService().shareCajaFile(_caja!['id'] as int);
+                  }
+                } catch (_) {
+                  // Si falla export/compartir no bloqueamos el cierre
+                }
                 if (!mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const HomePage()),

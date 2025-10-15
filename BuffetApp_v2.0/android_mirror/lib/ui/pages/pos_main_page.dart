@@ -10,6 +10,8 @@ import 'products_page.dart';
 import 'caja_page.dart';
 import 'caja_list_page.dart';
 import '../../services/caja_service.dart';
+import 'printer_test_page.dart';
+import 'home_page.dart';
 
 class PosMainPage extends StatefulWidget {
   const PosMainPage({super.key});
@@ -116,7 +118,18 @@ class _PosMainPageState extends State<PosMainPage> {
       drawer: Drawer(
         child: ListView(
           children: [
-            const DrawerHeader(child: Text('Buffet POS')),
+            const DrawerHeader(child: Text('BuffetApp')),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Inicio'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomePage()),
+                  (route) => false,
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.receipt_long),
               title: const Text('Ticket actual'),
@@ -141,13 +154,7 @@ class _PosMainPageState extends State<PosMainPage> {
                 await _load();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: const Text('Importar catálogo (próx.)'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
+            // Se quita la opción "Importar catálogo (próx.)"
             ListTile(
               leading: const Icon(Icons.point_of_sale),
               title: const Text('Caja'),
@@ -172,6 +179,15 @@ class _PosMainPageState extends State<PosMainPage> {
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsPage()));
                 if (!mounted) return;
                 await _load();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.print),
+              title: const Text('Prueba de impresora'),
+              onTap: () async {
+                Navigator.pop(context);
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterTestPage()));
               },
             ),
           ],

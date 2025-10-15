@@ -2,7 +2,7 @@ import tkinter as tk
 
 
 class MenuView(tk.Frame):
-    """Vista principal con acciones en una cuadrícula de botones grandes."""
+    """Vista principal en 2 columnas con botones uniformes y emojis."""
 
     def __init__(self, master, get_caja_info, on_cerrar_caja, on_ver_cierre, on_abrir_caja, controller=None):
         super().__init__(master)
@@ -10,52 +10,78 @@ class MenuView(tk.Frame):
         self.on_cerrar_caja = on_cerrar_caja
         self.on_ver_cierre = on_ver_cierre
         self.on_abrir_caja = on_abrir_caja
-        # controller: referencia al objeto BarCanchaApp para llamadas directas (mostrar_ventas, etc.)
-        self.controller = controller
+        self.controller = controller  # para mostrar_ventas / historial / productos / listado
 
-        # Welcome label (aumentado para accesibilidad)
-        self.label_bienvenida = tk.Label(self, text="Bienvenido al sistema de ventas", font=("Arial", 24))
-        self.label_bienvenida.grid(row=0, column=0, columnspan=3, pady=(20, 30))
+        # Encabezado (sin emoji para compatibilidad)
+        self.label_bienvenida = tk.Label(self, text="Bienvenido al sistema de ventas", font=("Arial", 22, 'bold'))
+        self.label_bienvenida.grid(row=0, column=0, columnspan=2, pady=(16, 12), sticky='n')
 
-        # Reduce button font by 3 points for requested sizing
-        btn_font = ("Arial", 15, 'bold')
-        btn_cfg = {'font': btn_font, 'width': 18, 'height': 4}
+        # Estilo uniforme
+        self.btn_font = ("Segoe UI", 16, 'bold')
+        self.btn_width_chars = 22  # mismo ancho para todos los botones
 
-        # Grid of main actions: 3 columns x 2 rows
-        self.btn_abrir = tk.Button(self, text="ABRIR CAJA", command=self.on_abrir_caja, **btn_cfg)
-        self.btn_abrir.grid(row=1, column=0, padx=12, pady=12, sticky='nsew')
+        def make_card_button(parent, emoji: str, title: str, cmd, bg="#ffffff", fg="#111", hover_bg="#f0f0f0"):
+            # Tarjeta con borde sutil
+            frame = tk.Frame(parent, bd=1, relief='solid', bg=bg, highlightthickness=0)
+            btn = tk.Button(
+                frame,
+                text=f"{emoji}  {title}",
+                font=self.btn_font,
+                command=cmd,
+                bd=0,
+                bg=bg,
+                fg=fg,
+                activebackground=hover_bg,
+                relief='flat',
+                padx=18, pady=14,
+                width=self.btn_width_chars
+            )
+            btn.pack(anchor='center', padx=10, pady=10)
 
-        self.btn_cerrar = tk.Button(self, text="CERRAR CAJA", command=self.on_cerrar_caja, **btn_cfg)
-        self.btn_cerrar.grid(row=1, column=1, padx=12, pady=12, sticky='nsew')
+            # Hover
+            def on_enter(_):
+                frame.configure(bg=hover_bg); btn.configure(bg=hover_bg)
+            def on_leave(_):
+                frame.configure(bg=bg); btn.configure(bg=bg)
+            frame.bind('<Enter>', on_enter); frame.bind('<Leave>', on_leave)
+            btn.bind('<Enter>', on_enter); btn.bind('<Leave>', on_leave)
+            return frame, btn
 
-        self.btn_ventas = tk.Button(self, text="VENTAS", command=self._on_ventas, **btn_cfg)
-        self.btn_ventas.grid(row=1, column=2, padx=12, pady=12, sticky='nsew')
+        # Layout 2 columnas
+        grid = tk.Frame(self)
+        grid.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=12, pady=6)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        grid.grid_columnconfigure(0, weight=1)
+        grid.grid_columnconfigure(1, weight=1)
 
-        self.btn_listado = tk.Button(self, text="LISTADO DE CAJAS", command=self._on_listado_cajas, **btn_cfg)
-        self.btn_listado.grid(row=2, column=0, padx=12, pady=12, sticky='nsew')
+        # Columna izquierda: VENTAS / HISTORIAL / PRODUCTOS
+        left = tk.Frame(grid)
+        left.grid(row=0, column=0, sticky='n', padx=(0, 8))
+        card_ventas, self.btn_ventas = make_card_button(left, "🧾", "VENTAS", self._on_ventas)
+        card_ventas.grid(row=0, column=0, sticky='n', pady=(0, 8))
+        card_historial, self.btn_historial = make_card_button(left, "📚", "HISTORIAL", self._on_historial)
+        card_historial.grid(row=1, column=0, sticky='n', pady=(0, 8))
+        card_productos, self.btn_productos = make_card_button(left, "🧃", "PRODUCTOS", self._on_productos)
+        card_productos.grid(row=2, column=0, sticky='n')
 
-        self.btn_productos = tk.Button(self, text="PRODUCTOS", command=self._on_productos, **btn_cfg)
-        self.btn_productos.grid(row=2, column=1, padx=12, pady=12, sticky='nsew')
+        # Columna derecha: ABRIR CAJA / CERRAR CAJA / LISTADO DE CAJAS
+        right = tk.Frame(grid)
+        right.grid(row=0, column=1, sticky='n', padx=(8, 0))
+        card_abrir, self.btn_abrir = make_card_button(right, "📥", "ABRIR CAJA", self.on_abrir_caja)
+        card_abrir.grid(row=0, column=0, sticky='n', pady=(0, 8))
+        card_cerrar, self.btn_cerrar = make_card_button(right, "📤", "CERRAR CAJA", self.on_cerrar_caja)
+        card_cerrar.grid(row=1, column=0, sticky='n', pady=(0, 8))
+        card_listado, self.btn_listado = make_card_button(right, "📋", "LISTADO DE CAJAS", self._on_listado_cajas)
+        card_listado.grid(row=2, column=0, sticky='n')
 
-        self.btn_historial = tk.Button(self, text="HISTORIAL", command=self._on_historial, **btn_cfg)
-        self.btn_historial.grid(row=2, column=2, padx=12, pady=12, sticky='nsew')
+        # Estado inicial de botones
+        self.actualizar_caja_info()
 
-        # Make columns expand evenly
-        for c in range(3):
-            self.grid_columnconfigure(c, weight=1)
-
+    # Acciones
     def _on_ventas(self):
-        # Only allow ventas if there's a controller or we fallback to no-op
         if self.controller and hasattr(self.controller, 'mostrar_ventas'):
             self.controller.mostrar_ventas()
-        else:
-            # try to call via master callbacks if available
-            try:
-                if hasattr(self, 'on_ver_cierre'):
-                    # fallback to show ventas via controller elsewhere
-                    pass
-            except Exception:
-                pass
 
     def _on_listado_cajas(self):
         if self.controller and hasattr(self.controller, 'mostrar_listado_cajas'):
@@ -70,17 +96,23 @@ class MenuView(tk.Frame):
             self.controller.mostrar_historial()
 
     def actualizar_caja_info(self):
-        """Actualiza el mensaje y activa/desactiva botones según el estado de la caja."""
+        """Actualiza encabezado y habilita/deshabilita acciones según estado de caja."""
         info = self.get_caja_info()
         if info:
             self.label_bienvenida.config(
-                text=f"Caja {info['codigo']} ({info['disciplina']}) abierta por {info['usuario_apertura']}\nApertura: {info['hora_apertura']} - Fondo $ {info['fondo_inicial']}"
+                text=f"Caja {info['codigo']} ({info['disciplina']}) abierta  •  Apertura {info['hora_apertura']}  •  Fondo $ {info['fondo_inicial']}"
             )
-            self.btn_abrir.config(state=tk.DISABLED)
-            self.btn_cerrar.config(state=tk.NORMAL)
-            self.btn_ventas.config(state=tk.NORMAL)
+            try:
+                self.btn_abrir.config(state=tk.DISABLED)
+                self.btn_cerrar.config(state=tk.NORMAL)
+                self.btn_ventas.config(state=tk.NORMAL)
+            except Exception:
+                pass
         else:
             self.label_bienvenida.config(text="No hay caja abierta")
-            self.btn_abrir.config(state=tk.NORMAL)
-            self.btn_cerrar.config(state=tk.DISABLED)
-            self.btn_ventas.config(state=tk.DISABLED)
+            try:
+                self.btn_abrir.config(state=tk.NORMAL)
+                self.btn_cerrar.config(state=tk.DISABLED)
+                self.btn_ventas.config(state=tk.DISABLED)
+            except Exception:
+                pass

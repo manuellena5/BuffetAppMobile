@@ -20,7 +20,7 @@ class App extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => CartModel(),
       child: MaterialApp(
-        title: 'Buffet Mirror',
+  title: 'BuffetApp',
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey), useMaterial3: true),
         home: const _SeedGate(),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/caja_service.dart';
+import '../format.dart';
 import 'pos_main_page.dart';
 
 class CajaOpenPage extends StatefulWidget {
@@ -11,7 +12,7 @@ class CajaOpenPage extends StatefulWidget {
 class _CajaOpenPageState extends State<CajaOpenPage> {
   final _form = GlobalKey<FormState>();
   final _usuario = TextEditingController();
-  final _fondo = TextEditingController(text: '0');
+  final _fondo = TextEditingController(text: formatCurrency(0));
   final _desc = TextEditingController();
   final _obs = TextEditingController();
   String _disciplina = 'Futbol Infantil';
@@ -26,7 +27,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
 
   Future<void> _abrir() async {
     if (!_form.currentState!.validate()) return;
-    final fondo = double.tryParse(_fondo.text.trim()) ?? 0;
+  final fondo = parseCurrencyToDouble(_fondo.text);
     final pvCode = _puntoVenta.contains('Caj01') ? 'Caj01' : (_puntoVenta.contains('Caj02') ? 'Caj02' : 'Caj03');
 
     try {
@@ -95,7 +96,11 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                 controller: _fondo,
                 decoration: const InputDecoration(labelText: 'Fondo inicial'),
                 keyboardType: TextInputType.number,
-                validator: (v) => (double.tryParse(v??'') == null || (double.tryParse(v!) ?? -1) < 0) ? '>= 0' : null,
+                inputFormatters: [CurrencyInputFormatter()],
+                validator: (v) {
+                  final val = parseCurrencyToDouble(v ?? '');
+                  return (val < 0) ? '>= 0' : null;
+                },
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(

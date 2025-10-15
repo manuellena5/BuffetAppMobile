@@ -38,7 +38,7 @@ class ProductosView(tk.Frame):
             self.frame_tabla,
             columns=("id", "codigo", "nombre", "precio", "stock", "categoria", "activo", "visible"),
             show="headings",
-            height=10,
+            height=12,
             style="App.Treeview",
         )
         self.tree.heading("codigo", text="Código")
@@ -55,7 +55,7 @@ class ProductosView(tk.Frame):
         self.tree.column("categoria", width=110)
         self.tree.column("activo", width=0, stretch=False)
         self.tree.column("visible", width=60)
-        self.tree.pack(ipadx=10, ipady=5, fill="x", expand=True)
+        self.tree.pack(ipadx=10, ipady=10, fill="x", expand=True)
         # Colores por categoría
         # Colores iguales a ventas_view.py
         self.colores_categoria = {

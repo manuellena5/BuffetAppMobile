@@ -39,13 +39,21 @@ class CajaListadoView(tk.Frame):
 		super().__init__(parent)
 		self.on_caja_cerrada = on_caja_cerrada
 		self._detalle_frame = None
+		self._filter_date = None  # fecha seleccionada para filtrar (str 'YYYY-MM-DD') o None para todas
+		self.var_fecha = tk.StringVar()
+		self.combo_fecha = None
 
 		# Top: botones
 		self.btn_frame = tk.Frame(self)
 		self.btn_frame.pack(side=tk.TOP, fill=tk.X, padx=6, pady=6)
 		tk.Button(self.btn_frame, text='Ver detalle', command=self._btn_ver_detalle).pack(side=tk.LEFT, padx=4)
-		tk.Button(self.btn_frame, text='Refrescar', command=self.cargar_cajas).pack(side=tk.LEFT, padx=4)
+		tk.Button(self.btn_frame, text='Refrescar', command=self._refresh_list).pack(side=tk.LEFT, padx=4)
 		# Export buttons removed per UX request
+
+		# Filtro por fecha (Combobox, mismo estilo que historial) al lado de los botones
+		tk.Label(self.btn_frame, text='Filtrar por fecha:', font=("Arial", 11)).pack(side=tk.LEFT, padx=(12, 4))
+		self.actualizar_fechas_combo()
+		self.var_fecha.trace_add('write', self._on_fecha_cambiada)
 
 		# Treeview
 		cols = [c[0] for c in self.COLUMNS]
@@ -70,6 +78,14 @@ class CajaListadoView(tk.Frame):
 
 		self.tree.bind('<Double-1>', lambda e: self._btn_ver_detalle())
 
+		# Cargar listado inicial
+		self.cargar_cajas()
+
+	def _refresh_list(self):
+		"""Recarga las fechas y el listado aplicando el filtro actual."""
+		self.actualizar_fechas_combo()
+		self.cargar_cajas()
+
 	def cargar_cajas(self):
 		# limpia
 		for it in self.tree.get_children():
@@ -77,12 +93,13 @@ class CajaListadoView(tk.Frame):
 
 		with get_connection() as conn:
 			cur = conn.cursor()
+			# Base query
 			query = (
 				"SELECT cd.id, cd.codigo_caja, cd.fecha, cd.usuario_apertura, COALESCE(cd.fondo_inicial,0),"
 				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_ventas,"
-				# Ventas en efectivo: si abierta, suma en vivo medio de pago efectivo; si cerrada, usa conteo_efectivo_final si corresponde? No: queremos ventas en efectivo (tickets) no el conteo; por lo tanto, siempre sumar por medio de pago 'efectivo'
+				# Ventas en efectivo: siempre por método de pago efectivo
 				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id LEFT JOIN metodos_pago mp ON mp.id=v.metodo_pago_id WHERE v.caja_id=cd.id AND t.status!='Anulado' AND (LOWER(mp.descripcion) LIKE 'efectivo%' OR LOWER(mp.descripcion)='efectivo')) as ventas_efectivo,"
-				# Transferencias: si la caja está abierta, mostrar suma en vivo por método de pago Transferencia; si está cerrada, usar el valor final si existe, sino la suma en vivo
+				# Transferencias: si la caja está abierta, suma en vivo; si no, usa valor final o suma en vivo
 				" CASE WHEN LOWER(COALESCE(cd.estado,''))='abierta' THEN ("
 				"   SELECT COALESCE(SUM(t.total_ticket),0)"
 				"     FROM tickets t"
@@ -103,9 +120,15 @@ class CajaListadoView(tk.Frame):
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_tickets,"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status='Anulado') as tickets_anulados,"
 				" COALESCE(cd.estado, '')"
-				" FROM caja_diaria cd ORDER BY cd.fecha DESC LIMIT 200"
+				" FROM caja_diaria cd"
 			)
-			cur.execute(query)
+			params = []
+			if self._filter_date:
+				query += " WHERE cd.fecha = ? ORDER BY cd.fecha DESC, cd.codigo_caja DESC"
+				params.append(self._filter_date)
+			else:
+				query += " ORDER BY cd.fecha DESC LIMIT 200"
+			cur.execute(query, params)
 			rows = cur.fetchall()
 
 			for row in rows:
@@ -137,6 +160,47 @@ class CajaListadoView(tk.Frame):
 				self.master.mostrar_pie_caja(self)
 		except Exception:
 			pass
+
+	def actualizar_fechas_combo(self):
+		"""Carga/actualiza el combobox de fechas (DISTINCT fecha de caja_diaria)."""
+		try:
+			fechas = []
+			with get_connection() as conn:
+				cur = conn.cursor()
+				cur.execute("SELECT DISTINCT fecha FROM caja_diaria ORDER BY fecha DESC LIMIT 365")
+				fechas = [str(row[0]) for row in cur.fetchall() if row and row[0]]
+			valores = ["Mostrar todo"] + fechas
+			if self.combo_fecha:
+				self.combo_fecha['values'] = valores
+				# Mantener selección si existe, sino fallback a índice 0
+				actual = self.var_fecha.get()
+				if actual not in valores:
+					self.combo_fecha.current(0)
+			else:
+				self.combo_fecha = ttk.Combobox(
+					self.btn_frame,
+					textvariable=self.var_fecha,
+					values=valores,
+					state="readonly",
+					width=20,
+				)
+				self.combo_fecha.pack(side=tk.LEFT, padx=4)
+				self.combo_fecha.current(0)
+		except Exception:
+			pass
+
+	def _on_fecha_cambiada(self, *args):
+		"""Actualiza el filtro interno y recarga el listado al cambiar la fecha."""
+		try:
+			valor = self.var_fecha.get()
+			if not valor or valor == "Mostrar todo":
+				self._filter_date = None
+			else:
+				self._filter_date = valor
+			self.cargar_cajas()
+		except Exception:
+			pass
+
 
 	def _selected_caja_id(self):
 		sel = self.tree.selection()
@@ -229,6 +293,7 @@ class CajaListadoView(tk.Frame):
 			elif isinstance(kwargs.get('cerrada'), bool):
 				cerrada = kwargs['cerrada']
 			if cerrada:
+				self.actualizar_fechas_combo()
 				self.cargar_cajas()
 		except Exception:
 			pass

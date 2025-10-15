@@ -40,7 +40,7 @@ ICON_SIZES = {
 }
 
 # Versión de la aplicación (se mostrará en el título de la ventana)
-APP_VERSION = "BuffetApp_v1.4"
+APP_VERSION = "BuffetApp_v1.5"
 
 # Parámetros específicos para la vista de ventas / carrito (fáciles de ajustar desde aquí)
 CART = {
