@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter: POS (Loyverse UI)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    }
+  ]
+}
