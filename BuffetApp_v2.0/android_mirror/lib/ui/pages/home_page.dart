@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/caja_service.dart';
+import '../format.dart';
 import 'caja_open_page.dart';
 import 'caja_list_page.dart';
 import 'caja_page.dart';
@@ -32,7 +33,11 @@ class _HomePageState extends State<HomePage> {
         total = (r['total'] as num?)?.toDouble() ?? 0.0;
       } catch (_) {}
     }
-    setState(() { _caja = c; _cajaTotal = total; _loading = false; });
+    setState(() {
+      _caja = c;
+      _cajaTotal = total;
+      _loading = false;
+    });
   }
 
   @override
@@ -55,7 +60,7 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(width: 6),
                           Text('Caja ${_caja!['codigo_caja']} • Total: '),
                           Text(
-                            _formatCurrency((_cajaTotal ?? 0)),
+                            formatCurrency((_cajaTotal ?? 0)),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -64,8 +69,12 @@ class _HomePageState extends State<HomePage> {
                   if (_caja != null) ...[
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => const PosMainPage()));
-                        if (!mounted) return; await _load();
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const PosMainPage()));
+                        if (!mounted) return;
+                        await _load();
                       },
                       icon: const Icon(Icons.point_of_sale),
                       label: const Text('Ventas'),
@@ -73,8 +82,12 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => const CajaPage()));
-                        if (!mounted) return; await _load();
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CajaPage()));
+                        if (!mounted) return;
+                        await _load();
                       },
                       icon: const Icon(Icons.lock),
                       label: const Text('Cerrar caja'),
@@ -82,8 +95,12 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => const CajaListPage()));
-                        if (!mounted) return; await _load();
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CajaListPage()));
+                        if (!mounted) return;
+                        await _load();
                       },
                       icon: const Icon(Icons.history),
                       label: const Text('Historial de cajas'),
@@ -91,8 +108,12 @@ class _HomePageState extends State<HomePage> {
                   ] else ...[
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => const CajaOpenPage()));
-                        if (!mounted) return; await _load();
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CajaOpenPage()));
+                        if (!mounted) return;
+                        await _load();
                       },
                       icon: const Icon(Icons.lock_open),
                       label: const Text('Abrir caja'),
@@ -100,8 +121,12 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        await Navigator.push(context, MaterialPageRoute(builder: (_) => const CajaListPage()));
-                        if (!mounted) return; await _load();
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CajaListPage()));
+                        if (!mounted) return;
+                        await _load();
                       },
                       icon: const Icon(Icons.history),
                       label: const Text('Historial de cajas'),
@@ -112,9 +137,4 @@ class _HomePageState extends State<HomePage> {
             ),
     );
   }
-}
-
-String _formatCurrency(num v) {
-  // Simple formato para evitar depender de intl aquí; el POS ya usa utilidades más completas
-  return '4 ${v.toStringAsFixed(2)}';
 }

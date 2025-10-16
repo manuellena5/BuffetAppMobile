@@ -26,8 +26,12 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
 
   Future<void> _load() async {
     final db = await AppDatabase.instance();
-    final data = await db.rawQuery('SELECT id, descripcion FROM metodos_pago ORDER BY id');
-    setState(() { _mp = data; _loading = false; });
+    final data = await db
+        .rawQuery('SELECT id, descripcion FROM metodos_pago ORDER BY id');
+    setState(() {
+      _mp = data;
+      _loading = false;
+    });
   }
 
   @override
@@ -43,7 +47,9 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(formatCurrency(cart.total), style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+            Text(formatCurrency(cart.total),
+                style:
+                    const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             const Text('Cantidad total a pagar'),
             const SizedBox(height: 16),
@@ -57,8 +63,10 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                   return ListTile(
                     dense: true,
                     title: Text(it.nombre),
-                    subtitle: Text('${it.cantidad} x ${formatCurrency(it.precioUnitario)}'),
-                    trailing: Text(formatCurrency(it.precioUnitario * it.cantidad)),
+                    subtitle: Text(
+                        '${it.cantidad} x ${formatCurrency(it.precioUnitario)}'),
+                    trailing:
+                        Text(formatCurrency(it.precioUnitario * it.cantidad)),
                   );
                 },
               ),
@@ -76,27 +84,37 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                  onPressed: cart.isEmpty ? null : () async {
-                    final items = cart.items.map((e) => {
-                      'producto_id': e.productoId,
-                      'nombre': e.nombre,
-                      'precio_unitario': e.precioUnitario,
-                      'cantidad': e.cantidad,
-                    }).toList();
-                    final result = await _ventaService.crearVenta(metodoPagoId: m['id'] as int, items: items, marcarImpreso: _imprimir);
-                    if (_imprimir) {
-                      try {
-                        final ventaId = result['ventaId'] as int;
-                        await PrintService().printVentaTicketsForVenta(ventaId);
-                      } catch (_) {}
-                    }
-                    // ignore: use_build_context_synchronously
-                    if (mounted) {
-                      context.read<CartModel>().clear();
-                      Navigator.pop(context, true);
-                    }
-                  },
+                  style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16)),
+                  onPressed: cart.isEmpty
+                      ? null
+                      : () async {
+                          final nav = Navigator.of(context);
+                          final cartModel = context.read<CartModel>();
+                          final items = cart.items
+                              .map((e) => {
+                                    'producto_id': e.productoId,
+                                    'nombre': e.nombre,
+                                    'precio_unitario': e.precioUnitario,
+                                    'cantidad': e.cantidad,
+                                  })
+                              .toList();
+                          final result = await _ventaService.crearVenta(
+                              metodoPagoId: m['id'] as int,
+                              items: items,
+                              marcarImpreso: _imprimir);
+                          if (_imprimir) {
+                            try {
+                              final ventaId = result['ventaId'] as int;
+                              await PrintService()
+                                  .printVentaTicketsForVenta(ventaId);
+                            } catch (_) {}
+                          }
+                          if (mounted) {
+                            cartModel.clear();
+                            nav.pop(true);
+                          }
+                        },
                   child: Text((m['descripcion'] as String).toUpperCase()),
                 ),
               ),

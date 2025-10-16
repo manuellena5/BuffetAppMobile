@@ -27,12 +27,14 @@ class PrintService {
       final doc = pw.Document();
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        build: (ctx) => pw.Center(child: pw.Text('Ticket no encontrado: #$ticketId')),
+        build: (ctx) =>
+            pw.Center(child: pw.Text('Ticket no encontrado: #$ticketId')),
       ));
       return doc.save();
     }
     final t = rows.first;
-    final identificador = (t['identificador_ticket'] as String?) ?? '#${t['id']}';
+    final identificador =
+        (t['identificador_ticket'] as String?) ?? '#${t['id']}';
     final fechaHora = (t['fecha_hora'] as String?) ?? '';
     final cajaCodigo = (t['codigo_caja'] as String?) ?? '-';
     final producto = (t['producto'] as String?) ?? 'Producto';
@@ -56,7 +58,9 @@ class PrintService {
               pw.Text(fechaHora),
               pw.Text('Caja $cajaCodigo'),
               pw.SizedBox(height: 10),
-              pw.Text(producto.toUpperCase(), style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold)),
+              pw.Text(producto.toUpperCase(),
+                  style: pw.TextStyle(
+                      fontSize: 26, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 6),
               pw.Text(_formatCurrency(total), style: bold),
             ],
@@ -70,12 +74,14 @@ class PrintService {
   /// Construye el PDF del cierre/resumen de caja
   Future<Uint8List> buildCajaResumenPdf(int cajaId) async {
     final db = await AppDatabase.instance();
-    final caja = await db.query('caja_diaria', where: 'id=?', whereArgs: [cajaId], limit: 1);
+    final caja = await db.query('caja_diaria',
+        where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
 
-  final doc = pw.Document();
-  pw.TextStyle s([bool b = false]) => pw.TextStyle(fontSize: 9, fontWeight: b ? pw.FontWeight.bold : pw.FontWeight.normal);
+    final doc = pw.Document();
+    pw.TextStyle s([bool b = false]) => pw.TextStyle(
+        fontSize: 9, fontWeight: b ? pw.FontWeight.bold : pw.FontWeight.normal);
 
     String line([String title = '', String? value]) {
       if (value == null) return title;
@@ -83,7 +89,8 @@ class PrintService {
     }
 
     final totalesMp = (resumen['por_mp'] as List).cast<Map<String, Object?>>();
-    final porProd = (resumen['por_producto'] as List).cast<Map<String, Object?>>();
+    final porProd =
+        (resumen['por_producto'] as List).cast<Map<String, Object?>>();
 
     doc.addPage(
       pw.Page(
@@ -93,31 +100,54 @@ class PrintService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('================================================', style: s(true)),
-              pw.Text('                 CIERRE DE CAJA                 ', style: s(true)),
-              pw.Text('================================================', style: s(true)),
+              pw.Text('================================================',
+                  style: s(true)),
+              pw.Text('                 CIERRE DE CAJA                 ',
+                  style: s(true)),
+              pw.Text('================================================',
+                  style: s(true)),
               pw.SizedBox(height: 6),
-              pw.Text(line('Codigo caja:', c['codigo_caja']?.toString()), style: s()),
-              pw.Text(line('Fecha apertura:', '${c['fecha'] ?? ''} ${c['hora_apertura'] ?? ''}'), style: s()),
-              pw.Text(line('Usuario apertura:', c['usuario_apertura']?.toString()), style: s()),
-              pw.Text(line('Disciplina:', c['disciplina']?.toString()), style: s()),
+              pw.Text(line('Codigo caja:', c['codigo_caja']?.toString()),
+                  style: s()),
+              pw.Text(
+                  line('Fecha apertura:',
+                      '${c['fecha'] ?? ''} ${c['hora_apertura'] ?? ''}'),
+                  style: s()),
+              pw.Text(
+                  line('Usuario apertura:', c['usuario_apertura']?.toString()),
+                  style: s()),
+              pw.Text(line('Disciplina:', c['disciplina']?.toString()),
+                  style: s()),
               if ((c['cierre_dt'] as String?) != null)
-                pw.Text(line('Fecha cierre:', c['cierre_dt']?.toString()), style: s()),
+                pw.Text(line('Fecha cierre:', c['cierre_dt']?.toString()),
+                    style: s()),
               pw.SizedBox(height: 6),
               pw.Text('TOTALES POR MEDIO DE PAGO', style: s(true)),
               pw.SizedBox(height: 4),
               ...totalesMp.map((m) => pw.Text(
-                    '• ${(m['mp_desc'] as String?) ?? 'MP ${m['mp']}'}: ${_formatCurrency(((m['total'] as num?) ?? 0).toDouble())}',
+                    '${(m['mp_desc'] as String?) ?? 'MP ${m['mp']}'}: ${_formatCurrency(((m['total'] as num?) ?? 0).toDouble())}',
                     style: s(),
                   )),
               pw.SizedBox(height: 4),
-              pw.Text('TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}', style: s(true)),
+              pw.Text(
+                  'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
+                  style: s(true)),
               pw.SizedBox(height: 6),
-              pw.Text('Fondo inicial: ${_formatCurrency(((c['fondo_inicial'] as num?) ?? 0).toDouble())}', style: s()),
-              pw.Text('Ingresos: ${_formatCurrency(((c['ingresos'] as num?) ?? 0).toDouble())}', style: s()),
-              pw.Text('Retiros: ${_formatCurrency(((c['retiros'] as num?) ?? 0).toDouble())}', style: s()),
-              pw.Text('Diferencia: ${_formatCurrency(((c['diferencia'] as num?) ?? 0).toDouble())}', style: s(true)),
-              pw.Text('Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}', style: s()),
+              pw.Text(
+                  'Fondo inicial: ${_formatCurrency(((c['fondo_inicial'] as num?) ?? 0).toDouble())}',
+                  style: s()),
+              pw.Text(
+                  'Ingresos: ${_formatCurrency(((c['ingresos'] as num?) ?? 0).toDouble())}',
+                  style: s()),
+              pw.Text(
+                  'Retiros: ${_formatCurrency(((c['retiros'] as num?) ?? 0).toDouble())}',
+                  style: s()),
+              pw.Text(
+                  'Diferencia: ${_formatCurrency(((c['diferencia'] as num?) ?? 0).toDouble())}',
+                  style: s(true)),
+              pw.Text(
+                  'Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}',
+                  style: s()),
               pw.SizedBox(height: 6),
               pw.Text('ITEMS VENDIDOS:', style: s(true)),
               pw.SizedBox(height: 2),
@@ -145,7 +175,11 @@ class PrintService {
   /// Imprime todos los tickets de una venta (uno por ítem)
   Future<void> printVentaTicketsForVenta(int ventaId) async {
     final db = await AppDatabase.instance();
-    final rows = await db.query('tickets', columns: ['id'], where: 'venta_id=?', whereArgs: [ventaId], orderBy: 'id');
+    final rows = await db.query('tickets',
+        columns: ['id'],
+        where: 'venta_id=?',
+        whereArgs: [ventaId],
+        orderBy: 'id');
     for (final r in rows) {
       final id = r['id'] as int;
       await printTicket(id);
@@ -156,7 +190,7 @@ class PrintService {
   Future<void> printCajaResumen(int cajaId) async {
     await Printing.layoutPdf(
       onLayout: (format) async => buildCajaResumenPdf(cajaId),
-      name: 'cierre_caja_${cajaId}.pdf',
+  name: 'cierre_caja_$cajaId.pdf',
     );
   }
 

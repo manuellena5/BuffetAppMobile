@@ -21,14 +21,19 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
 
   @override
   void dispose() {
-    _usuario.dispose(); _fondo.dispose(); _desc.dispose(); _obs.dispose();
+    _usuario.dispose();
+    _fondo.dispose();
+    _desc.dispose();
+    _obs.dispose();
     super.dispose();
   }
 
   Future<void> _abrir() async {
     if (!_form.currentState!.validate()) return;
-  final fondo = parseCurrencyToDouble(_fondo.text);
-    final pvCode = _puntoVenta.contains('Caj01') ? 'Caj01' : (_puntoVenta.contains('Caj02') ? 'Caj02' : 'Caj03');
+    final fondo = parseCurrencyToDouble(_fondo.text);
+    final pvCode = _puntoVenta.contains('Caj01')
+        ? 'Caj01'
+        : (_puntoVenta.contains('Caj02') ? 'Caj02' : 'Caj03');
 
     try {
       // Verificar si ya hay una caja abierta
@@ -39,9 +44,12 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Caja ya abierta'),
-            content: Text('Ya existe una caja abierta: ${abierta['codigo_caja']}. Cerrala o usá otra.'),
+            content: Text(
+                'Ya existe una caja abierta: ${abierta['codigo_caja']}. Cerrala o usá otra.'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Entendido')),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Entendido')),
             ],
           ),
         );
@@ -57,20 +65,26 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         puntoVentaCodigo: pvCode,
       );
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PosMainPage()));
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const PosMainPage()));
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString();
       String uiMsg = 'No se pudo abrir la caja.';
       if (msg.contains('UNIQUE') && msg.contains('codigo_caja')) {
-        uiMsg = 'Ya existe una caja con el mismo código para hoy. Probá con otro Punto de venta o disciplina.';
+        uiMsg =
+            'Ya existe una caja con el mismo código para hoy. Probá con otro Punto de venta o disciplina.';
       }
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Error al abrir caja'),
           content: Text(uiMsg),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cerrar'))
+          ],
         ),
       );
     }
@@ -88,8 +102,10 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
             children: [
               TextFormField(
                 controller: _usuario,
-                decoration: const InputDecoration(labelText: 'Usuario apertura'),
-                validator: (v) => (v==null||v.trim().isEmpty) ? 'Requerido' : null,
+                decoration:
+                    const InputDecoration(labelText: 'Usuario apertura'),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -104,10 +120,12 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _disciplina,
+                initialValue: _disciplina,
                 items: const [
-                  DropdownMenuItem(value: 'Futbol Infantil', child: Text('Futbol Infantil')),
-                  DropdownMenuItem(value: 'Futbol Mayor', child: Text('Futbol Mayor')),
+                  DropdownMenuItem(
+                      value: 'Futbol Infantil', child: Text('Futbol Infantil')),
+                  DropdownMenuItem(
+                      value: 'Futbol Mayor', child: Text('Futbol Mayor')),
                   DropdownMenuItem(value: 'Evento', child: Text('Evento')),
                   DropdownMenuItem(value: 'Otros', child: Text('Otros')),
                 ],
@@ -116,19 +134,24 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _puntoVenta,
+                initialValue: _puntoVenta,
                 items: const [
-                  DropdownMenuItem(value: 'Caja1 (Caj01)', child: Text('Caja1 (Caj01)')),
-                  DropdownMenuItem(value: 'Caja2 (Caj02)', child: Text('Caja2 (Caj02)')),
-                  DropdownMenuItem(value: 'Caja3 (Caj03)', child: Text('Caja3 (Caj03)')),
+                  DropdownMenuItem(
+                      value: 'Caja1 (Caj01)', child: Text('Caja1 (Caj01)')),
+                  DropdownMenuItem(
+                      value: 'Caja2 (Caj02)', child: Text('Caja2 (Caj02)')),
+                  DropdownMenuItem(
+                      value: 'Caja3 (Caj03)', child: Text('Caja3 (Caj03)')),
                 ],
-                onChanged: (v) => setState(() => _puntoVenta = v ?? 'Caja1 (Caj01)'),
+                onChanged: (v) =>
+                    setState(() => _puntoVenta = v ?? 'Caja1 (Caj01)'),
                 decoration: const InputDecoration(labelText: 'Punto de venta'),
               ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _desc,
-                decoration: const InputDecoration(labelText: 'Descripción del evento'),
+                decoration:
+                    const InputDecoration(labelText: 'Descripción del evento'),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -136,7 +159,8 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                 decoration: const InputDecoration(labelText: 'Observación'),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _abrir, child: const Text('Abrir caja')),
+              ElevatedButton(
+                  onPressed: _abrir, child: const Text('Abrir caja')),
             ],
           ),
         ),

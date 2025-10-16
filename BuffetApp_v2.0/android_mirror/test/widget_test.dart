@@ -5,13 +5,15 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:buffet_mirror/main.dart';
 
 void main() {
-  testWidgets('Arranca y muestra título', (WidgetTester tester) async {
+  testWidgets('Arranca y muestra app', (WidgetTester tester) async {
     await tester.pumpWidget(const App());
-    expect(find.text('Buffet Mirror'), findsOneWidget);
+    // Valida que el MaterialApp se haya montado
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }

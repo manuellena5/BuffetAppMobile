@@ -9,10 +9,11 @@ from pathlib import Path
 import os
 
 # Cuando PyInstaller ejecuta el spec, __file__ no siempre está definido de la forma esperada.
-# Usamos el cwd y nos aseguramos que apunte a la carpeta donde está main.py.
-proj_dir = Path.cwd() / 'BuffetApp_v1.4'
+# Determinamos el directorio del proyecto de forma robusta buscando main.py desde el spec actual o el cwd.
+here = Path(__file__).resolve().parent if '__file__' in globals() else Path.cwd()
+proj_dir = here
 if not (proj_dir / 'main.py').exists():
-    # fallback: intentar el parent de este spec si se ejecuta desde dentro
+    # fallback: intentar el cwd donde se lanzó PyInstaller
     maybe = Path.cwd()
     if (maybe / 'main.py').exists():
         proj_dir = maybe

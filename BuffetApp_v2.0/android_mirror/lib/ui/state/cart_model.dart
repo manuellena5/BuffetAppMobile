@@ -5,7 +5,11 @@ class CartItem {
   final String nombre;
   final double precioUnitario;
   int cantidad;
-  CartItem({required this.productoId, required this.nombre, required this.precioUnitario, this.cantidad = 1});
+  CartItem(
+      {required this.productoId,
+      required this.nombre,
+      required this.precioUnitario,
+      this.cantidad = 1});
   double get subtotal => precioUnitario * cantidad;
 }
 
@@ -21,14 +25,18 @@ class CartModel extends ChangeNotifier {
     if (idx >= 0) {
       _items[idx].cantidad += 1;
     } else {
-      _items.add(CartItem(productoId: id, nombre: nombre, precioUnitario: precio));
+      _items.add(
+          CartItem(productoId: id, nombre: nombre, precioUnitario: precio));
     }
     notifyListeners();
   }
 
   void inc(int id) {
     final idx = _items.indexWhere((e) => e.productoId == id);
-    if (idx >= 0) { _items[idx].cantidad += 1; notifyListeners(); }
+    if (idx >= 0) {
+      _items[idx].cantidad += 1;
+      notifyListeners();
+    }
   }
 
   void dec(int id) {

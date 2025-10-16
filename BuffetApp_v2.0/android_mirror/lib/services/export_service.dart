@@ -19,8 +19,11 @@ class ExportService {
   }
 
   Future<Map<String, dynamic>> _buildPayload(Database db, int cajaId) async {
-    final caja = await db.query('caja_diaria', where: 'id=?', whereArgs: [cajaId], limit: 1);
-    if (caja.isEmpty) { throw Exception('Caja no encontrada'); }
+    final caja = await db.query('caja_diaria',
+        where: 'id=?', whereArgs: [cajaId], limit: 1);
+    if (caja.isEmpty) {
+      throw Exception('Caja no encontrada');
+    }
 
     final resumen = await CajaService().resumenCaja(cajaId);
     // Tickets completos (incluye anulados)
@@ -61,8 +64,9 @@ class ExportService {
     final nowIso = _df.format(DateTime.now());
     final metadata = {
       'app': 'BuffetMirror',
-      'app_version': '0.1.0',
-      'device_id': 'unknown', // TODO: persistir con uuid en storage y leerlo aquí
+      'app_version': '1.0.0',
+      'device_id':
+          'unknown', // TODO: persistir con uuid en storage y leerlo aquí
       'device_alias': 'device', // TODO: permitir alias editable y persistido
       'fecha_export': nowIso,
     };
@@ -80,18 +84,22 @@ class ExportService {
 
   Future<File> exportCajaToJson(int cajaId) async {
     final exportDir = await _ensureExportDir();
-  final db = await AppDatabase.instance();
-  final payload = await _buildPayload(db, cajaId);
-    final codigo = (payload['caja'] as Map)['codigo_caja']?.toString() ?? 'CAJA';
-    final file = File(p.join(exportDir.path, 'caja_${codigo}.json'));
-    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload), flush: true);
+    final db = await AppDatabase.instance();
+    final payload = await _buildPayload(db, cajaId);
+    final codigo =
+        (payload['caja'] as Map)['codigo_caja']?.toString() ?? 'CAJA';
+    final file = File(p.join(exportDir.path, 'caja_$codigo.json'));
+    await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(payload),
+        flush: true);
     await _pruneOldBackups(exportDir);
     return file;
   }
 
   Future<void> shareCajaFile(int cajaId) async {
     final file = await exportCajaToJson(cajaId);
-    await Share.shareXFiles([XFile(file.path)], subject: 'Caja ${p.basename(file.path)}');
+  final base = p.basename(file.path);
+  await Share.shareXFiles([XFile(file.path)], subject: 'Caja $base');
   }
 
   Future<void> _pruneOldBackups(Directory exportDir) async {
@@ -102,7 +110,9 @@ class ExportService {
         .toList();
     files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
     for (int i = 4; i < files.length; i++) {
-      try { await files[i].delete(); } catch (_) {}
+      try {
+        await files[i].delete();
+      } catch (_) {}
     }
   }
 }

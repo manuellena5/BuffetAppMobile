@@ -46,19 +46,25 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                 setState(() => _selected = p);
               },
               icon: const Icon(Icons.print),
-              label: Text(_selected == null ? 'Elegir impresora' : 'Impresora: ${_selected!.name}'),
+              label: Text(_selected == null
+                  ? 'Elegir impresora'
+                  : 'Impresora: ${_selected!.name}'),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
                 const Text('Disponibles:'),
                 const SizedBox(width: 8),
-                IconButton(onPressed: _refreshPrinters, icon: const Icon(Icons.refresh)),
+                IconButton(
+                    onPressed: _refreshPrinters,
+                    icon: const Icon(Icons.refresh)),
               ],
             ),
             Expanded(
               child: _printers.isEmpty
-                  ? const Center(child: Text('No se detectaron impresoras. Podés seleccionar una con "Elegir impresora" y se usará el diálogo del sistema o previsualización PDF.'))
+                  ? const Center(
+                      child: Text(
+                          'No se detectaron impresoras. Podés seleccionar una con "Elegir impresora" y se usará el diálogo del sistema o previsualización PDF.'))
                   : ListView.builder(
                       itemCount: _printers.length,
                       itemBuilder: (ctx, i) {
@@ -66,7 +72,9 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                         final selected = _selected?.name == p.name;
                         return ListTile(
                           title: Text(p.name),
-                          trailing: selected ? const Icon(Icons.check, color: Colors.green) : null,
+                          trailing: selected
+                              ? const Icon(Icons.check, color: Colors.green)
+                              : null,
                           onTap: () => setState(() => _selected = p),
                         );
                       },
@@ -77,12 +85,14 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
               onPressed: () async {
                 // Buscar último ticket o generar uno de prueba en memoria
                 final db = await AppDatabase.instance();
-                final last = await db.query('tickets', columns: ['id'], orderBy: 'id DESC', limit: 1);
+                final last = await db.query('tickets',
+                    columns: ['id'], orderBy: 'id DESC', limit: 1);
                 final id = last.isNotEmpty ? last.first['id'] as int : null;
                 if (id == null) {
                   // Construir un PDF de ejemplo y mostrar
                   await Printing.layoutPdf(
-                    onLayout: (f) async => await PrintService().buildTicketPdf(await _crearTicketDummy()),
+                    onLayout: (f) async => await PrintService()
+                        .buildTicketPdf(await _crearTicketDummy()),
                     name: 'ticket_demo.pdf',
                   );
                 } else {
@@ -97,17 +107,20 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
             const SizedBox(height: 8),
             ElevatedButton(
               onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 // Tomar caja abierta o la última cerrada
                 final svc = CajaService();
                 final abierta = await svc.getCajaAbierta();
                 int? cajaId = abierta?['id'] as int?;
                 if (cajaId == null) {
                   final db = await AppDatabase.instance();
-                  final last = await db.query('caja_diaria', columns: ['id'], orderBy: 'id DESC', limit: 1);
+                  final last = await db.query('caja_diaria',
+                      columns: ['id'], orderBy: 'id DESC', limit: 1);
                   cajaId = last.isNotEmpty ? last.first['id'] as int : null;
                 }
                 if (cajaId == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay cajas para imprimir.')));
+                  messenger.showSnackBar(
+                      const SnackBar(content: Text('No hay cajas para imprimir.')));
                   return;
                 }
                 await Printing.layoutPdf(
@@ -143,8 +156,10 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
       productoId = p.first['id'] as int;
     }
     final now = DateTime.now();
-    final fecha = '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final hora = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    final fecha =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final hora =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
     final ventaId = await db.insert('ventas', {
       'uuid': 'demo',
       'fecha_hora': '$fecha $hora',
@@ -163,7 +178,14 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
       'total_ticket': 1500,
       'identificador_ticket': null,
     });
-    await db.update('tickets', {'identificador_ticket': 'DEMO-${now.year}${now.month}${now.day}-$ticketId'}, where: 'id=?', whereArgs: [ticketId]);
+    await db.update(
+        'tickets',
+        {
+          'identificador_ticket':
+              'DEMO-${now.year}${now.month}${now.day}-$ticketId'
+        },
+        where: 'id=?',
+        whereArgs: [ticketId]);
     return ticketId;
   }
 }
