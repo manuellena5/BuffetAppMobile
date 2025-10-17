@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/caja_service.dart';
 import '../format.dart';
 import 'pos_main_page.dart';
+import 'products_page.dart';
 
 class CajaOpenPage extends StatefulWidget {
   const CajaOpenPage({super.key});
@@ -12,11 +13,13 @@ class CajaOpenPage extends StatefulWidget {
 class _CajaOpenPageState extends State<CajaOpenPage> {
   final _form = GlobalKey<FormState>();
   final _usuario = TextEditingController();
-  final _fondo = TextEditingController(text: formatCurrency(0));
+  final _fondo = TextEditingController(text: '');
   final _desc = TextEditingController();
   final _obs = TextEditingController();
-  String _disciplina = 'Futbol Infantil';
-  String _puntoVenta = 'Caja1 (Caj01)';
+  String? _disciplina;
+  String? _puntoVentaCodigo; // Caj01/Caj02/Caj03
+  List<String> _disciplinas = const [];
+  List<Map<String, String>> _puntos = const []; // {codigo, nombre}
   final _svc = CajaService();
 
   @override
@@ -28,12 +31,33 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _cargarCatalogos();
+  }
+
+  Future<void> _cargarCatalogos() async {
+    final dis = await _svc.listarDisciplinas();
+    final pv = await _svc.listarPuntosVenta();
+    if (!mounted) return;
+    setState(() {
+      _disciplinas = dis;
+      _puntos = pv
+          .map((e) => {
+                'codigo': (e['codigo'] as String),
+                'nombre': (e['nombre'] as String),
+              })
+          .toList();
+      _disciplina = _disciplinas.isNotEmpty ? _disciplinas.first : null;
+      _puntoVentaCodigo = _puntos.isNotEmpty ? _puntos.first['codigo'] : null;
+    });
+  }
+
   Future<void> _abrir() async {
     if (!_form.currentState!.validate()) return;
-    final fondo = parseCurrencyToDouble(_fondo.text);
-    final pvCode = _puntoVenta.contains('Caj01')
-        ? 'Caj01'
-        : (_puntoVenta.contains('Caj02') ? 'Caj02' : 'Caj03');
+    final fondo = parseLooseDouble(_fondo.text);
+  final pvCode = _puntoVentaCodigo ?? 'Caj01';
 
     try {
       // Verificar si ya hay una caja abierta
@@ -59,14 +83,39 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
       await _svc.abrirCaja(
         usuario: _usuario.text.trim(),
         fondoInicial: fondo,
-        disciplina: _disciplina,
+  disciplina: _disciplina ?? 'Otros',
         descripcionEvento: _desc.text.trim(),
         observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim(),
         puntoVentaCodigo: pvCode,
       );
       if (!mounted) return;
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const PosMainPage()));
+      // Preguntar si desea cargar stock ahora
+      final goToStock = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Caja abierta'),
+          content: const Text('¿Querés cargar stock ahora?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Ir a ventas')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Cargar stock')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (goToStock == true) {
+        // Ir a Productos
+        // Importación perezosa para evitar dependencias circulares
+        // ignore: use_build_context_synchronously
+    Navigator.pushReplacement(
+      context, MaterialPageRoute(builder: (_) => const ProductsPage()));
+      } else {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const PosMainPage()));
+      }
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString();
@@ -112,40 +161,47 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                 controller: _fondo,
                 decoration: const InputDecoration(labelText: 'Fondo inicial'),
                 keyboardType: TextInputType.number,
-                inputFormatters: [CurrencyInputFormatter()],
                 validator: (v) {
-                  final val = parseCurrencyToDouble(v ?? '');
+                  final val = parseLooseDouble(v ?? '');
                   return (val < 0) ? '>= 0' : null;
                 },
               ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _disciplina,
-                items: const [
-                  DropdownMenuItem(
-                      value: 'Futbol Infantil', child: Text('Futbol Infantil')),
-                  DropdownMenuItem(
-                      value: 'Futbol Mayor', child: Text('Futbol Mayor')),
-                  DropdownMenuItem(value: 'Evento', child: Text('Evento')),
-                  DropdownMenuItem(value: 'Otros', child: Text('Otros')),
-                ],
-                onChanged: (v) => setState(() => _disciplina = v ?? 'Otros'),
-                decoration: const InputDecoration(labelText: 'Disciplina'),
+              FutureBuilder<List<String>>(
+                future: _svc.listarDisciplinas(),
+                builder: (ctx, snap) {
+                  final items = snap.data ?? _disciplinas;
+                  final value = _disciplina ?? (items.isNotEmpty ? items.first : null);
+                  return DropdownButtonFormField<String>(
+                    value: value,
+                    items: [
+                      for (final d in items)
+                        DropdownMenuItem(value: d, child: Text(d))
+                    ],
+                    onChanged: (v) => setState(() => _disciplina = v),
+                    decoration: const InputDecoration(labelText: 'Disciplina'),
+                  );
+                },
               ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _puntoVenta,
-                items: const [
-                  DropdownMenuItem(
-                      value: 'Caja1 (Caj01)', child: Text('Caja1 (Caj01)')),
-                  DropdownMenuItem(
-                      value: 'Caja2 (Caj02)', child: Text('Caja2 (Caj02)')),
-                  DropdownMenuItem(
-                      value: 'Caja3 (Caj03)', child: Text('Caja3 (Caj03)')),
-                ],
-                onChanged: (v) =>
-                    setState(() => _puntoVenta = v ?? 'Caja1 (Caj01)'),
-                decoration: const InputDecoration(labelText: 'Punto de venta'),
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _svc.listarPuntosVenta(),
+                builder: (ctx, snap) {
+                  final items = snap.data ?? _puntos;
+                  final value = _puntoVentaCodigo ?? (items.isNotEmpty ? items.first['codigo'] as String : null);
+                  return DropdownButtonFormField<String>(
+                    value: value,
+                    items: [
+                      for (final e in items)
+                        DropdownMenuItem(
+                          value: e['codigo'] as String,
+                          child: Text('${e['nombre']} (${e['codigo']})'),
+                        )
+                    ],
+                    onChanged: (v) => setState(() => _puntoVentaCodigo = v),
+                    decoration: const InputDecoration(labelText: 'Punto de venta'),
+                  );
+                },
               ),
               const SizedBox(height: 8),
               TextFormField(

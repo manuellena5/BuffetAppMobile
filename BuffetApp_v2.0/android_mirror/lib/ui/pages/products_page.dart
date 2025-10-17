@@ -139,6 +139,7 @@ class _ProductFormState extends State<_ProductForm> {
   final _codigo = TextEditingController();
   final _precio = TextEditingController();
   final _stock = TextEditingController(text: '999');
+  bool _contabilizaStock = false;
   int? _catId = 3; // Otros por defecto
   bool _visible = true;
   String? _imagenPath; // ruta local a la imagen
@@ -150,9 +151,11 @@ class _ProductFormState extends State<_ProductForm> {
     if (d != null) {
       _nombre.text = (d['nombre'] as String?) ?? '';
       _codigo.text = (d['codigo_producto'] as String?) ?? '';
-      final pv = d['precio_venta'] as num?;
-      _precio.text = pv == null ? '' : formatCurrency(pv);
-      _stock.text = '${d['stock_actual'] ?? '0'}';
+  final pv = d['precio_venta'] as num?;
+  _precio.text = pv == null ? '' : pv.toString();
+  final st = d['stock_actual'] as int?;
+  _stock.text = '${st ?? 999}';
+  _contabilizaStock = (st != null && st != 999);
       _catId = d['categoria_id'] as int? ?? 3;
       _visible = ((d['visible'] as int?) ?? 1) == 1;
       _imagenPath = d['imagen'] as String?;
@@ -175,9 +178,21 @@ class _ProductFormState extends State<_ProductForm> {
     final db = await AppDatabase.instance();
     final codigo = _codigo.text.trim().toUpperCase();
     final nombre = _nombre.text.trim();
-  final precioParsed = parseCurrencyToDouble(_precio.text.trim());
+  final precioParsed = parseLooseDouble(_precio.text.trim());
   final precio = precioParsed.isNaN ? -1 : precioParsed.round();
-    final stock = int.tryParse(_stock.text.trim()) ?? -1;
+    int stock;
+    if (!_contabilizaStock) {
+      stock = 999; // no contabiliza => ilimitado
+    } else {
+      stock = int.tryParse(_stock.text.trim()) ?? -1;
+      if (stock == 999) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Si contabiliza stock, no puede ser 999. Ingrese otro valor.')));
+        }
+        return;
+      }
+    }
 
     // Validaciones extra: precio/stock >= 0
     if (precio < 0) {
@@ -374,10 +389,9 @@ class _ProductFormState extends State<_ProductForm> {
                 controller: _precio,
                 decoration: const InputDecoration(labelText: 'Precio de venta'),
                 keyboardType: TextInputType.number,
-                inputFormatters: [CurrencyInputFormatter()],
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Ingrese un número';
-                  final val = parseCurrencyToDouble(v);
+                  final val = parseLooseDouble(v);
                   if (val.isNaN) return 'Ingrese un número';
                   return null;
                 },
@@ -388,9 +402,31 @@ class _ProductFormState extends State<_ProductForm> {
                 decoration: const InputDecoration(
                     labelText: 'Stock actual (use 999 para ilimitado)'),
                 keyboardType: TextInputType.number,
+                enabled: _contabilizaStock,
                 validator: (v) {
+                  if (!_contabilizaStock) return null; // deshabilitado
                   if (v == null || v.isEmpty) return 'Ingrese un número';
-                  return int.tryParse(v) == null ? 'Ingrese un número' : null;
+                  final iv = int.tryParse(v);
+                  if (iv == null) return 'Ingrese un número';
+                  if (iv == 999) return 'Use un valor distinto a 999 si contabiliza stock';
+                  if (iv < 0) return 'Stock debe ser >= 0';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Contabilizar stock'),
+                subtitle: const Text('Si está apagado, no se descuenta stock (999)'),
+                value: _contabilizaStock,
+                onChanged: (v) {
+                  setState(() {
+                    _contabilizaStock = v;
+                    if (!v) {
+                      _stock.text = '999';
+                    } else {
+                      if (_stock.text.trim() == '999') _stock.text = '0';
+                    }
+                  });
                 },
               ),
               const SizedBox(height: 8),

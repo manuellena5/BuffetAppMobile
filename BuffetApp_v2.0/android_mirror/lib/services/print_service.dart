@@ -78,6 +78,11 @@ class PrintService {
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
+  final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+  final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
+  final obsCierre = (c['obs_cierre'] as String?) ?? '';
+  final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
+  final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
 
     final doc = pw.Document();
     pw.TextStyle s([bool b = false]) => pw.TextStyle(
@@ -118,9 +123,15 @@ class PrintService {
                   style: s()),
               pw.Text(line('Disciplina:', c['disciplina']?.toString()),
                   style: s()),
+              if (descripcionEvento.isNotEmpty)
+                pw.Text(line('Descripción del evento:', descripcionEvento), style: s()),
               if ((c['cierre_dt'] as String?) != null)
                 pw.Text(line('Fecha cierre:', c['cierre_dt']?.toString()),
                     style: s()),
+              if (obsApertura.isNotEmpty)
+                pw.Text('Obs. apertura: $obsApertura', style: s()),
+              if (obsCierre.isNotEmpty)
+                pw.Text('Obs. cierre: $obsCierre', style: s()),
               pw.SizedBox(height: 6),
               pw.Text('TOTALES POR MEDIO DE PAGO', style: s(true)),
               pw.SizedBox(height: 4),
@@ -133,17 +144,9 @@ class PrintService {
                   'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
                   style: s(true)),
               pw.SizedBox(height: 6),
+              pw.Text('Fondo inicial: ${_formatCurrency(fondo)}', style: s()),
               pw.Text(
-                  'Fondo inicial: ${_formatCurrency(((c['fondo_inicial'] as num?) ?? 0).toDouble())}',
-                  style: s()),
-              pw.Text(
-                  'Ingresos: ${_formatCurrency(((c['ingresos'] as num?) ?? 0).toDouble())}',
-                  style: s()),
-              pw.Text(
-                  'Retiros: ${_formatCurrency(((c['retiros'] as num?) ?? 0).toDouble())}',
-                  style: s()),
-              pw.Text(
-                  'Diferencia: ${_formatCurrency(((c['diferencia'] as num?) ?? 0).toDouble())}',
+          'Diferencia: ${_formatCurrency(diferencia)}',
                   style: s(true)),
               pw.Text(
                   'Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}',

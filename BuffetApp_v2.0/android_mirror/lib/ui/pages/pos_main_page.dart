@@ -31,6 +31,7 @@ class _PosMainPageState extends State<PosMainPage> {
   String? _cajaCodigo;
   bool _useList = false;
   String? _appVersion;
+  static const String _lowStockPrefsKey = 'low_stock_alerted_ids';
 
   @override
   void initState() {
@@ -70,6 +71,37 @@ class _PosMainPageState extends State<PosMainPage> {
       _cajaCodigo = cajaCodigo;
       _loading = false;
     });
+    // Alerta de stock mínimo por producto una sola vez
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final alerted = sp.getStringList(_lowStockPrefsKey) ?? <String>[];
+      final alertedSet = alerted.toSet();
+      final newLow = _productos.where((p) {
+        final s = (p['stock_actual'] as int?) ?? 0;
+        if (s == 999 || s > 5) return false;
+        final id = (p['id'] as int).toString();
+        return !alertedSet.contains(id);
+      }).toList();
+      if (mounted && newLow.isNotEmpty) {
+        final names = newLow.take(10).map((e) => e['nombre']).join(', ');
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Stock bajo'),
+            content: Text('Hay productos con poco stock (<=5):\n$names'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Entendido'),
+              )
+            ],
+          ),
+        );
+        // Marcar como alertados
+        final updated = <String>{...alertedSet, ...newLow.map((e) => (e['id'] as int).toString())};
+        await sp.setStringList(_lowStockPrefsKey, updated.toList());
+      }
+    } catch (_) {}
   }
 
   Future<bool> _tryDecreaseStock(int id) async {
@@ -80,8 +112,32 @@ class _PosMainPageState extends State<PosMainPage> {
     if (updated > 0) {
       final idx = _productos.indexWhere((e) => e['id'] == id);
       if (idx >= 0) {
-        setState(() => _productos[idx]['stock_actual'] =
-            (_productos[idx]['stock_actual'] as int) - 1);
+        final newStock = (_productos[idx]['stock_actual'] as int) - 1;
+        setState(() => _productos[idx]['stock_actual'] = newStock);
+        // Si el stock llegó a 0, preguntar si ocultar el producto
+        if (newStock == 0 && mounted) {
+          final choice = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Stock agotado'),
+              content: Text('"${_productos[idx]['nombre']}" llegó a 0. ¿Ocultar el producto del POS?'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Mantener visible')),
+                ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Ocultar')),
+              ],
+            ),
+          );
+          if (choice != null) {
+            final visible = choice ? 0 : 1;
+            await db.update('products', {'visible': visible}, where: 'id=?', whereArgs: [id]);
+            // refrescar lista
+            await _load();
+          }
+        }
       }
       return true;
     }

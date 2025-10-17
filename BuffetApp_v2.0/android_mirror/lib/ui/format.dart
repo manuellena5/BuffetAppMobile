@@ -16,6 +16,15 @@ double parseCurrencyToDouble(String text) {
   return value;
 }
 
+// Parser laxo para números sin formateo de moneda (admite "1234", "1234,50", "1234.50")
+double parseLooseDouble(String text) {
+  final match = RegExp(r'[-+]?\d+(?:[\.,]\d+)?').firstMatch(text.trim());
+  if (match == null) return 0.0;
+  final raw = match.group(0)!;
+  final norm = raw.replaceAll(',', '.');
+  return double.tryParse(norm) ?? 0.0;
+}
+
 class CurrencyInputFormatter extends TextInputFormatter {
   final NumberFormat numberFormat;
   CurrencyInputFormatter({String locale = 'es_AR', String symbol = '\$'})

@@ -185,6 +185,10 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
             if ((_caja!['observaciones_apertura'] as String?)?.isNotEmpty ==
                 true)
               Text('Descripción: ${_caja!['observaciones_apertura']}'),
+            if ((_caja!['obs_cierre'] as String?)?.isNotEmpty == true)
+              Text('Obs. cierre: ${_caja!['obs_cierre']}'),
+            if ((_caja!['diferencia'] as num?) != null)
+              Text('Diferencia: ${formatCurrency(((_caja!['diferencia'] as num?) ?? 0))}'),
             const Divider(height: 24),
       Text('Totales', style: Theme.of(context).textTheme.titleMedium),
       Text('Total ventas: ${formatCurrency(resumen['total'] as num)}',

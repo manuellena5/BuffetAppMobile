@@ -18,8 +18,8 @@ class _CajaPageState extends State<CajaPage> {
   bool _loading = true;
 
   final _usuario = TextEditingController();
-  final _efectivo = TextEditingController(text: formatCurrency(0));
-  final _transfer = TextEditingController(text: formatCurrency(0));
+  final _efectivo = TextEditingController(text: '');
+  final _transfer = TextEditingController(text: '');
   final _obs = TextEditingController();
 
   @override
@@ -122,13 +122,13 @@ class _CajaPageState extends State<CajaPage> {
                 decoration:
                     const InputDecoration(labelText: 'Efectivo en caja'),
                 keyboardType: TextInputType.number,
-                inputFormatters: [CurrencyInputFormatter()]),
+        ),
             const SizedBox(height: 6),
             TextField(
                 controller: _transfer,
                 decoration: const InputDecoration(labelText: 'Transferencias'),
                 keyboardType: TextInputType.number,
-                inputFormatters: [CurrencyInputFormatter()]),
+        ),
             const SizedBox(height: 6),
             TextField(
                 controller: _obs,
@@ -138,8 +138,8 @@ class _CajaPageState extends State<CajaPage> {
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 final nav = Navigator.of(context);
-                final eff = parseCurrencyToDouble(_efectivo.text);
-                final tr = parseCurrencyToDouble(_transfer.text);
+                final eff = parseLooseDouble(_efectivo.text);
+                final tr = parseLooseDouble(_transfer.text);
                 if ((_usuario.text.trim()).isEmpty) {
                   messenger.showSnackBar(
                       const SnackBar(content: Text('Usuario cierre requerido')));
@@ -164,7 +164,7 @@ class _CajaPageState extends State<CajaPage> {
                       children: [
                         Text(
                             'Total ventas (sistema): ${formatCurrency(totalVentas)}'),
-                        Text('Efectivo declarado: ${formatCurrency(eff)}'),
+                        Text('Efectivo en caja: ${formatCurrency(eff)}'),
                         Text('Fondo inicial: ${formatCurrency(fondo)}'),
                         Text('Transferencias: ${formatCurrency(tr)}'),
                         Text(
@@ -180,7 +180,7 @@ class _CajaPageState extends State<CajaPage> {
                           child: const Text('Cancelar')),
                       ElevatedButton(
                           onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Cerrar')),
+                          child: const Text('Cerrar caja')),
                     ],
                   ),
                 );

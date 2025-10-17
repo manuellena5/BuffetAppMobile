@@ -1,6 +1,17 @@
 import '../data/dao/db.dart';
 
 class CajaService {
+  Future<List<Map<String, dynamic>>> listarPuntosVenta() async {
+    final db = await AppDatabase.instance();
+    final r = await db.query('punto_venta', orderBy: 'codigo ASC');
+    return r.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<List<String>> listarDisciplinas() async {
+    final db = await AppDatabase.instance();
+    final r = await db.query('disciplinas', columns: ['nombre'], orderBy: 'nombre ASC');
+    return r.map((e) => (e['nombre'] as String)).toList();
+  }
   Future<Map<String, dynamic>?> getCajaAbierta() async {
     final db = await AppDatabase.instance();
     final r =
@@ -61,11 +72,6 @@ class CajaService {
         codigo = '$baseCodigo-${maxSufijo + 1}';
       }
     }
-    final aperturaDesc = descripcionEvento.isNotEmpty
-        ? (observacion != null && observacion.isNotEmpty
-            ? '$descripcionEvento — $observacion'
-            : descripcionEvento)
-        : (observacion ?? '');
     return await db.insert('caja_diaria', {
       'codigo_caja': codigo,
       'disciplina': disciplina,
@@ -75,7 +81,8 @@ class CajaService {
       'apertura_dt': '$fecha $hora',
       'fondo_inicial': fondoInicial,
       'estado': 'ABIERTA',
-      'observaciones_apertura': aperturaDesc,
+      'descripcion_evento': descripcionEvento,
+      'observaciones_apertura': (observacion ?? ''),
       'diferencia': 0,
       'ingresos': 0,
       'retiros': 0,
@@ -101,7 +108,12 @@ class CajaService {
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
     ''', [cajaId]);
     final totalVentas = (tot.first['total'] as num?)?.toDouble() ?? 0.0;
-    final diferencia = (efectivoEnCaja + transferencias) - totalVentas;
+    // Fórmula pedida: Total Ventas = (Efectivo - Fondo Inicial) + Transferencias
+    // => Diferencia = ((Efectivo - Fondo) + Transferencias) - TotalVentas
+    final cajaRow = await db.query('caja_diaria', columns: ['fondo_inicial'], where: 'id=?', whereArgs: [cajaId], limit: 1);
+    final fondo = ((cajaRow.first['fondo_inicial'] as num?) ?? 0).toDouble();
+    final totalPorFormula = (efectivoEnCaja - fondo) + transferencias;
+    final diferencia = totalPorFormula - totalVentas;
     await db.update(
         'caja_diaria',
         {
