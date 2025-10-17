@@ -178,12 +178,20 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
             const SizedBox(height: 8),
             Text('Fecha: ${_caja!['fecha']} • Estado: ${_caja!['estado']}'),
             const SizedBox(height: 8),
+            if ((_caja!['disciplina'] as String?)?.isNotEmpty == true)
+              Text('Disciplina: ${_caja!['disciplina']}'),
+            Text('Fondo inicial: ${formatCurrency((_caja!['fondo_inicial'] as num?) ?? 0)}'),
+            const SizedBox(height: 8),
             if ((_caja!['observaciones_apertura'] as String?)?.isNotEmpty ==
                 true)
               Text('Descripción: ${_caja!['observaciones_apertura']}'),
             const Divider(height: 24),
-            Text('Totales', style: Theme.of(context).textTheme.titleMedium),
-            Text('Total ventas: ${formatCurrency(resumen['total'] as num)}'),
+      Text('Totales', style: Theme.of(context).textTheme.titleMedium),
+      Text('Total ventas: ${formatCurrency(resumen['total'] as num)}',
+        style: Theme.of(context)
+          .textTheme
+          .titleLarge
+          ?.copyWith(fontWeight: FontWeight.bold, color: Colors.green.shade700)),
             const SizedBox(height: 6),
             Text('Ventas por método de pago',
                 style: Theme.of(context).textTheme.titleMedium),
@@ -193,13 +201,24 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
                       '• ${(e['mp_desc'] as String?) ?? 'MP ${e['mp']}'}: ${formatCurrency((e['total'] as num?) ?? 0)}'),
                 )),
             const SizedBox(height: 10),
-            Text('Ventas por producto',
-                style: Theme.of(context).textTheme.titleMedium),
-            ...(resumen['por_producto'] as List).map<Widget>((e) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text(
-                      '• ${e['nombre']}: ${e['cantidad']} un. • ${formatCurrency((e['total'] as num?) ?? 0)}'),
-                )),
+      Text('Ventas por producto',
+        style: Theme.of(context).textTheme.titleMedium),
+      ...(() {
+        final list = List<Map<String, dynamic>>.from(
+          (resumen['por_producto'] as List?) ?? const []);
+        list.sort((a, b) {
+        final an = (a['cantidad'] as num?) ?? 0;
+        final bn = (b['cantidad'] as num?) ?? 0;
+        return bn.compareTo(an);
+        });
+        return list
+          .map<Widget>((e) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(
+              '• ${(e['nombre'] ?? '')} x ${(e['cantidad'] ?? 0)} = ${formatCurrency(((e['total'] as num?) ?? 0))}'),
+            ))
+          .toList();
+      }()),
           ],
         ),
       ),

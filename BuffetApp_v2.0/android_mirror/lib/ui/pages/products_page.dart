@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../../data/dao/db.dart';
 import 'package:sqflite/sqflite.dart';
 import '../format.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
@@ -122,6 +126,7 @@ class _ProductFormState extends State<_ProductForm> {
   final _stock = TextEditingController(text: '999');
   int? _catId = 3; // Otros por defecto
   bool _visible = true;
+  String? _imagenPath; // ruta local a la imagen
 
   @override
   void initState() {
@@ -134,6 +139,7 @@ class _ProductFormState extends State<_ProductForm> {
       _stock.text = '${d['stock_actual'] ?? '0'}';
       _catId = d['categoria_id'] as int? ?? 3;
       _visible = ((d['visible'] as int?) ?? 1) == 1;
+      _imagenPath = d['imagen'] as String?;
     }
   }
 
@@ -153,7 +159,8 @@ class _ProductFormState extends State<_ProductForm> {
     final db = await AppDatabase.instance();
     final codigo = _codigo.text.trim().toUpperCase();
     final nombre = _nombre.text.trim();
-    final precio = int.tryParse(_precio.text.trim()) ?? -1;
+  final precioParsed = parseCurrencyToDouble(_precio.text.trim());
+  final precio = precioParsed.isNaN ? -1 : precioParsed.round();
     final stock = int.tryParse(_stock.text.trim()) ?? -1;
 
     // Validaciones extra: precio/stock >= 0
@@ -227,6 +234,7 @@ class _ProductFormState extends State<_ProductForm> {
       'categoria_id': _catId,
       'visible': _visible ? 1 : 0,
       'color': null,
+      'imagen': _imagenPath,
     };
     if (widget.data == null) {
       // create
@@ -251,6 +259,69 @@ class _ProductFormState extends State<_ProductForm> {
           key: _form,
           child: ListView(
             children: [
+              // Imagen del producto (preview y selector)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _imagenPath != null && _imagenPath!.isNotEmpty && File(_imagenPath!).existsSync()
+                        ? Image.file(File(_imagenPath!), fit: BoxFit.cover)
+                        : const Icon(Icons.image, color: Colors.grey),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add_a_photo),
+                    label: const Text('Agregar imagen'),
+                    onPressed: () async {
+                      final src = await showModalBottomSheet<ImageSource>(
+                        context: context,
+                        builder: (ctx) => SafeArea(
+                          child: Wrap(children: [
+                            ListTile(
+                              leading: const Icon(Icons.photo_library),
+                              title: const Text('Galería'),
+                              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.photo_camera),
+                              title: const Text('Cámara'),
+                              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                            ),
+                          ]),
+                        ),
+                      );
+                      if (src == null) return;
+                      final picker = ImagePicker();
+                      final x = await picker.pickImage(source: src, imageQuality: 85);
+                      if (x == null) return;
+                      // Copiar a carpeta de documentos de la app para persistencia
+                      final dir = await getApplicationDocumentsDirectory();
+                      final picsDir = Directory(p.join(dir.path, 'product_images'));
+                      if (!await picsDir.exists()) await picsDir.create(recursive: true);
+                      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${p.basename(x.path)}';
+                      final destPath = p.join(picsDir.path, fileName);
+                      await File(x.path).copy(destPath);
+                      if (!mounted) return;
+                      setState(() => _imagenPath = destPath);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  if (_imagenPath != null && _imagenPath!.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () => setState(() => _imagenPath = null),
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Quitar'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _nombre,
                 decoration: const InputDecoration(labelText: 'Nombre'),
@@ -263,6 +334,18 @@ class _ProductFormState extends State<_ProductForm> {
                 decoration: const InputDecoration(
                     labelText: 'Código (máx 4, obligatorio)'),
                 maxLength: 4,
+                onChanged: (v) {
+                  final upper = v.toUpperCase();
+                  if (upper != v) {
+                    final pos = _codigo.selection.base.offset;
+                    _codigo.value = TextEditingValue(
+                      text: upper,
+                      selection: TextSelection.collapsed(
+                        offset: pos < 0 ? upper.length : pos,
+                      ),
+                    );
+                  }
+                },
                 validator: (v) {
                   final t = (v ?? '').trim();
                   if (t.isEmpty) return 'Requerido';
@@ -275,9 +358,13 @@ class _ProductFormState extends State<_ProductForm> {
                 controller: _precio,
                 decoration: const InputDecoration(labelText: 'Precio de venta'),
                 keyboardType: TextInputType.number,
-                validator: (v) => (int.tryParse(v ?? '') == null)
-                    ? 'Ingrese un número'
-                    : null,
+                inputFormatters: [CurrencyInputFormatter()],
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Ingrese un número';
+                  final val = parseCurrencyToDouble(v);
+                  if (val.isNaN) return 'Ingrese un número';
+                  return null;
+                },
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -285,9 +372,10 @@ class _ProductFormState extends State<_ProductForm> {
                 decoration: const InputDecoration(
                     labelText: 'Stock actual (use 999 para ilimitado)'),
                 keyboardType: TextInputType.number,
-                validator: (v) => (int.tryParse(v ?? '') == null)
-                    ? 'Ingrese un número'
-                    : null,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Ingrese un número';
+                  return int.tryParse(v) == null ? 'Ingrese un número' : null;
+                },
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<int>(
@@ -304,7 +392,7 @@ class _ProductFormState extends State<_ProductForm> {
               SwitchListTile(
                 value: _visible,
                 onChanged: (v) => setState(() => _visible = v),
-                title: const Text('Visible en POS'),
+                title: const Text('Visible'),
               ),
               const SizedBox(height: 16),
               ElevatedButton(

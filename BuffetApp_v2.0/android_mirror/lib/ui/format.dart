@@ -21,11 +21,9 @@ class CurrencyInputFormatter extends TextInputFormatter {
   TextEditingValue formatEditUpdate(
       TextEditingValue oldValue, TextEditingValue newValue) {
     final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    // Permitir vaciar el campo: si no quedan dígitos, devolver texto vacío
     if (digits.isEmpty) {
-      final empty = numberFormat.format(0);
-      return TextEditingValue(
-          text: empty,
-          selection: TextSelection.collapsed(offset: empty.length));
+      return const TextEditingValue(text: '', selection: TextSelection.collapsed(offset: 0));
     }
     final value = double.parse(digits) / 100.0;
     final newText = numberFormat.format(value);

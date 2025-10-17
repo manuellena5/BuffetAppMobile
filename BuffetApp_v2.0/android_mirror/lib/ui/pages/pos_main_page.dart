@@ -14,7 +14,9 @@ import '../../services/caja_service.dart';
 import 'printer_test_page.dart';
 import 'home_page.dart';
 import 'settings_page.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import '../../app_version.dart';
+import 'help_page.dart';
+import 'dart:io';
 
 class PosMainPage extends StatefulWidget {
   const PosMainPage({super.key});
@@ -38,8 +40,8 @@ class _PosMainPageState extends State<PosMainPage> {
 
   Future<void> _load() async {
     final db = await AppDatabase.instance();
-    final prods = await db.rawQuery(
-        'SELECT id, nombre, precio_venta, stock_actual FROM products WHERE visible=1 ORDER BY id');
+  final prods = await db.rawQuery(
+    'SELECT id, nombre, precio_venta, stock_actual, imagen FROM products WHERE visible=1 ORDER BY id');
     // cargar preferencia de layout
     try {
       final sp = await SharedPreferences.getInstance();
@@ -60,11 +62,8 @@ class _PosMainPageState extends State<PosMainPage> {
     } catch (_) {
       // ignorar errores de caja en POS; mantener UI funcional
     }
-    // obtener versión app
-    try {
-      final info = await PackageInfo.fromPlatform();
-      _appVersion = '${info.version}+${info.buildNumber}';
-    } catch (_) {}
+    // versión app fija desde constantes
+    _appVersion = '${AppBuildInfo.version}+${AppBuildInfo.buildNumber}';
     setState(() {
       _productos = prods.map((e) => Map<String, dynamic>.from(e)).toList();
       _cajaTotal = cajaTotal;
@@ -250,6 +249,16 @@ class _PosMainPageState extends State<PosMainPage> {
                     builder: (_) => const PrinterTestPage()));
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Ayuda'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                await nav.push(
+                    MaterialPageRoute(builder: (_) => const HelpPage()));
+              },
+            ),
             const SizedBox(height: 8),
             if (_appVersion != null)
               Padding(
@@ -345,6 +354,7 @@ class _PosMainPageState extends State<PosMainPage> {
         final p = _productos[i];
         return ListTile(
           onTap: () => _onTapProduct(p),
+          leading: _buildLeadingImage(p),
           title: Text(p['nombre'] as String,
               maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Row(children: [
@@ -363,31 +373,99 @@ class _PosMainPageState extends State<PosMainPage> {
 
   Widget _productButton(Map<String, dynamic> p, {bool isGrid = false}) {
     return ElevatedButton(
+      onPressed: () => _onTapProduct(p),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.grey.shade200,
         foregroundColor: Colors.black87,
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
-      onPressed: () => _onTapProduct(p),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(p['nombre'] as String,
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: _buildTileImage(p),
+      ),
+    );
+  }
+
+  Widget _buildLeadingImage(Map<String, dynamic> p) {
+    final img = p['imagen'] as String?;
+    if (img == null || img.isEmpty) {
+      return const CircleAvatar(
+        backgroundColor: Colors.grey,
+        child: Icon(Icons.image, color: Colors.white),
+      );
+    }
+    return CircleAvatar(
+      backgroundColor: Colors.grey.shade300,
+      backgroundImage: FileImage(File(img)),
+    );
+  }
+
+  Widget _buildTileImage(Map<String, dynamic> p) {
+    final img = p['imagen'] as String?;
+    final name = (p['nombre'] as String?) ?? '';
+    final price = p['precio_venta'] as num?;
+    final stock = (p['stock_actual'] as int?) ?? 0;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (img != null && img.isNotEmpty)
+          Image.file(File(img), fit: BoxFit.cover)
+        else
+          Container(color: Colors.grey.shade300),
+        // chip de stock (arriba-izquierda), oculto si 999 (ilimitado)
+        if (stock != 999)
+          Positioned(
+            top: 6,
+            left: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Stock: $stock',
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        // chip de precio (arriba-derecha)
+        if (price != null)
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade700.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                formatCurrency(price),
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        // overlay con nombre siempre visible
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            color: Colors.black54,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: Text(
+              name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Text(formatCurrency(p['precio_venta'] as num),
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          if (((p['stock_actual'] as int?) ?? 0) != 999)
-            Text('[${p['stock_actual']}]',
-                style: TextStyle(color: Colors.grey.shade700)),
-        ],
-      ),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

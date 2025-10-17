@@ -129,17 +129,19 @@ class CajaService {
     ''', [cajaId]);
     final ticketsCont = await db.rawQuery('''
       SELECT 
-        SUM(CASE WHEN t.status = 'Anulado' THEN 1 ELSE 0 END) as anulados,
-        SUM(CASE WHEN t.status <> 'Anulado' THEN 1 ELSE 0 END) as emitidos
+        COALESCE(SUM(CASE WHEN t.status = 'Anulado' THEN 1 ELSE 0 END),0) as anulados,
+        COALESCE(SUM(CASE WHEN t.status <> 'Anulado' THEN 1 ELSE 0 END),0) as emitidos
       FROM tickets t
       JOIN ventas v ON v.id = t.venta_id
       WHERE v.caja_id = ?
     ''', [cajaId]);
     final ventasPorProducto = await db.rawQuery('''
-      SELECT p.nombre, COUNT(t.id) as cantidad, COALESCE(SUM(t.total_ticket),0) as total
+      SELECT COALESCE(p.nombre,'(Sin nombre)') AS nombre,
+             COUNT(t.id) as cantidad,
+             COALESCE(SUM(t.total_ticket),0) as total
       FROM tickets t
       JOIN ventas v ON v.id = t.venta_id
-      JOIN products p ON p.id = t.producto_id
+      LEFT JOIN products p ON p.id = t.producto_id
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
       GROUP BY p.id
       ORDER BY cantidad DESC

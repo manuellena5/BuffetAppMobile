@@ -74,33 +74,26 @@ class _SettingsPageState extends State<SettingsPage> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                RadioListTile<AppThemeMode>(
-                  title: const Text('Usar ajustes del dispositivo'),
-                  value: AppThemeMode.system,
-                  groupValue: temp,
-                  onChanged: (v) {
-                    setLocal(() => temp = v ?? AppThemeMode.system);
-                    Navigator.pop(ctx, temp);
+                SegmentedButton<AppThemeMode>(
+                  segments: const [
+                    ButtonSegment(
+                        value: AppThemeMode.system, icon: Icon(Icons.phone)),
+                    ButtonSegment(
+                        value: AppThemeMode.light, icon: Icon(Icons.light_mode)),
+                    ButtonSegment(
+                        value: AppThemeMode.dark, icon: Icon(Icons.dark_mode)),
+                  ],
+                  selected: {temp},
+                  onSelectionChanged: (v) {
+                    final sel = v.first;
+                    setLocal(() => temp = sel);
                   },
                 ),
-                RadioListTile<AppThemeMode>(
-                  title: const Text('Desactivado'),
-                  value: AppThemeMode.light,
-                  groupValue: temp,
-                  onChanged: (v) {
-                    setLocal(() => temp = v ?? AppThemeMode.light);
-                    Navigator.pop(ctx, temp);
-                  },
-                ),
-                RadioListTile<AppThemeMode>(
-                  title: const Text('Activado'),
-                  value: AppThemeMode.dark,
-                  groupValue: temp,
-                  onChanged: (v) {
-                    setLocal(() => temp = v ?? AppThemeMode.dark);
-                    Navigator.pop(ctx, temp);
-                  },
-                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, temp),
+                  child: const Text('Aplicar'),
+                )
               ],
             ),
           );

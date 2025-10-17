@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 import '../data/dao/db.dart';
 import 'caja_service.dart';
+import '../app_version.dart';
 
 class ExportService {
   final _df = DateFormat("yyyy-MM-dd'T'HH:mm:ss");
@@ -64,7 +65,7 @@ class ExportService {
     final nowIso = _df.format(DateTime.now());
     final metadata = {
       'app': 'BuffetMirror',
-      'app_version': '1.0.0',
+      'app_version': '${AppBuildInfo.version}+${AppBuildInfo.buildNumber}',
       'device_id':
           'unknown', // TODO: persistir con uuid en storage y leerlo aquí
       'device_alias': 'device', // TODO: permitir alias editable y persistido

@@ -89,20 +89,22 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
             ),
             const SizedBox(height: 12),
             FutureBuilder(
-              future: _loadProducto(t['producto_id'] as int),
+              future: _loadItemNombre(
+                  productoId: t['producto_id'] as int?,
+                  categoriaId: t['categoria_id'] as int?),
               builder: (ctx, snap) {
                 if (!snap.hasData) {
                   return const Expanded(
                       child: Center(child: CircularProgressIndicator()));
                 }
-                final prod = snap.data as Map<String, dynamic>;
+                final itemNombre = snap.data as String;
                 return Expanded(
                   child: ListView.separated(
                     itemCount: 1,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (ctx, i) {
                       return ListTile(
-                        title: Text(prod['nombre'] as String),
+                        title: Text(itemNombre),
                         subtitle: Text(
                             '1 x ${formatCurrency(t['total_ticket'] as num)}${isAnulado ? ' (anulado)' : ''}'),
                         trailing: Text(formatCurrency(t['total_ticket'] as num),
@@ -179,11 +181,13 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                       final db = await AppDatabase.instance();
                       await db.update('tickets', {'status': 'Anulado'},
                           where: 'id=?', whereArgs: [t['id']]);
-                      final pid = t['producto_id'] as int;
-                      // Sumar stock en forma atómica solo si no es ilimitado (999)
-                      await db.rawUpdate(
-                          'UPDATE products SET stock_actual = CASE WHEN stock_actual = 999 THEN 999 ELSE stock_actual + 1 END WHERE id = ?',
-                          [pid]);
+                      final pid = t['producto_id'] as int?;
+                      if (pid != null) {
+                        // Sumar stock en forma atómica solo si no es ilimitado (999)
+                        await db.rawUpdate(
+                            'UPDATE products SET stock_actual = CASE WHEN stock_actual = 999 THEN 999 ELSE stock_actual + 1 END WHERE id = ?',
+                            [pid]);
+                      }
                       if (context.mounted) {
                         Navigator.pop(context, true);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -212,10 +216,18 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
     );
   }
 
-  Future<Map<String, dynamic>> _loadProducto(int id) async {
+  Future<String> _loadItemNombre({int? productoId, int? categoriaId}) async {
     final db = await AppDatabase.instance();
-    final r = await db.query('products',
-        columns: ['nombre'], where: 'id=?', whereArgs: [id]);
-    return r.first;
+    if (productoId != null) {
+      final r = await db.query('products',
+          columns: ['nombre'], where: 'id=?', whereArgs: [productoId]);
+      if (r.isNotEmpty) return r.first['nombre'] as String;
+    }
+    if (categoriaId != null) {
+      final r = await db.query('Categoria_Producto',
+          columns: ['descripcion'], where: 'id=?', whereArgs: [categoriaId]);
+      if (r.isNotEmpty) return r.first['descripcion'] as String;
+    }
+    return 'Producto';
   }
 }

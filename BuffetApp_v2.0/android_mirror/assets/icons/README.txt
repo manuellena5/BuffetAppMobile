@@ -1,0 +1,1 @@
+This folder contains the prepared foreground icon with padding to ensure white borders around the image when used as an Android adaptive icon.

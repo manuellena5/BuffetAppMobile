@@ -41,6 +41,25 @@ class AppDatabase {
           "CREATE TABLE IF NOT EXISTS caja_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, caja_id INTEGER NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','RETIRO')), monto REAL NOT NULL CHECK (monto > 0), observacion TEXT, creado_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (caja_id) REFERENCES caja_diaria(id))");
       await db.execute(
           "CREATE INDEX IF NOT EXISTS idx_mov_caja_id ON caja_movimiento(caja_id)");
+
+      // Semillas iniciales (idempotentes)
+      await db.insert('Categoria_Producto', {'id': 1, 'descripcion': 'Comida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert('Categoria_Producto', {'id': 2, 'descripcion': 'Bebida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert('Categoria_Producto', {'id': 3, 'descripcion': 'Otros'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+      // Productos precargados si no existen por nombre
+      await db.rawInsert(
+          "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+          "SELECT NULL, 'Donacion', 0, 999, 3, 3, 1\n"
+          "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Donacion'))");
+      await db.rawInsert(
+          "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+          "SELECT NULL, 'Hielo', 1000, 999, 3, 2, 1\n"
+          "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Hielo'))");
+      await db.rawInsert(
+          "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+          "SELECT NULL, 'Papas fritas', 2000, 999, 3, 1, 1\n"
+          "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Papas fritas'))");
     }, onOpen: (db) async {
       // Asegurar llaves foráneas y tablas críticas si la DB ya existía sin ellas
       await db.execute("PRAGMA foreign_keys=ON");
@@ -52,6 +71,30 @@ class AppDatabase {
           "CREATE INDEX IF NOT EXISTS idx_tickets_categoria_id ON tickets(categoria_id)");
       await db.execute(
           "CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)");
+            // Migración ligera: agregar columna 'imagen' a products si no existe
+            final cols = await db.rawQuery("PRAGMA table_info(products)");
+            final hasImagen = cols.any((c) => (c['name'] as String?) == 'imagen');
+            if (!hasImagen) {
+                await db.execute("ALTER TABLE products ADD COLUMN imagen TEXT");
+            }
+
+                    // Semillas también en onOpen (idempotentes), por si la DB ya existía
+                    await db.insert('Categoria_Producto', {'id': 1, 'descripcion': 'Comida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+                    await db.insert('Categoria_Producto', {'id': 2, 'descripcion': 'Bebida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+                    await db.insert('Categoria_Producto', {'id': 3, 'descripcion': 'Otros'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+                    await db.rawInsert(
+                            "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+                            "SELECT NULL, 'Donacion', 0, 999, 3, 3, 1\n"
+                            "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Donacion'))");
+                    await db.rawInsert(
+                            "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+                            "SELECT NULL, 'Hielo', 1000, 999, 3, 2, 1\n"
+                            "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Hielo'))");
+                    await db.rawInsert(
+                            "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+                            "SELECT NULL, 'Papas fritas', 2000, 999, 3, 1, 1\n"
+                            "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Papas fritas'))");
     });
     return _db!;
   }
