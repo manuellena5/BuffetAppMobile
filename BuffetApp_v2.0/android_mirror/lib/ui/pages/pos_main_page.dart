@@ -358,7 +358,7 @@ class _PosMainPageState extends State<PosMainPage> {
           title: Text(p['nombre'] as String,
               maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Row(children: [
-            Text(formatCurrency(p['precio_venta'] as num),
+      Text(formatCurrencyNoDecimals(p['precio_venta'] as num),
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 12),
             if (((p['stock_actual'] as int?) ?? 0) != 999)
@@ -442,7 +442,7 @@ class _PosMainPageState extends State<PosMainPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                formatCurrency(price),
+                formatCurrencyNoDecimals(price),
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ),

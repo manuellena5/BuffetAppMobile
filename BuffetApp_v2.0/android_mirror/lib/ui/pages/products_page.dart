@@ -40,6 +40,7 @@ class _ProductsPageState extends State<ProductsPage> {
     final db = await AppDatabase.instance();
     final r = await db.rawQuery('''
       SELECT p.id, p.codigo_producto, p.nombre, p.precio_venta, p.stock_actual, p.visible, p.categoria_id,
+             p.imagen,
              COALESCE(c.descripcion,'') as categoria
       FROM products p
       LEFT JOIN Categoria_Producto c ON c.id = p.categoria_id
@@ -83,9 +84,10 @@ class _ProductsPageState extends State<ProductsPage> {
             final p = _items[i];
             final visible = ((p['visible'] as int?) ?? 1) == 1;
             return ListTile(
+              leading: _buildLeadingImage(p['imagen'] as String?),
               title: Text(p['nombre'] as String),
               subtitle: Text(
-                  '${p['categoria'] ?? ''} • ${formatCurrency(p['precio_venta'] as num)} • Stock: ${p['stock_actual']}'),
+                  '${p['categoria'] ?? ''} • ${formatCurrencyNoDecimals(p['precio_venta'] as num)} • Stock: ${p['stock_actual']}'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 IconButton(
                     icon: const Icon(Icons.edit),
@@ -109,6 +111,19 @@ class _ProductsPageState extends State<ProductsPage> {
       ),
     );
   }
+}
+
+Widget _buildLeadingImage(String? imgPath) {
+  if (imgPath == null || imgPath.isEmpty) {
+    return const CircleAvatar(
+        backgroundColor: Colors.grey, child: Icon(Icons.image, color: Colors.white));
+  }
+  final file = File(imgPath);
+  if (!file.existsSync()) {
+    return const CircleAvatar(
+        backgroundColor: Colors.grey, child: Icon(Icons.image, color: Colors.white));
+  }
+  return CircleAvatar(backgroundImage: FileImage(file));
 }
 
 class _ProductForm extends StatefulWidget {
@@ -135,7 +150,8 @@ class _ProductFormState extends State<_ProductForm> {
     if (d != null) {
       _nombre.text = (d['nombre'] as String?) ?? '';
       _codigo.text = (d['codigo_producto'] as String?) ?? '';
-      _precio.text = '${d['precio_venta'] ?? ''}';
+      final pv = d['precio_venta'] as num?;
+      _precio.text = pv == null ? '' : formatCurrency(pv);
       _stock.text = '${d['stock_actual'] ?? '0'}';
       _catId = d['categoria_id'] as int? ?? 3;
       _visible = ((d['visible'] as int?) ?? 1) == 1;

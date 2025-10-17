@@ -50,15 +50,15 @@ class AppDatabase {
       // Productos precargados si no existen por nombre
       await db.rawInsert(
           "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
-          "SELECT NULL, 'Donacion', 0, 999, 3, 3, 1\n"
+          "SELECT 'DONA', 'Donacion', 0, 999, 3, 3, 1\n"
           "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Donacion'))");
       await db.rawInsert(
           "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
-          "SELECT NULL, 'Hielo', 1000, 999, 3, 2, 1\n"
+          "SELECT 'HIEL', 'Hielo', 1000, 999, 3, 2, 1\n"
           "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Hielo'))");
       await db.rawInsert(
           "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
-          "SELECT NULL, 'Papas fritas', 2000, 999, 3, 1, 1\n"
+          "SELECT 'PAPF', 'Papas fritas', 2000, 999, 3, 1, 1\n"
           "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Papas fritas'))");
     }, onOpen: (db) async {
       // Asegurar llaves foráneas y tablas críticas si la DB ya existía sin ellas
@@ -83,18 +83,26 @@ class AppDatabase {
                     await db.insert('Categoria_Producto', {'id': 2, 'descripcion': 'Bebida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
                     await db.insert('Categoria_Producto', {'id': 3, 'descripcion': 'Otros'}, conflictAlgorithm: ConflictAlgorithm.ignore);
 
-                    await db.rawInsert(
-                            "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
-                            "SELECT NULL, 'Donacion', 0, 999, 3, 3, 1\n"
-                            "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Donacion'))");
-                    await db.rawInsert(
-                            "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
-                            "SELECT NULL, 'Hielo', 1000, 999, 3, 2, 1\n"
-                            "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Hielo'))");
-                    await db.rawInsert(
-                            "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
-                            "SELECT NULL, 'Papas fritas', 2000, 999, 3, 1, 1\n"
-                            "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Papas fritas'))");
+            await db.rawInsert(
+                "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+                "SELECT 'DONA', 'Donacion', 0, 999, 3, 3, 1\n"
+                "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Donacion'))");
+            await db.rawInsert(
+                "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+                "SELECT 'HIEL', 'Hielo', 1000, 999, 3, 2, 1\n"
+                "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Hielo'))");
+            await db.rawInsert(
+                "INSERT INTO products (codigo_producto, nombre, precio_venta, stock_actual, stock_minimo, categoria_id, visible)\n"
+                "SELECT 'PAPF', 'Papas fritas', 2000, 999, 3, 1, 1\n"
+                "WHERE NOT EXISTS (SELECT 1 FROM products WHERE UPPER(nombre)=UPPER('Papas fritas'))");
+
+            // Backfill de códigos si existen sin código
+            await db.rawUpdate(
+            "UPDATE products SET codigo_producto='DONA' WHERE UPPER(nombre)=UPPER('Donacion') AND (codigo_producto IS NULL OR TRIM(codigo_producto)='')");
+            await db.rawUpdate(
+            "UPDATE products SET codigo_producto='HIEL' WHERE UPPER(nombre)=UPPER('Hielo') AND (codigo_producto IS NULL OR TRIM(codigo_producto)='')");
+            await db.rawUpdate(
+            "UPDATE products SET codigo_producto='PAPF' WHERE UPPER(nombre)=UPPER('Papas fritas') AND (codigo_producto IS NULL OR TRIM(codigo_producto)='')");
     });
     return _db!;
   }

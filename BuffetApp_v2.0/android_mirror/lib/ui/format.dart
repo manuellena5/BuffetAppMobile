@@ -4,6 +4,10 @@ import 'package:intl/intl.dart';
 final _formatter = NumberFormat.currency(locale: 'es_AR', symbol: '\$');
 String formatCurrency(num value) => _formatter.format(value);
 
+final _formatter0 =
+  NumberFormat.currency(locale: 'es_AR', symbol: '\$', decimalDigits: 0);
+String formatCurrencyNoDecimals(num value) => _formatter0.format(value);
+
 double parseCurrencyToDouble(String text) {
   // Mantener sólo dígitos para un parser estable (2 decimales)
   final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
