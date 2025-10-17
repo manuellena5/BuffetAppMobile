@@ -42,7 +42,7 @@ class _PosMainPageState extends State<PosMainPage> {
   Future<void> _load() async {
     final db = await AppDatabase.instance();
   final prods = await db.rawQuery(
-    'SELECT id, nombre, precio_venta, stock_actual, imagen FROM products WHERE visible=1 ORDER BY id');
+    'SELECT id, nombre, precio_venta, stock_actual, imagen FROM products WHERE visible=1 ORDER BY orden_visual ASC, id ASC');
     // cargar preferencia de layout
     try {
       final sp = await SharedPreferences.getInstance();
@@ -183,24 +183,32 @@ class _PosMainPageState extends State<PosMainPage> {
           ),
         ]),
         actions: [
-          TextButton.icon(
-            onPressed: cart.isEmpty
-                ? null
-                : () async {
-                    final nav = Navigator.of(context);
-                    final messenger = ScaffoldMessenger.of(context);
-                    final paid = await nav.push(
-                        MaterialPageRoute(
-                            builder: (_) => const PaymentMethodPage()));
-                    if (paid == true && mounted) {
-                      messenger.showSnackBar(
-                          const SnackBar(content: Text('Venta registrada')));
-                      await _load();
-                    }
-                  },
-            icon: const Icon(Icons.attach_money, color: Colors.white),
-            label: Text(formatCurrency(cart.total),
-                style: const TextStyle(color: Colors.white)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: const StadiumBorder(),
+              ),
+              onPressed: cart.isEmpty
+                  ? null
+                  : () async {
+                      final nav = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+                      final paid = await nav.push(
+                          MaterialPageRoute(
+                              builder: (_) => const PaymentMethodPage()));
+                      if (paid == true && mounted) {
+                        messenger.showSnackBar(
+                            const SnackBar(content: Text('Venta registrada')));
+                        await _load();
+                      }
+                    },
+              icon: const Icon(Icons.attach_money),
+              label: Text(formatCurrency(cart.total)),
+            ),
           ),
         ],
       ),

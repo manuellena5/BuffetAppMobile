@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'product_reorder_page.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
@@ -66,7 +67,27 @@ class _ProductsPageState extends State<ProductsPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Productos')),
+      appBar: AppBar(
+        title: const Text('Productos'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'reorder') {
+                final changed = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProductReorderPage()),
+                );
+                if (changed == true && mounted) {
+                  await _load();
+                }
+              }
+            },
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'reorder', child: Text('Ordenar productos')),
+            ],
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final ok = await Navigator.push(
@@ -268,8 +289,10 @@ class _ProductFormState extends State<_ProductForm> {
       'imagen': _imagenPath,
     };
     if (widget.data == null) {
-      // create
-      await db.insert('products', payload);
+      // create: asignar orden_visual = max(orden_visual)+1
+      final r = await db.rawQuery('SELECT COALESCE(MAX(orden_visual),0) as maxo FROM products');
+      final next = ((r.first['maxo'] as num?)?.toInt() ?? 0) + 1;
+      await db.insert('products', {...payload, 'orden_visual': next});
     } else {
       // update
       await db.update('products', payload,

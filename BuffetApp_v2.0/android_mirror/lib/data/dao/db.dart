@@ -33,6 +33,7 @@ class AppDatabase {
             'precio_venta INTEGER NOT NULL, '
             'stock_actual INTEGER DEFAULT 0, '
             'stock_minimo INTEGER DEFAULT 3, '
+      'orden_visual INTEGER, '
             'categoria_id INTEGER, '
             'visible INTEGER DEFAULT 1, '
             'color TEXT, '
@@ -144,6 +145,7 @@ class AppDatabase {
             'precio_venta': 0,
             'stock_actual': 999,
             'stock_minimo': 3,
+            'orden_visual': 13,
             'categoria_id': 3,
             'visible': 1,
           },
@@ -157,6 +159,7 @@ class AppDatabase {
             'precio_venta': 1000,
             'stock_actual': 999,
             'stock_minimo': 3,
+            'orden_visual': 10,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -170,6 +173,7 @@ class AppDatabase {
             'precio_venta': 2000,
             'stock_actual': 999,
             'stock_minimo': 3,
+            'orden_visual': 12,
             'categoria_id': 1,
             'visible': 1,
           },
@@ -186,6 +190,7 @@ class AppDatabase {
             'precio_venta': 3000,
             'stock_actual': 50,
             'stock_minimo': 3,
+            'orden_visual': 1,
             'categoria_id': 1,
             'visible': 1,
           },
@@ -195,10 +200,11 @@ class AppDatabase {
           'products',
           {
             'codigo_producto': 'CHOR',
-            'nombre': 'Choripán',
+            'nombre': 'Choripan',
             'precio_venta': 3000,
             'stock_actual': 50,
             'stock_minimo': 3,
+            'orden_visual': 2,
             'categoria_id': 1,
             'visible': 1,
           },
@@ -209,10 +215,11 @@ class AppDatabase {
           'products',
           {
             'codigo_producto': 'VINO',
-            'nombre': 'Vino blanco',
+            'nombre': 'Vino',
             'precio_venta': 2000,
             'stock_actual': 999,
             'stock_minimo': 3,
+            'orden_visual': 9,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -226,6 +233,7 @@ class AppDatabase {
             'precio_venta': 2500,
             'stock_actual': 50,
             'stock_minimo': 3,
+            'orden_visual': 11,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -235,10 +243,11 @@ class AppDatabase {
           'products',
           {
             'codigo_producto': 'AGMT',
-            'nombre': 'Agua mate',
+            'nombre': 'Agua Mate',
             'precio_venta': 1000,
             'stock_actual': 50,
             'stock_minimo': 3,
+            'orden_visual': 7,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -252,6 +261,7 @@ class AppDatabase {
             'precio_venta': 5000,
             'stock_actual': 999,
             'stock_minimo': 3,
+            'orden_visual': 6,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -265,6 +275,7 @@ class AppDatabase {
             'precio_venta': 2000,
             'stock_actual': 999,
             'stock_minimo': 3,
+            'orden_visual': 5,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -278,6 +289,7 @@ class AppDatabase {
             'precio_venta': 1000,
             'stock_actual': 50,
             'stock_minimo': 3,
+            'orden_visual': 8,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -291,6 +303,7 @@ class AppDatabase {
             'precio_venta': 2000,
             'stock_actual': 999,
             'stock_minimo': 5,
+            'orden_visual': 3,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -304,6 +317,7 @@ class AppDatabase {
             'precio_venta': 1500,
             'stock_actual': 999,
             'stock_minimo': 5,
+            'orden_visual': 4,
             'categoria_id': 2,
             'visible': 1,
           },
@@ -321,6 +335,36 @@ class AppDatabase {
         if (!hasDescEvento) {
           await db.execute('ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT');
         }
+
+        // Migración: agregar columna orden_visual si falta y setear orden inicial
+        final prodInfo = await db.rawQuery("PRAGMA table_info(products)");
+        final hasOrden = prodInfo.any((c) => (c['name'] as String?) == 'orden_visual');
+        if (!hasOrden) {
+          await db.execute('ALTER TABLE products ADD COLUMN orden_visual INTEGER');
+        }
+        // Renombrar Vino blanco -> Vino si existe
+        await db.update('products', {'nombre': 'Vino'}, where: 'codigo_producto = ?', whereArgs: ['VINO']);
+        // Seteo de orden inicial para códigos conocidos
+        const orderMap = {
+          'HAMB': 1,
+          'CHOR': 2,
+          'JARR': 3,
+          'VASO': 4,
+          'CERV': 5,
+          'FERN': 6,
+          'AGMT': 7,
+          'AGUA': 8,
+          'VINO': 9,
+          'HIEL': 10,
+          'GATO': 11,
+          'PAPF': 12,
+          'DONA': 13,
+        };
+        for (final e in orderMap.entries) {
+          await db.update('products', {'orden_visual': e.value}, where: 'codigo_producto = ?', whereArgs: [e.key]);
+        }
+        // Para los que queden nulos, mandarlos al final: 1000 + id
+        await db.rawUpdate('UPDATE products SET orden_visual = 1000 + id WHERE orden_visual IS NULL');
 
         // Asegurar catálogos también en onOpen para instalaciones previas
         await _ensureCatalogos(db);
