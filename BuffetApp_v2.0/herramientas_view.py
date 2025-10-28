@@ -14,6 +14,14 @@ from app_config import (
 )
 from sync_utils import import_from_db
 from utils_paths import DB_PATH, appdata_dir
+# Importación opcional de sincronización en la nube
+try:
+    from cloud_sync import is_configured as cloud_is_configured, sync_pendientes as cloud_sync_pendientes
+except Exception:
+    def cloud_is_configured():
+        return False
+    def cloud_sync_pendientes(limit: int = 20):
+        raise RuntimeError("Sincronización en la nube no disponible")
 
 
 # HerramientasView centraliza la gestión de backups y el test de impresora
@@ -29,13 +37,13 @@ class HerramientasView:
         # Centrar y hacer modal
         try:
             backup_win.update_idletasks()
-            w, h = 760, 560
+            w, h = 980, 620
             sw, sh = backup_win.winfo_screenwidth(), backup_win.winfo_screenheight()
             x = max(0, (sw // 2) - (w // 2))
             y = max(0, (sh // 2) - (h // 2))
             backup_win.geometry(f"{w}x{h}+{x}+{y}")
         except Exception:
-            backup_win.geometry("760x560")
+            backup_win.geometry("980x620")
         backup_win.transient(root)
         backup_win.grab_set()
 
@@ -109,13 +117,31 @@ class HerramientasView:
             apply_button_style(btn_restore)
         btn_restore.pack(side=tk.LEFT, padx=6)
 
+        # Botón de sincronización con la nube (Supabase)
+        def _sync_cloud_now():
+            # Abre la nueva ventana de sincronización (listado + acciones)
+            try:
+                if not cloud_is_configured():
+                    messagebox.showwarning(
+                        "Sincronización",
+                        "Supabase no está configurado. Configurá SUPABASE_URL y SUPABASE_ANON_KEY en el entorno o ajustes."
+                    )
+                    return
+                self.abrir_sync_window(backup_win)
+            except Exception as e:
+                messagebox.showerror("Sincronización", f"Error al abrir la ventana de sincronización: {e}")
+
+        btn_sync = themed_button(btns_sync, text="Sincronizar datos con la nube", command=_sync_cloud_now)
+        apply_button_style(btn_sync)
+        btn_sync.pack(side=tk.LEFT, padx=6)
+
         # Lista local de backups (debajo de las acciones)
         tk.Label(backup_win, text="Backups locales (AppData/Local/BuffetApp/backup):").pack(pady=(6,0))
         list_frame = tk.Frame(backup_win)
         list_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=4)
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        listbox = tk.Listbox(list_frame, width=80, height=10, yscrollcommand=scrollbar.set)
+        listbox = tk.Listbox(list_frame, width=110, height=12, yscrollcommand=scrollbar.set)
         listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=listbox.yview)
         try:
@@ -126,6 +152,182 @@ class HerramientasView:
                     listbox.insert(0, fn)
         except Exception:
             pass
+
+    def abrir_sync_window(self, root):
+        """Ventana para listar últimas 20 cajas y sincronizar pendientes, validando estado en la nube."""
+        win = tk.Toplevel(root)
+        win.title("Sincronización con la nube")
+        try:
+            win.update_idletasks()
+            w, h = 1280, 680
+            sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+            x = max(0, (sw // 2) - (w // 2))
+            y = max(0, (sh // 2) - (h // 2))
+            win.geometry(f"{w}x{h}+{x}+{y}")
+        except Exception:
+            win.geometry("1280x680")
+        win.transient(root)
+        win.grab_set()
+        try:
+            win.minsize(1100, 560)
+        except Exception:
+            pass
+
+        # Tabla de cajas
+        cols = ("Código", "Evento", "Apertura", "Cierre", "Tickets", "Ventas", "Local", "Nube")
+        tree = ttk.Treeview(win, columns=cols, show="headings", height=18)
+        for c in cols:
+            tree.heading(c, text=c)
+        tree.column("Código", width=110, anchor="w")
+        tree.column("Evento", width=220, anchor="w")
+        tree.column("Apertura", width=180, anchor="w")
+        tree.column("Cierre", width=180, anchor="w")
+        tree.column("Tickets", width=80, anchor="e")
+        tree.column("Ventas", width=100, anchor="e")
+        tree.column("Local", width=70, anchor="center")
+        tree.column("Nube", width=70, anchor="center")
+
+        vsb = ttk.Scrollbar(win, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8,0), pady=8)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y, padx=(0,8), pady=8)
+
+        # Tag para filas sincronizadas en nube
+        tree.tag_configure("synced", background="#E7F6EC", foreground="#166534")  # verde suave
+
+        data_rows = []  # para reuso en sincronización
+
+        def _load_rows():
+            # Limpiar
+            for iid in tree.get_children():
+                tree.delete(iid)
+            data_rows.clear()
+            # Leer últimas 20 cajas locales
+            try:
+                with get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id, codigo_caja, descripcion_evento, fecha, hora_apertura, hora_cierre,
+                               COALESCE(total_tickets,0), COALESCE(total_ventas,0),
+                               COALESCE(nube_enviado,0), COALESCE(nube_uuid,'')
+                          FROM caja_diaria
+                         ORDER BY id DESC
+                         LIMIT 20
+                        """
+                    )
+                    rows = cur.fetchall() or []
+            except Exception as e:
+                messagebox.showerror("Sincronización", f"No se pudieron leer las cajas locales: {e}")
+                rows = []
+
+            # Consultar Supabase por los UUID disponibles
+            uuid_map = {}
+            uuids = []
+            for r in rows:
+                # Columna 9 = nube_uuid (según SELECT)
+                val = r[9]
+                s = str(val if val is not None else "").strip()
+                if s:
+                    uuids.append(s)
+            remote_uuids = set()
+            if uuids:
+                try:
+                    from cloud_sync import SUPABASE_REST, HEADERS  # usar mismas credenciales
+                    import requests
+                    # Particionar en grupos para URL IN
+                    bs = 100
+                    for i in range(0, len(uuids), bs):
+                        chunk = uuids[i:i+bs]
+                        values = ",".join([f'"{u}"' for u in chunk])
+                        url = f"{SUPABASE_REST}/cajas?select=uuid&uuid=in.({values})"
+                        r = requests.get(url, headers=HEADERS, timeout=20)
+                        if r.status_code < 300 and r.text:
+                            for row in r.json():
+                                u = (row.get("uuid") or "").strip()
+                                if u:
+                                    remote_uuids.add(u)
+                except Exception:
+                    # Si falla la consulta remota, dejamos Nube en base a local
+                    remote_uuids = set()
+
+            # Poblar tabla
+            for rid, cod, evento, fch, ha, hc, tickets, ventas, local_sync, nube_uuid in rows:
+                ap = f"{fch or ''} {ha or ''}".strip()
+                ci = f"{fch or ''} {hc or ''}".strip()
+                nube_ok = (str(nube_uuid).strip() in remote_uuids) if (str(nube_uuid).strip()) else False
+                vals = (cod or "", evento or "", ap, ci, int(tickets or 0), f"{float(ventas or 0):.2f}", "Sí" if local_sync else "No", "Sí" if nube_ok else "No")
+                tag = ("synced",) if nube_ok else ()
+                tree.insert("", tk.END, iid=str(rid), values=vals, tags=tag)
+                data_rows.append({
+                    "id": int(rid),
+                    "codigo": cod or "",
+                    "evento": evento or "",
+                    "local_sync": bool(local_sync),
+                    "nube_uuid": (nube_uuid or "").strip(),
+                    "nube_ok": bool(nube_ok),
+                })
+
+        _load_rows()
+
+        # Acciones
+        btns = tk.Frame(win)
+        btns.pack(fill=tk.X, padx=8, pady=(0,8))
+
+        def _sync_pending():
+            # Determinar pendientes (Nube == No)
+            pendientes = [d for d in data_rows if not d["nube_ok"]]
+            if not pendientes:
+                messagebox.showinfo("Sincronización", "No hay pendientes para sincronizar.")
+                return
+            # Confirmar lista de cajas a sincronizar
+            resumen = "\n".join([f"- Caja {d['id']} ({d['codigo']})" for d in pendientes])
+            if not messagebox.askyesno("Confirmar", f"Se sincronizarán {len(pendientes)} cajas:\n\n{resumen}\n\n¿Continuar?"):
+                return
+            # Modal de progreso
+            progress = tk.Toplevel(win)
+            progress.title("Sincronizando…")
+            progress.transient(win)
+            progress.grab_set()
+            lbl = tk.Label(progress, text="Sincronizando cajas…")
+            lbl.pack(padx=16, pady=(14, 6))
+            pbar = ttk.Progressbar(progress, mode="determinate", length=360, maximum=len(pendientes))
+            pbar.pack(padx=16, pady=(0, 14))
+            ok_cnt = 0; err_cnt = 0
+            errores = []
+            try:
+                from cloud_sync import sync_caja
+                for idx, d in enumerate(pendientes, start=1):
+                    try:
+                        lbl.configure(text=f"Sincronizando caja {d['id']} ({d['codigo']})…")
+                        progress.update_idletasks()
+                        r = sync_caja(d["id"])
+                        ok_cnt += 1
+                    except Exception as e:
+                        err_cnt += 1
+                        errores.append(f"Caja {d['id']}: {e}")
+                    finally:
+                        pbar['value'] = idx
+                        try:
+                            progress.update_idletasks()
+                        except Exception:
+                            pass
+            finally:
+                try:
+                    progress.destroy()
+                except Exception:
+                    pass
+            # Resultado
+            if err_cnt:
+                message = f"Sincronización finalizada. OK: {ok_cnt} | Errores: {err_cnt}\n\n" + "\n".join(errores[:10])
+                messagebox.showwarning("Sincronización", message)
+            else:
+                messagebox.showinfo("Sincronización", f"Sincronización completada. OK: {ok_cnt}")
+            # Refrescar tabla
+            _load_rows()
+
+        tk.Button(btns, text="Sincronizar pendientes", command=_sync_pending, bg="#166534", fg="white").pack(side=tk.LEFT, padx=4)
+        tk.Button(btns, text="Cerrar", command=win.destroy).pack(side=tk.LEFT, padx=4)
 
     def abrir_impresora_window(self, root):
         """Ventana de configuración de impresora: elegir y probar."""
@@ -193,15 +395,17 @@ class HerramientasView:
         tk.Label(frm_dev, text="Nombre del dispositivo:").grid(row=0, column=0, sticky="w", padx=6, pady=4)
         tk.Entry(frm_dev, state="readonly", width=42, readonlybackground="#f7f7f7",
                  textvariable=tk.StringVar(value=get_device_name())).grid(row=0, column=1, sticky="w", padx=6, pady=4)
-        tk.Label(frm_dev, text="ID (UUID):").grid(row=1, column=0, sticky="w", padx=6, pady=4)
-        tk.Entry(frm_dev, state="readonly", width=42, readonlybackground="#f7f7f7",
-                 textvariable=tk.StringVar(value=get_device_id())).grid(row=1, column=1, sticky="w", padx=6, pady=4)
+    # Oculto: ID (UUID) del dispositivo (se solicitó no mostrarlo en Punto de Venta)
+    # tk.Label(frm_dev, text="ID (UUID):").grid(row=1, column=0, sticky="w", padx=6, pady=4)
+    # tk.Entry(frm_dev, state="readonly", width=42, readonlybackground="#f7f7f7",
+    #          textvariable=tk.StringVar(value=get_device_id())).grid(row=1, column=1, sticky="w", padx=6, pady=4)
 
         # Listado de cajas (plantillas)
         frm_cajas = tk.LabelFrame(win, text="Cajas disponibles")
         frm_cajas.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         columns = ("Descripción", "Prefijo", "Predeterminada", "Estado")
         tree = ttk.Treeview(frm_cajas, columns=columns, show="headings", height=8)
+        # Encabezados y tamaños de columnas
         for c in columns:
             tree.heading(c, text=c)
             if c == "Descripción":
@@ -212,57 +416,13 @@ class HerramientasView:
                 tree.column(c, width=140, anchor="center")
             else:  # Estado
                 tree.column(c, width=100, anchor="center")
-        tree.pack(fill=tk.BOTH, expand=True)
 
-        # Cargar datos desde DB
-        try:
-            conn = get_connection(); cur = conn.cursor()
-            cur.execute("SELECT id, descripcion, prefijo, predeterminada, activo FROM pos_cajas ORDER BY id")
-            for rid, desc, pref, pred, activo in cur.fetchall():
-                tree.insert("", tk.END, iid=str(rid), values=(desc, pref, "Sí" if pred else "No", "Activa" if activo else "Inactiva"))
-            conn.close()
-        except Exception:
-            pass
-
-        # Acción: marcar predeterminada
-        btns = tk.Frame(win)
-        btns.pack(fill=tk.X, padx=8, pady=6)
-
-        def set_default():
-            sel = tree.selection()
-            if not sel:
-                messagebox.showwarning("Punto de Venta", "Seleccioná una caja para establecer como predeterminada.")
-                return
-            caja_id = int(sel[0])
-            vals_sel = list(tree.item(sel[0], 'values'))
-            # Si está inactiva, ofrecer reactivarla
-            if len(vals_sel) >= 4 and vals_sel[3] == "Inactiva":
-                if not messagebox.askyesno("Punto de Venta", "La caja seleccionada está inactiva. ¿Querés reactivarla y establecerla como predeterminada?"):
-                    return
-            try:
-                conn = get_connection(); cur = conn.cursor()
-                # Dejar solo una predeterminada
-                cur.execute("UPDATE pos_cajas SET predeterminada=CASE WHEN id=? THEN 1 ELSE 0 END", (caja_id,))
-                # Asegurar que esté activa
-                cur.execute("UPDATE pos_cajas SET activo=1 WHERE id=?", (caja_id,))
-                conn.commit(); conn.close()
-                # refrescar
-                for iid in tree.get_children():
-                    vals = list(tree.item(iid, 'values'))
-                    vals[2] = "Sí" if int(iid) == caja_id else "No"
-                    if int(iid) == caja_id:
-                        if len(vals) >= 4:
-                            vals[3] = "Activa"
-                    tree.item(iid, values=vals)
-                messagebox.showinfo("Punto de Venta", "Caja predeterminada actualizada.")
-            except Exception as e:
-                messagebox.showerror("Punto de Venta", f"No se pudo actualizar: {e}")
-
-        btn_def = themed_button(btns, text="Establecer como predeterminada", command=set_default)
-        apply_button_style(btn_def)
-        btn_def.pack(side=tk.LEFT, padx=4)
-
-        # Helpers
+        # Scrollbar vertical
+        vsb = ttk.Scrollbar(frm_cajas, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        # Cargar listado inicial
         def _refresh_tree():
             try:
                 for iid in tree.get_children():
@@ -274,6 +434,44 @@ class HerramientasView:
                 conn.close()
             except Exception:
                 pass
+        _refresh_tree()
+
+        # Acción: marcar predeterminada
+        btns = tk.Frame(win)
+        btns.pack(fill=tk.X, padx=8, pady=6)
+        def set_default():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("Punto de Venta", "Seleccioná una caja para establecer como predeterminada.")
+                return
+            caja_id = int(sel[0])
+            vals_sel = tree.item(sel[0], 'values')
+            # Si está inactiva, ofrecer reactivarla
+            if len(vals_sel) >= 4 and vals_sel[3] == "Inactiva":
+                if not messagebox.askyesno("Punto de Venta", "La caja seleccionada está inactiva. ¿Querés reactivarla y establecerla como predeterminada?"):
+                    return
+                reactivate = True
+            else:
+                reactivate = False
+            try:
+                conn = get_connection(); cur = conn.cursor()
+                # Dejar solo una predeterminada
+                cur.execute("UPDATE pos_cajas SET predeterminada=CASE WHEN id=? THEN 1 ELSE 0 END", (caja_id,))
+                if reactivate:
+                    cur.execute("UPDATE pos_cajas SET activo=1 WHERE id=?", (caja_id,))
+                conn.commit(); conn.close()
+                # Refrescar listado
+                _refresh_tree()
+                messagebox.showinfo("Punto de Venta", "Caja predeterminada actualizada.")
+            except Exception as e:
+                messagebox.showerror("Punto de Venta", f"No se pudo actualizar: {e}")
+
+        btn_def = themed_button(btns, text="Establecer como predeterminada", command=set_default)
+        apply_button_style(btn_def)
+        btn_def.pack(side=tk.LEFT, padx=4)
+
+        # Helpers
+        # Nota: _refresh_tree inicial ya definido arriba y reutilizado más abajo
 
         def _open_modal(title, initial=None):
             top = tk.Toplevel(win)
@@ -378,7 +576,10 @@ class HerramientasView:
 
         # Botonera ABM
         btn_add = themed_button(btns, text="Agregar", command=add_box)
-        apply_button_style(btn_add)
+        try:
+            apply_button_style(btn_add, bg=COLORS.get('success', '#166534'), fg='white')
+        except Exception:
+            apply_button_style(btn_add)
         btn_add.pack(side=tk.LEFT, padx=4)
         btn_edit = themed_button(btns, text="Editar", command=edit_box)
         apply_button_style(btn_edit)

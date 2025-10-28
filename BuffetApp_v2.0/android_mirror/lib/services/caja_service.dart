@@ -20,7 +20,7 @@ class CajaService {
   }
 
   Future<int> abrirCaja(
-      {required String usuario,
+    {required String usuario,
       required double fondoInicial,
       required String disciplina,
       required String descripcionEvento,
@@ -76,7 +76,10 @@ class CajaService {
       'codigo_caja': codigo,
       'disciplina': disciplina,
       'fecha': fecha,
-      'usuario_apertura': usuario,
+      // Guardar usuario clásico como 'admin' por defecto
+      'usuario_apertura': 'admin',
+      // Nuevo campo cajero_apertura
+      'cajero_apertura': usuario,
       'hora_apertura': hora,
       'apertura_dt': '$fecha $hora',
       'fondo_inicial': fondoInicial,
@@ -94,7 +97,7 @@ class CajaService {
       {required int cajaId,
       required double efectivoEnCaja,
       required double transferencias,
-      required String usuarioCierre,
+    required String usuarioCierre,
       String? observacion}) async {
     final db = await AppDatabase.instance();
     final now = DateTime.now();
@@ -121,6 +124,8 @@ class CajaService {
           'hora_cierre': hora,
       'cierre_dt':
         now.toIso8601String().substring(0, 19).replaceAll('T', ' '),
+          'usuario_cierre': 'admin',
+          'cajero_cierre': usuarioCierre,
           'obs_cierre': observacion,
           'diferencia': diferencia,
         },

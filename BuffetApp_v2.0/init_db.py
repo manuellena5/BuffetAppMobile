@@ -43,15 +43,55 @@ def init_db():
         categoria_id INTEGER,
         visible INTEGER DEFAULT 1,
         color TEXT,
+        orden_visual INTEGER,
         FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id)
     )
     ''')
     # Intentar agregar columnas opcionales si no existen
+    # Agrega columnas de texto si faltan (orden_visual se maneja aparte como INTEGER)
     for col in ("color", "codigo_producto"):
         try:
             c.execute(f"ALTER TABLE products ADD COLUMN {col} TEXT")
         except Exception:
             pass
+
+    # Migración: agregar columna contabiliza_stock (1=descuenta, 0=no descuenta)
+    try:
+        c.execute("ALTER TABLE products ADD COLUMN contabiliza_stock INTEGER NOT NULL DEFAULT 1")
+    except Exception:
+        pass
+    # Migración: asegurar columna orden_visual (INTEGER) y valores por defecto
+    try:
+        # Si la columna existe pero está vacía, inicializar basada en id
+        c.execute("PRAGMA table_info(products)")
+        cols = [r[1] for r in c.fetchall()]
+        if 'orden_visual' not in cols:
+            try:
+                c.execute("ALTER TABLE products ADD COLUMN orden_visual INTEGER")
+            except Exception:
+                pass
+        # Inicializar donde esté NULL usando id (orden natural)
+        try:
+            c.execute("UPDATE products SET orden_visual = id WHERE orden_visual IS NULL")
+        except Exception:
+            pass
+        # Normalizar tipo por si quedó almacenado como TEXT en alguna BD vieja
+        try:
+            c.execute("UPDATE products SET orden_visual = CAST(orden_visual AS INTEGER) WHERE orden_visual IS NOT NULL AND typeof(orden_visual)='text'")
+        except Exception:
+            pass
+        # Índice para ordenar rápido en ventas
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_products_orden_visual ON products(orden_visual)")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # Si existía la convención stock_actual=999 como stock infinito, migrar a contabiliza_stock=0
+    try:
+        c.execute("UPDATE products SET contabiliza_stock=0 WHERE stock_actual=999")
+    except Exception:
+        pass
 
     # Ventas (una venta puede tener varios tickets)
     c.execute('''
@@ -151,12 +191,15 @@ def init_db():
         disciplina TEXT,
         fecha TEXT NOT NULL,
         usuario_apertura TEXT,
+        cajero_apertura TEXT,
         hora_apertura TEXT NOT NULL,
         fondo_inicial REAL NOT NULL,
+        descripcion_evento TEXT,
         observaciones_apertura TEXT,
         estado TEXT NOT NULL CHECK (estado IN ('abierta','cerrada')),
         hora_cierre TEXT,
         usuario_cierre TEXT,
+        cajero_cierre TEXT,
         apertura_dt TEXT,
         cierre_dt TEXT,
         total_ventas REAL,
@@ -304,6 +347,45 @@ def init_db():
         except Exception:
             pass
 
+    # Migración: agregar columna descripcion_evento si no existe
+    try:
+        c.execute("ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT")
+    except Exception:
+        pass
+
+    # Migración: agregar columnas cajero_apertura y cajero_cierre si no existen
+    try:
+        c.execute("PRAGMA table_info(caja_diaria)")
+        cols = [r[1] for r in c.fetchall()]
+        if 'cajero_apertura' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN cajero_apertura TEXT")
+            except Exception:
+                pass
+        if 'cajero_cierre' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN cajero_cierre TEXT")
+            except Exception:
+                pass
+        # Sincronización con nube: columnas auxiliares
+        if 'nube_enviado' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN nube_enviado INTEGER DEFAULT 0")
+            except Exception:
+                pass
+        if 'nube_uuid' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN nube_uuid TEXT")
+            except Exception:
+                pass
+        if 'enviado_nube_ts' not in cols:
+            try:
+                c.execute("ALTER TABLE caja_diaria ADD COLUMN enviado_nube_ts TEXT")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
     # Usuarios del sistema
     c.execute('''
@@ -314,6 +396,24 @@ def init_db():
         rol TEXT NOT NULL
     )
     ''')
+    # Migración: columna ACTIVO para borrado lógico
+    try:
+        c.execute("PRAGMA table_info(usuarios)")
+        ucols = [r[1] for r in c.fetchall()]
+        if 'activo' not in ucols:
+            try:
+                c.execute("ALTER TABLE usuarios ADD COLUMN activo INTEGER NOT NULL DEFAULT 1")
+                # Inicializar todos como activos
+                c.execute("UPDATE usuarios SET activo=1 WHERE activo IS NULL")
+            except Exception:
+                pass
+        # Índice opcional por activo
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_activo ON usuarios(activo)")
+        except Exception:
+            pass
+    except Exception:
+        pass
 
     # Tabla de disciplinas
     c.execute('''
@@ -337,6 +437,32 @@ def init_db():
             disciplinas,
         )
    
+    # Overrides del día por disciplina para productos (precio/visibilidad/stock del día)
+    try:
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS pos_producto_dia (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TEXT NOT NULL,
+            disciplina TEXT NOT NULL,
+            producto_id INTEGER NOT NULL,
+            precio_venta_dia REAL,
+            visible INTEGER NOT NULL DEFAULT 1,
+            stock_dia INTEGER,
+            creado_ts TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY(producto_id) REFERENCES products(id)
+        )
+        ''')
+        # Índices útiles
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ppd_fecha_disciplina ON pos_producto_dia(fecha, disciplina)")
+        except Exception:
+            pass
+        try:
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ppd_prod_fecha_disciplina ON pos_producto_dia(producto_id, fecha, disciplina)")
+        except Exception:
+            pass
+    except Exception:
+        pass
 
     # Insertar productos si no hay nada
     c.execute("SELECT COUNT(*) FROM products")
@@ -372,11 +498,17 @@ def init_db():
         c.executemany("INSERT INTO products (codigo_producto, nombre, precio_compra, precio_venta, stock_actual, stock_minimo, categoria_id) VALUES (?, ?, ?, ?, ?, ?, ?)", productos)
         print("Productos y categorías cargados")
 
+        # Ajustar contabiliza_stock para los precargados con 999 (no contabiliza)
+        try:
+            c.execute("UPDATE products SET contabiliza_stock=0 WHERE stock_actual=999")
+        except Exception:
+            pass
+
     # Insertar usuarios por defecto si no existen
     c.execute("SELECT COUNT(*) FROM usuarios")
     if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO usuarios (usuario, password, rol) VALUES (?, ?, ?)", ("admin", "admin123", "administrador"))
-        c.execute("INSERT INTO usuarios (usuario, password, rol) VALUES (?, ?, ?)", ("cajero", "cajero123", "cajero"))
+        c.execute("INSERT INTO usuarios (usuario, password, rol, activo) VALUES (?, ?, ?, 1)", ("admin", "admin123", "administrador"))
+        c.execute("INSERT INTO usuarios (usuario, password, rol, activo) VALUES (?, ?, ?, 1)", ("cajero", "cajero123", "cajero"))
 
     conn.commit()
     

@@ -40,8 +40,7 @@ ICON_SIZES = {
 }
 
 # Versión de la aplicación (se mostrará en el título de la ventana)
-# Nota: mantener el formato existente con prefijo "BuffetApp_v" para consistencia visual
-APP_VERSION = "BuffetApp_v2.0"
+APP_VERSION = "BuffetApp_v1.5"
 
 # Parámetros específicos para la vista de ventas / carrito (fáciles de ajustar desde aquí)
 CART = {
@@ -52,6 +51,16 @@ CART = {
     'item_font': (FONT_FAMILY, 14),             # texto de items en carrito
     'subtotal_font': (FONT_FAMILY, 14, 'bold'), # subtotal por item
     'qty_button_font': (FONT_FAMILY, 12),       # botones +/- (aumentado 1 punto)
+}
+
+# Parámetros de la grilla de productos en Ventas
+# Ajustá 'card_width' para hacer las tarjetas más angostas o anchas sin tocar la lógica
+SALES_GRID = {
+    'card_width': 200,   # ancho de cada tarjeta (antes 260)
+    'card_height': 110,  # alto de cada tarjeta
+    'card_padx': 8,      # padding horizontal entre tarjetas
+    'card_pady': 10,     # padding vertical entre tarjetas
+    'columns': 3,        # cantidad de columnas
 }
 
 # Fuentes predefinidas para compatibilidad

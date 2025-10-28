@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
+import 'dart:typed_data';
+import '../../services/usb_printer_service.dart';
 
 import '../../services/print_service.dart';
 import '../../services/caja_service.dart';
 import '../../data/dao/db.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PrinterTestPage extends StatefulWidget {
   const PrinterTestPage({super.key});
@@ -14,6 +17,11 @@ class PrinterTestPage extends StatefulWidget {
 class _PrinterTestPageState extends State<PrinterTestPage> {
   Printer? _selected;
   List<Printer> _printers = const [];
+  final _usb = UsbPrinterService();
+  List<Map<String, dynamic>> _usbDevices = const [];
+  Map<String, dynamic>? _usbSel;
+  bool _connected = false;
+  bool _printLogoEscpos = true;
 
   Future<void> _refreshPrinters() async {
     try {
@@ -29,42 +37,165 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
   void initState() {
     super.initState();
     _refreshPrinters();
+    _refreshUsb();
+    _autoConnectIfSaved();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final v = sp.getBool('print_logo_escpos');
+      setState(() => _printLogoEscpos = v ?? true);
+    } catch (_) {}
+  }
+
+  Future<void> _autoConnectIfSaved() async {
+    final ok = await _usb.autoConnectSaved();
+    if (!context.mounted) return;
+    if (ok) {
+      final saved = await _usb.getDefaultDevice();
+      if (!mounted) return;
+      setState(() {
+        _connected = true;
+        _usbSel = saved;
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impresora USB conectada automáticamente')));
+    }
+  }
+
+  Future<void> _refreshUsb() async {
+    try {
+      final list = await _usb.listDevices();
+      setState(() => _usbDevices = list);
+    } catch (_) {
+      setState(() => _usbDevices = const []);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Prueba de impresora')),
+      appBar: AppBar(title: const Text('Config. impresora')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ElevatedButton.icon(
-              onPressed: () async {
-                final p = await Printing.pickPrinter(context: context);
-                setState(() => _selected = p);
+            Text('Preferencias de impresión', style: Theme.of(context).textTheme.titleMedium),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Imprimir logo en cierre (USB)'),
+              value: _printLogoEscpos,
+              onChanged: (v) async {
+                setState(() => _printLogoEscpos = v);
+                try {
+                  final sp = await SharedPreferences.getInstance();
+                  await sp.setBool('print_logo_escpos', v);
+                } catch (_) {}
               },
-              icon: const Icon(Icons.print),
-              label: Text(_selected == null
-                  ? 'Elegir impresora'
-                  : 'Impresora: ${_selected!.name}'),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Text('Disponibles:'),
-                const SizedBox(width: 8),
-                IconButton(
-                    onPressed: _refreshPrinters,
-                    icon: const Icon(Icons.refresh)),
-              ],
-            ),
+            const Divider(height: 24),
+            Text('USB directa', style: Theme.of(context).textTheme.titleMedium),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<Map<String, dynamic>>(
+                  key: ValueKey('usb_${_usbSel != null ? '${_usbSel!['vendorId']}_${_usbSel!['productId']}' : 'none'}_${_usbDevices.length}'),
+                  initialValue: _usbSel,
+                  items: _usbDevices.map((d) => DropdownMenuItem(
+                    value: d,
+                    child: Text('${d['deviceName']} (${d['vendorId']}:${d['productId']})'),
+                  )).toList(),
+                  onChanged: (v) => setState(() => _usbSel = v),
+                  hint: const Text('Seleccioná dispositivo USB'),
+                ),
+              ),
+              IconButton(onPressed: _refreshUsb, icon: const Icon(Icons.refresh)),
+            ]),
+            if (_connected && _usbSel != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.usb, color: Colors.green),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text('Conectado: ${_usbSel!['deviceName']} (${_usbSel!['vendorId']}:${_usbSel!['productId']})')),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, children: [
+              ElevatedButton(
+                onPressed: _usbSel == null ? null : () async {
+                  final v = _usbSel!['vendorId'] as int;
+                  final p = _usbSel!['productId'] as int;
+                  var perm = await _usb.requestPermission(v, p);
+                  if (!perm) {
+                    // Reintento automático breve: algunos dispositivos requieren segundo intento
+                    await Future.delayed(const Duration(milliseconds: 400));
+                    perm = await _usb.requestPermission(v, p);
+                    if (!perm) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permiso USB denegado. Volvé a intentar.')));
+                      return;
+                    }
+                  }
+                  final ok = await _usb.connect(v, p);
+                    if (!context.mounted) return;
+                  if (ok) {
+                    await _usb.saveDefaultDevice(vendorId: v, productId: p, deviceName: _usbSel!['deviceName'] as String?);
+                  }
+                  setState(() => _connected = ok);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Conectado' : 'No conectó')));
+                  // Refrescar lista tras intento de conexión
+                  await _refreshUsb();
+                },
+                child: const Text('Conectar USB'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // ESC/POS básico
+                  final b = BytesBuilder();
+                  b.add([0x1B, 0x40]); // init
+                  b.add([0x1B, 0x21, 0x20]); // doble alto
+                  b.add('BuffetApp\n'.codeUnits);
+                  b.add([0x1B, 0x21, 0x00]);
+                  b.add('Prueba USB ESC/POS\n\n'.codeUnits);
+                  b.add([0x1D, 0x56, 0x42, 0x00]); // corte parcial
+                  try {
+                    final ok = await _usb.printBytes(Uint8List.fromList(b.toBytes()));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Impreso por USB' : 'No se pudo imprimir por USB')));
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                },
+                child: const Text('Imprimir USB (test)'),
+              ),
+            ]),
+            const Divider(height: 24),
+            // Se quita el rótulo "Disponibles" por no aportar valor; se mantiene la lista.
             Expanded(
               child: _printers.isEmpty
-                  ? const Center(
-                      child: Text(
-                          'No se detectaron impresoras. Podés seleccionar una con "Elegir impresora" y se usará el diálogo del sistema o previsualización PDF.'))
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('Ayuda para conectar la impresora USB:', style: TextStyle(fontWeight: FontWeight.w600)),
+                          SizedBox(height: 8),
+                          Text('• Conectá la impresora por USB (OTG) y encendela.'),
+                          Text('• Si Android pide permiso, tocá "Permitir".'),
+                          Text('• Tocá "Conectar USB" y luego "Refrescar" si no aparece en la lista.'),
+                          Text('• Probá desconectar y volver a conectar el cable USB/OTG.'),
+                          Text('• Reiniciá la app si persiste el problema.'),
+                          Text('• Verificá los permisos en Android: Ajustes > Apps > BuffetApp > Permisos > USB.'),
+                        ],
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: _printers.length,
                       itemBuilder: (ctx, i) {
@@ -84,22 +215,23 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
             ElevatedButton(
               onPressed: () async {
                 // Buscar último ticket o generar uno de prueba en memoria
-                final db = await AppDatabase.instance();
-                final last = await db.query('tickets',
+        final db = await AppDatabase.instance();
+        final last = await db.query('tickets',
                     columns: ['id'], orderBy: 'id DESC', limit: 1);
-                final id = last.isNotEmpty ? last.first['id'] as int : null;
-                if (id == null) {
-                  // Construir un PDF de ejemplo y mostrar
-                  await Printing.layoutPdf(
-                    onLayout: (f) async => await PrintService()
-                        .buildTicketPdf(await _crearTicketDummy()),
-                    name: 'ticket_demo.pdf',
-                  );
-                } else {
-                  await Printing.layoutPdf(
-                    onLayout: (f) => PrintService().buildTicketPdf(id),
-                    name: 'ticket_$id.pdf',
-                  );
+                final id = last.isNotEmpty ? last.first['id'] as int : await _crearTicketDummy();
+                try {
+                  final connected = await _usb.isConnected();
+                  if (!connected) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay impresora USB conectada.')));
+                    return;
+                  }
+                  final ok = await PrintService().printTicketUsbOnly(id);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Ticket impreso por USB' : 'No se pudo imprimir por USB')));
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al imprimir: $e')));
                 }
               },
               child: const Text('Test Ticket de venta'),
@@ -123,10 +255,20 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                       const SnackBar(content: Text('No hay cajas para imprimir.')));
                   return;
                 }
-                await Printing.layoutPdf(
-                  onLayout: (f) => PrintService().buildCajaResumenPdf(cajaId!),
-                  name: 'cierre_caja_$cajaId.pdf',
-                );
+                try {
+                  final connected = await _usb.isConnected();
+                  if (!connected) {
+                    if (!context.mounted) return;
+                    messenger.showSnackBar(const SnackBar(content: Text('No hay impresora USB conectada.')));
+                    return;
+                  }
+                  final ok = await PrintService().printCajaResumenUsbOnly(cajaId);
+                  if (!context.mounted) return;
+                  messenger.showSnackBar(SnackBar(content: Text(ok ? 'Cierre impreso por USB' : 'No se pudo imprimir por USB')));
+                } catch (e) {
+                  if (!context.mounted) return;
+                  messenger.showSnackBar(SnackBar(content: Text('Error al imprimir: $e')));
+                }
               },
               child: const Text('Test Cierre de caja'),
             ),

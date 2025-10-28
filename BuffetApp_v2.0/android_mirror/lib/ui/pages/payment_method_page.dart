@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../data/dao/db.dart';
 import '../../services/venta_service.dart';
 import '../../services/print_service.dart';
+import '../../services/usb_printer_service.dart';
 import '../format.dart';
 import '../state/cart_model.dart';
 
@@ -17,6 +18,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
   bool _loading = true;
   final _ventaService = VentaService();
   bool _imprimir = true; // por defecto seleccionado
+  final _usb = UsbPrinterService();
 
   @override
   void initState() {
@@ -86,7 +88,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16)),
-                  onPressed: cart.isEmpty
+          onPressed: cart.isEmpty
                       ? null
                       : () async {
                           final nav = Navigator.of(context);
@@ -99,18 +101,37 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                                     'cantidad': e.cantidad,
                                   })
                               .toList();
+                          // Validar USB conectada
+                          final usbConnected = await _usb.isConnected();
+                          final marcarImpreso = _imprimir && usbConnected;
+                          if (!usbConnected && _imprimir && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('No hay impresora USB conectada. Los tickets se guardarán como No Impreso.')),
+                            );
+                          }
                           final result = await _ventaService.crearVenta(
-                              metodoPagoId: m['id'] as int,
-                              items: items,
-                              marcarImpreso: _imprimir);
-                          if (_imprimir) {
+                            metodoPagoId: m['id'] as int,
+                            items: items,
+                            marcarImpreso: marcarImpreso,
+                          );
+                          if (marcarImpreso) {
                             try {
                               final ventaId = result['ventaId'] as int;
-                              await PrintService()
-                                  .printVentaTicketsForVenta(ventaId);
-                            } catch (_) {}
+                              final ok = await PrintService().printVentaTicketsForVentaUsbOnly(ventaId);
+                              if (!ok && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Fallo la impresión por USB.')),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error al imprimir: $e')),
+                                );
+                              }
+                            }
                           }
-                          if (mounted) {
+                          if (context.mounted) {
                             cartModel.clear();
                             nav.pop(true);
                           }

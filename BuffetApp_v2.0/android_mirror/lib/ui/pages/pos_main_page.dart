@@ -17,6 +17,8 @@ import 'settings_page.dart';
 import '../../app_version.dart';
 import 'help_page.dart';
 import 'dart:io';
+import 'dart:async';
+import '../../services/usb_printer_service.dart';
 
 class PosMainPage extends StatefulWidget {
   const PosMainPage({super.key});
@@ -32,11 +34,15 @@ class _PosMainPageState extends State<PosMainPage> {
   bool _useList = false;
   String? _appVersion;
   static const String _lowStockPrefsKey = 'low_stock_alerted_ids';
+  bool _usbConnected = false;
+  final _usb = UsbPrinterService();
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _startUsbPolling();
   }
 
   Future<void> _load() async {
@@ -102,6 +108,23 @@ class _PosMainPageState extends State<PosMainPage> {
         await sp.setStringList(_lowStockPrefsKey, updated.toList());
       }
     } catch (_) {}
+  }
+
+  void _startUsbPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      final ok = await _usb.isConnected();
+      if (!mounted) return;
+      if (ok != _usbConnected) {
+        setState(() => _usbConnected = ok);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<bool> _tryDecreaseStock(int id) async {
@@ -183,6 +206,53 @@ class _PosMainPageState extends State<PosMainPage> {
           ),
         ]),
         actions: [
+          // Estado USB + acceso rápido a Config. impresora
+          IconButton(
+            tooltip: _usbConnected ? 'Impresora conectada' : 'Impresora desconectada',
+            icon: Icon(Icons.usb, color: _usbConnected ? Colors.green : Colors.red),
+            onPressed: () async {
+              if (!mounted) return;
+              // ignore: use_build_context_synchronously
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PrinterTestPage()),
+              );
+              if (!mounted) return;
+            },
+          ),
+          // Limpiar carrito
+          Builder(builder: (ctx) {
+            final cart = context.watch<CartModel>();
+            return IconButton(
+              tooltip: 'Limpiar carrito',
+              icon: const Icon(Icons.remove_shopping_cart),
+              onPressed: cart.isEmpty
+                  ? null
+                  : () async {
+                      // ignore: use_build_context_synchronously
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (dctx) => AlertDialog(
+                          title: const Text('Limpiar carrito'),
+                          content: const Text('Se eliminarán todos los ítems del carrito. ¿Continuar?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Cancelar')),
+                            ElevatedButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('Limpiar')),
+                          ],
+                        ),
+                      );
+                      if (ok == true) {
+                        if (!mounted) return;
+                        // ignore: use_build_context_synchronously
+                        context.read<CartModel>().clear();
+                        // ignore: use_build_context_synchronously
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Carrito limpiado')),
+                        );
+                      }
+                    },
+            );
+          }),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: FilledButton.icon(
@@ -195,13 +265,17 @@ class _PosMainPageState extends State<PosMainPage> {
               onPressed: cart.isEmpty
                   ? null
                   : () async {
-                      final nav = Navigator.of(context);
-                      final messenger = ScaffoldMessenger.of(context);
-                      final paid = await nav.push(
-                          MaterialPageRoute(
-                              builder: (_) => const PaymentMethodPage()));
-                      if (paid == true && mounted) {
-                        messenger.showSnackBar(
+                      if (!mounted) return;
+                      // ignore: use_build_context_synchronously
+                      final paid = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const PaymentMethodPage()),
+                      );
+                      if (!mounted) return;
+                      if (paid == true) {
+                        // ignore: use_build_context_synchronously
+                        ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Venta registrada')));
                         await _load();
                       }
@@ -305,7 +379,7 @@ class _PosMainPageState extends State<PosMainPage> {
             ),
             ListTile(
               leading: const Icon(Icons.print),
-              title: const Text('Prueba de impresora'),
+              title: const Text('Config. impresora'),
               onTap: () async {
                 final nav = Navigator.of(context);
                 nav.pop();
@@ -346,7 +420,7 @@ class _PosMainPageState extends State<PosMainPage> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Caja $_cajaCodigo • Total: ${formatCurrency((_cajaTotal ?? 0))}',
+                      '${_cajaCodigo ?? ''} • Total: ${formatCurrency((_cajaTotal ?? 0))}',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -422,8 +496,10 @@ class _PosMainPageState extends State<PosMainPage> {
           title: Text(p['nombre'] as String,
               maxLines: 2, overflow: TextOverflow.ellipsis),
           subtitle: Row(children: [
-      Text(formatCurrencyNoDecimals(p['precio_venta'] as num),
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              formatCurrencyNoDecimals(p['precio_venta'] as num),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             const SizedBox(width: 12),
             if (((p['stock_actual'] as int?) ?? 0) != 999)
               Text('Stock: ${p['stock_actual']}',
@@ -507,7 +583,7 @@ class _PosMainPageState extends State<PosMainPage> {
               ),
               child: Text(
                 formatCurrencyNoDecimals(price),
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ),
           ),

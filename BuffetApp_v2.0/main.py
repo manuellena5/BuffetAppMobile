@@ -19,6 +19,30 @@ class BarCanchaApp:
         # TODO: Implementar lógica real de impresión de ticket si es necesario
         print("[DEBUG] imprimir_ticket llamado con carrito:", carrito)
         # Aquí puedes llamar a la lógica de impresión real si existe
+
+    def marcar_tickets_impresos(self, ticket_ids):
+        """Marca como 'Impreso' los tickets indicados.
+        Acepta lista de IDs (int) y realiza un UPDATE en bloque.
+        """
+        try:
+            if not ticket_ids:
+                return
+            ids = [int(x) for x in ticket_ids if str(x).isdigit()]
+            if not ids:
+                return
+            placeholders = ",".join(["?"] * len(ids))
+            with get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(f"UPDATE tickets SET status='Impreso' WHERE id IN ({placeholders})", ids)
+                conn.commit()
+        except Exception as e:
+            # No bloquear el flujo por errores de marcado; loguear si hay logger
+            try:
+                fecha_hora = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                log_error(fecha_hora, 'marcar_tickets_impresos', f'Error: {e}')
+            except Exception:
+                pass
+
     def __init__(self, root):
         import json, os, threading
         self.root = root
@@ -89,43 +113,57 @@ class BarCanchaApp:
         self.menu_bar = tk.Menu(self.root, font=("Arial", 16))
         # No mostrar la barra de menú hasta que el usuario se loguee
         self.root.config(menu=None)
+
+        # Menú Principal (botón/entrada simple)
         self.menu_bar.add_command(label="Menú Principal", command=self.mostrar_menu_principal, state=tk.DISABLED)
+
+        # Ventas
         self.menu_bar.add_command(label="Ventas", command=self.mostrar_ventas, state=tk.DISABLED)
-        self.menu_bar.add_command(label="Historial ventas", command=self.mostrar_historial, state=tk.DISABLED)
+
+        # Tickets (muestra tickets de la caja actual)
+        self.menu_bar.add_command(label="Tickets", command=self.mostrar_tickets_hoy, state=tk.DISABLED)
+
+        # Cajas -> Abrir / Cerrar / Listado
+        self.caja_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.caja_menu.add_command(label="Abrir Caja", command=self.abrir_caja_window)
+        self.caja_menu.add_command(label="Cerrar Caja", command=self.cerrar_caja_window, state=tk.DISABLED)
+        self.caja_menu.add_separator()
+        self.caja_menu.add_command(label="Listado de Cajas", command=self.mostrar_cajas)
+        self.menu_bar.add_cascade(label="Cajas", menu=self.caja_menu)
+
+        # Reportes -> Historial de ventas
+        self.reportes_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.reportes_menu.add_command(label="Historial de ventas", command=self.mostrar_historial, state=tk.DISABLED)
+        # Dashboard de Caja
+        self.reportes_menu.add_command(label="Dashboard de Caja", command=self.mostrar_reportes_kpi, state=tk.DISABLED)
+        self.menu_bar.add_cascade(label="Reportes", menu=self.reportes_menu)
+
+        # Productos
         self.menu_bar.add_command(label="Productos", command=self.mostrar_productos, state=tk.DISABLED)
+
+        # Configuración -> subitems
         from herramientas_view import HerramientasView  # mantener import, instanciar lazy
         self.herramientas_view = None
         def _hv():
             if self.herramientas_view is None:
                 self.herramientas_view = HerramientasView(self)
             return self.herramientas_view
-        self.herramientas_menu = tk.Menu(self.menu_bar, tearoff=0)
-        # Usar el método de instancia para permitir dependencias internas
-        # Configuración de impresora (nueva ventana)
-        self.herramientas_menu.add_command(
-            label="Config. Impresora", command=lambda: _hv().abrir_impresora_window(self.root), state=tk.DISABLED
-        )
-        # (Eliminado) Opción de backup local directo: se centraliza en "Backups y Sincronización"
-        # Abrir gestión de backups locales, importación desde .db y POS
-        self.herramientas_menu.add_command(
-            label="Backups y Sincronización", command=lambda: _hv().abrir_backup_window(self.root), state=tk.DISABLED
-        )
-        # Submenú Punto de Venta
-        self.pos_menu = tk.Menu(self.herramientas_menu, tearoff=0)
+
+        self.configuracion_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.configuracion_menu.add_command(label="Config. Impresora", command=lambda: _hv().abrir_impresora_window(self.root), state=tk.DISABLED)
+        self.configuracion_menu.add_command(label="Backups y Sincronización", command=lambda: _hv().abrir_backup_window(self.root), state=tk.DISABLED)
+        # Punto de venta
+        self.pos_menu = tk.Menu(self.configuracion_menu, tearoff=0)
         self.pos_menu.add_command(label="Gestionar Punto de Venta", command=lambda: _hv().abrir_pos_window(self.root))
-        self.herramientas_menu.add_cascade(label="Punto de Venta", menu=self.pos_menu)
+        self.configuracion_menu.add_cascade(label="Punto de venta", menu=self.pos_menu)
+        # Usuarios dentro de Configuración
+        self.configuracion_menu.add_command(label="Usuarios", command=self.mostrar_usuarios)
+        self.menu_bar.add_cascade(label="Configuracion", menu=self.configuracion_menu)
 
-        # Menú de caja: permite abrir y cerrar la caja diaria
-        self.caja_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.caja_menu.add_command(label="Abrir Caja", command=self.abrir_caja_window)
-        self.caja_menu.add_command(label="Cerrar Caja", command=self.cerrar_caja_window, state=tk.DISABLED)
-        # Ingreso/Retiro de efectivo se manejan desde la pantalla de Detalle/Cierre de caja.
-        # Eliminamos las entradas del menú para evitar duplicación de flujos.
-        self.caja_menu.add_command(label="Listado de Cajas", command=self.mostrar_listado_cajas)
-        self.menu_bar.add_cascade(label="Cajas", menu=self.caja_menu)
-
-        # Herramientas como último elemento del menú
-        self.menu_bar.add_cascade(label="Herramientas", menu=self.herramientas_menu)
+        # Sesion -> Cerrar sesión
+        self.sesion_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.sesion_menu.add_command(label="Cerrar sesión", command=self.cerrar_sesion)
+        self.menu_bar.add_cascade(label="Sesion", menu=self.sesion_menu)
 
         self.logged_user = None
         self.logged_role = None
@@ -142,7 +180,7 @@ class BarCanchaApp:
         self.productos_view = None
 
         self.caja_abierta_id = None
-        
+
         self.ocultar_frames()
         # Import tardío para reducir costo inicial
         from login_view import LoginView  # noqa: E402 (import tardío intencional)
@@ -178,11 +216,24 @@ class BarCanchaApp:
         # Habilita todos los comandos del menú principal
         self.menu_bar.entryconfig("Menú Principal", state=tk.NORMAL)
         self.menu_bar.entryconfig("Ventas", state=tk.NORMAL)
-        self.menu_bar.entryconfig("Historial ventas", state=tk.NORMAL)
+        # Historial es ahora un submenu dentro de Reportes
+        try:
+            self.reportes_menu.entryconfig("Historial de ventas", state=tk.NORMAL)
+            self.reportes_menu.entryconfig("Dashboard de Caja", state=tk.NORMAL)
+        except Exception:
+            # mantenemos compatibilidad si no existe
+            try:
+                self.menu_bar.entryconfig("Historial ventas", state=tk.NORMAL)
+            except Exception:
+                pass
         self.menu_bar.entryconfig("Productos", state=tk.NORMAL)
-        self.herramientas_menu.entryconfig("Config. Impresora", state=tk.NORMAL)
-        # (Eliminado) habilitación de "Backup local (AppData)"
-        self.herramientas_menu.entryconfig("Backups y Sincronización", state=tk.NORMAL)
+        # Configuración (antes herramientas) -> habilitar subitems
+        try:
+            self.configuracion_menu.entryconfig("Config. Impresora", state=tk.NORMAL)
+            self.configuracion_menu.entryconfig("Backups y Sincronización", state=tk.NORMAL)
+        except Exception:
+            pass
+        # Usuarios: visibilidad se ajusta post-login según rol
 
 
     def actualizar_menu_caja(self):
@@ -193,6 +244,27 @@ class BarCanchaApp:
         # Las operaciones de Ingreso/Retiro se gestionan desde Detalle/Cierre de Caja
         # por lo que ya no existen entradas dedicadas en este menú.
         self.menu_bar.entryconfig("Ventas", state=(tk.NORMAL if abierta else tk.DISABLED))
+        # Tickets debe estar habilitado solo con caja abierta
+        try:
+            self.menu_bar.entryconfig("Tickets", state=(tk.NORMAL if abierta else tk.DISABLED))
+        except Exception:
+            pass
+        # Reportes: permitir siempre Dashboard e Historial en el menú
+        try:
+            self.reportes_menu.entryconfig("Dashboard de Caja", state=tk.NORMAL)
+        except Exception:
+            pass
+
+    # --- Reportes ---
+    def mostrar_reportes_kpi(self):
+        try:
+            from reportes_kpi_view import ReportesKPIView
+        except Exception as e:
+            messagebox.showerror("Reportes", f"No se pudo abrir el Dashboard.\n{e}")
+            return
+        self.ocultar_frames()
+        self.reportes_kpi_view = ReportesKPIView(self.root)
+        self.reportes_kpi_view.pack(fill=tk.BOTH, expand=True)
 
     def on_caja_cerrada(self):
         """Actualiza el estado global cuando una caja se cierra."""
@@ -340,29 +412,385 @@ class BarCanchaApp:
         self._informar_movimiento('retiro')
 
     
-    def on_login(self, usuario, rol):
+    def on_login(self, usuario, rol, disciplina=None):
         self.logged_user = usuario
         self.logged_role = rol
+        # Si no se recibió disciplina, abrir modal para forzar la selección
+        if not disciplina:
+            disciplina = self._elegir_disciplina_modal()
+        # Guardar disciplina seleccionada
+        try:
+            self.disciplina_actual = disciplina
+        except Exception:
+            self.disciplina_actual = None
         self.login_view.pack_forget()
         # Mostrar la barra de menú una vez autenticado el usuario
         self.root.config(menu=self.menu_bar)
         self.habilitar_menu()
+        # Ajustar menú según rol
+        try:
+            if str(rol).lower() == 'administrador':
+                self.menu_bar.entryconfig('Usuarios', state=tk.NORMAL)
+            else:
+                self.menu_bar.entryconfig('Usuarios', state=tk.DISABLED)
+        except Exception:
+            pass
+        # Mostrar disciplina en el título si corresponde
+        try:
+            if disciplina:
+                desc = None
+                try:
+                    with get_connection() as _conn:
+                        _cur = _conn.cursor()
+                        _cur.execute("SELECT descripcion FROM disciplinas WHERE codigo=?", (disciplina,))
+                        rowd = _cur.fetchone()
+                        desc = rowd[0] if rowd else None
+                except Exception:
+                    desc = None
+                suffix = desc or disciplina
+                if suffix:
+                    self.root.title(f"Sistema de Ventas - Bar de Cancha - Disciplina: {suffix}")
+        except Exception:
+            pass
+
         conn = get_connection()
         cursor = conn.cursor()
+        # Búsqueda básica para la lógica existente (pares id,codigo)
         cursor.execute("SELECT id, codigo_caja FROM caja_diaria WHERE estado='abierta'")
         rows = cursor.fetchall()
+        # Búsqueda extendida con disciplina para admins
+        try:
+            cursor.execute(
+                """
+                SELECT cd.id, cd.codigo_caja, cd.disciplina, COALESCE(d.descripcion, cd.disciplina) AS disciplina_desc
+                  FROM caja_diaria cd
+                  LEFT JOIN disciplinas d ON d.codigo = cd.disciplina
+                 WHERE cd.estado='abierta'
+                """
+            )
+            rows_full = cursor.fetchall()
+        except Exception:
+            rows_full = []
         conn.close()
 
-        if not rows:
-            messagebox.showinfo("Caja", "No hay caja abierta. Abra una caja desde el menú Caja para habilitar ventas.")
+        # Regla: si inicia como Cajero y hay una o más cajas abiertas, NO permitir abrir otra;
+        # pedir autenticación de Administrador para cerrar la(s) abierta(s)
+        if str(rol).lower() == 'cajero' and rows:
             self.caja_abierta_id = None
-        elif len(rows) == 1:
-            self.caja_abierta_id = rows[0][0]
+            try:
+                self._pedir_admin_para_cerrar_caja(rows)
+            except Exception:
+                # Si el flujo falla, informar y continuar sin caja abierta
+                messagebox.showwarning("Caja", "Hay cajas abiertas. Un administrador debe cerrarlas para continuar.")
         else:
-            self.resolver_cajas_abiertas(rows)
+            # Si es administrador y hay exactamente una caja abierta con distinta disciplina a la seleccionada, avisar y redirigir a cierre
+            try:
+                if rows_full and len(rows_full) == 1 and str(rol).lower() == 'administrador':
+                    caja_id, cod_caja, caja_disc, caja_disc_desc = rows_full[0]
+                    if disciplina and caja_disc and str(caja_disc) != str(disciplina):
+                        # Cambiar a la disciplina de la caja abierta y actualizar título
+                        self.disciplina_actual = caja_disc
+                        try:
+                            suffix = caja_disc_desc or caja_disc
+                            if suffix:
+                                self.root.title(f"Sistema de Ventas - Bar de Cancha - Disciplina: {suffix}")
+                        except Exception:
+                            pass
+                        # Setear caja abierta actual
+                        self.caja_abierta_id = caja_id
+                        # Modal informativa con acción de cierre
+                        win = tk.Toplevel(self.root)
+                        win.title("Caja abierta en otra disciplina")
+                        win.transient(self.root)
+                        win.grab_set()
+                        # Centrar ventana en pantalla
+                        try:
+                            ancho, alto = 540, 260
+                            sw = self.root.winfo_screenwidth(); sh = self.root.winfo_screenheight()
+                            x = (sw - ancho) // 2; y = (sh - alto) // 2
+                            win.geometry(f"{ancho}x{alto}+{x}+{y}")
+                        except Exception:
+                            pass
+                        msg = (
+                            "Se encontró una caja abierta en otra disciplina.\n\n"
+                            f"Disciplina de la caja abierta: {caja_disc_desc or caja_disc}.\n\n"
+                            "Se iniciará la sesión con esa disciplina.\n\n"
+                            "Para continuar, cierre la caja abierta."
+                        )
+                        tk.Label(win, text=msg, font=("Arial", 11), justify="left", padx=12, pady=12).pack()
+                        def _go_close():
+                            try:
+                                win.grab_release()
+                            except Exception:
+                                pass
+                            win.destroy()
+                            # Abrir ventana de Cerrar caja
+                            self.cerrar_caja_window()
+                        tk.Button(win, text="Cerrar caja", command=_go_close, width=16).pack(pady=(0,12))
+                        # No continuar mostrando menú principal aquí; el flujo va a cierre
+                        self.actualizar_menu_caja()
+                        return
+            except Exception:
+                pass
+            # Flujo estándar si no aplica la condición especial de admin
+            if not rows:
+                messagebox.showinfo("Caja", "No hay caja abierta. Abra una caja desde el menú Caja para habilitar ventas.")
+                self.caja_abierta_id = None
+            elif len(rows) == 1:
+                self.caja_abierta_id = rows[0][0]
+            else:
+                self.resolver_cajas_abiertas(rows)
 
         self.actualizar_menu_caja()
         self.mostrar_menu_principal()
+
+    def _elegir_disciplina_modal(self):
+        # Cargar disciplinas
+        try:
+            with get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT codigo, COALESCE(descripcion, codigo) as desc FROM disciplinas ORDER BY desc, codigo")
+                rows = cur.fetchall() or []
+        except Exception:
+            rows = []
+        # Si no hay disciplinas, fallback
+        if not rows:
+            return 'BAR'
+        # Construir modal bloqueante
+        win = tk.Toplevel(self.root)
+        win.title("Seleccione disciplina")
+        win.transient(self.root)
+        win.grab_set()
+        try:
+            win.protocol("WM_DELETE_WINDOW", lambda: None)  # Evitar cerrar sin seleccionar
+        except Exception:
+            pass
+        # Hacer la ventana más alta para que no se oculte el botón Aceptar (y achicar 25% respecto a la versión previa)
+        ancho, alto = 540, 450
+        x = self.root.winfo_screenwidth() // 2 - ancho // 2
+        y = self.root.winfo_screenheight() // 2 - alto // 2
+        win.geometry(f"{ancho}x{alto}+{x}+{y}")
+        try:
+            win.minsize(480, 420)
+        except Exception:
+            pass
+        tk.Label(win, text="Debe elegir una disciplina para continuar.", font=("Arial", 12)).pack(pady=(14, 8))
+        map_desc_to_code = {str(d or c): str(c) for c, d in rows}
+        descs = list(map_desc_to_code.keys())
+        # Radio buttons de disciplinas (por defecto "BAR" si existe)
+        # Buscar una opción cuyo código o descripción sea "BAR"
+        default_desc = None
+        for c, d in rows:
+            c_str = str(c or '').strip()
+            d_str = str(d or c).strip()
+            if c_str.upper() == 'BAR' or d_str.upper() == 'BAR':
+                default_desc = d_str
+                break
+        if not default_desc and descs:
+            default_desc = descs[0]
+        var_desc = tk.StringVar(value=default_desc or '')
+        radios_container = tk.Frame(win)
+        radios_container.pack(pady=6)
+        try:
+            for desc in descs:
+                tk.Radiobutton(radios_container, text=desc, variable=var_desc, value=desc, anchor='w', padx=8).pack(fill='x', anchor='w')
+        except Exception:
+            pass
+        seleccionado = {'code': None}
+        def confirmar():
+            d = (var_desc.get() or '').strip()
+            code = map_desc_to_code.get(d)
+            if not code:
+                messagebox.showwarning('Disciplina', 'Seleccione una disciplina.'); return
+            seleccionado['code'] = code
+            try:
+                win.grab_release()
+            except Exception:
+                pass
+            win.destroy()
+        tk.Button(win, text="Aceptar", command=confirmar, bg="#1976d2", fg="white", width=12).pack(pady=12)
+        self.root.wait_window(win)
+        # Si por alguna razón no se seleccionó, forzar primera
+        return seleccionado['code'] or map_desc_to_code.get(descs[0]) or 'BAR'
+
+    def cerrar_sesion(self):
+        """Cierra la sesión actual y vuelve a la pantalla de login"""
+        try:
+            # Limpiar estado de usuario y caja
+            self.logged_user = None
+            self.logged_role = None
+            try:
+                self.disciplina_actual = None
+            except Exception:
+                pass
+            self.caja_abierta_id = None
+            # Ocultar todas las vistas y quitar menú
+            self.ocultar_frames()
+            try:
+                self.root.config(menu=None)
+            except Exception:
+                pass
+            try:
+                # Fallback adicional para asegurar que la barra desaparezca en Windows
+                self.root['menu'] = None
+            except Exception:
+                pass
+            try:
+                # Algunos entornos requieren cadena vacía en lugar de None
+                self.root.config(menu='')
+            except Exception:
+                pass
+            try:
+                self.root['menu'] = ''
+            except Exception:
+                pass
+            # Volver a mostrar login
+            try:
+                self.login_view.destroy()
+            except Exception:
+                pass
+            from login_view import LoginView
+            self.login_view = LoginView(self.root, self.on_login)
+            self.login_view.pack(fill=tk.BOTH, expand=True)
+            # Restaurar título básico (sin disciplina)
+            try:
+                from theme import APP_VERSION
+                self.root.title(f"Sistema de Ventas - Bar de Cancha - {APP_VERSION}")
+            except Exception:
+                try:
+                    self.root.title("Sistema de Ventas - Bar de Cancha")
+                except Exception:
+                    pass
+        except Exception as e:
+            messagebox.showerror("Sesión", f"No se pudo cerrar sesión. {e}")
+
+    def _pedir_admin_para_cerrar_caja(self, open_rows):
+        """Muestra un modal para autenticación de administrador y, si es correcta,
+        abre la vista de cierre para la(s) caja(s) abierta(s).
+
+        open_rows: lista de (id, codigo_caja) para cajas con estado='abierta'
+        """
+        win = tk.Toplevel(self.root)
+        win.title("Cierre requerido por Administrador")
+        ancho, alto = 420, 220
+        x = self.root.winfo_screenwidth() // 2 - ancho // 2
+        y = self.root.winfo_screenheight() // 2 - alto // 2
+        win.geometry(f"{ancho}x{alto}+{x}+{y}")
+        win.transient(self.root)
+        win.grab_set()
+
+        tk.Label(win, text="Hay cajas abiertas. Se requiere un Administrador para cerrarlas.", font=("Arial", 11)).pack(pady=(12, 8))
+        form = tk.Frame(win)
+        form.pack(pady=6)
+        tk.Label(form, text="Usuario admin:").grid(row=0, column=0, sticky='w')
+        entry_user = tk.Entry(form)
+        entry_user.grid(row=1, column=0, pady=(0,8))
+        tk.Label(form, text="Contraseña:").grid(row=2, column=0, sticky='w')
+        entry_pass = tk.Entry(form, show='*')
+        entry_pass.grid(row=3, column=0)
+
+        btns = tk.Frame(win)
+        btns.pack(pady=10)
+
+        def autenticar_y_abrir():
+            usuario_admin = entry_user.get().strip()
+            pass_admin = entry_pass.get().strip()
+            if not usuario_admin or not pass_admin:
+                messagebox.showwarning('Administrador', 'Ingrese usuario y contraseña.'); return
+            # validar credenciales con rol Administrador
+            try:
+                conn = get_connection(); cur = conn.cursor()
+                cur.execute("SELECT rol FROM usuarios WHERE usuario=? AND password=?", (usuario_admin, pass_admin))
+                row = cur.fetchone(); conn.close()
+            except Exception as e:
+                messagebox.showerror('Administrador', f'Error de base de datos: {e}'); return
+            if not row or str(row[0]).lower() != 'administrador':
+                messagebox.showerror('Administrador', 'Credenciales inválidas o sin rol Administrador.'); return
+            # Autenticación OK: abrir UI de cierre con usuario del sistema = admin temporal
+            win.destroy()
+            # Guardar sesión original del cajero
+            orig_user = self.logged_user; orig_role = self.logged_role
+            try:
+                # Elevar temporalmente a admin para que el cierre registre usuario_cierre correcto
+                self.logged_user = usuario_admin
+                self.logged_role = 'Administrador'
+                # Si hay una sola caja abierta, abrir su detalle directamente; si hay varias, resolver selección
+                if len(open_rows) == 1:
+                    self.abrir_cierre_para_caja(open_rows[0][0], restore_session=(orig_user, orig_role))
+                else:
+                    # mostrar selector; al finalizar (on_close) restaurar sesión
+                    self._abrir_selector_cajas_para_admin(open_rows, restore_session=(orig_user, orig_role))
+            except Exception:
+                # ante cualquier problema, restaurar sesión original
+                self.logged_user = orig_user; self.logged_role = orig_role
+
+        tk.Button(btns, text="Autenticar y cerrar", command=autenticar_y_abrir, bg="#1976d2", fg="white").pack(side=tk.LEFT, padx=6)
+        tk.Button(btns, text="Cancelar", command=win.destroy).pack(side=tk.LEFT, padx=6)
+
+    def _abrir_selector_cajas_para_admin(self, rows, restore_session=None):
+        """Permite al admin seleccionar una de las cajas abiertas para ver/cerrar su detalle."""
+        # Reutilizar la ventana existente de resolución pero forzando el flujo a abrir detalle en lugar de "usar caja"
+        sel_win = tk.Toplevel(self.root)
+        sel_win.title("Cajas abiertas")
+        tk.Label(sel_win, text="Seleccione la caja a cerrar:" ).pack(padx=10, pady=5)
+        lista = tk.Listbox(sel_win, width=48)
+        lista.pack(padx=10, pady=5)
+        for cid, codigo in rows:
+            lista.insert(tk.END, f"{codigo} (id {cid})")
+
+        def abrir_detalle():
+            sel = lista.curselection()
+            if not sel:
+                messagebox.showwarning("Caja", "Debe seleccionar una caja.")
+                return
+            caja_id = rows[sel[0]][0]
+            sel_win.destroy()
+            self.abrir_cierre_para_caja(caja_id, restore_session=restore_session)
+
+        tk.Button(sel_win, text="Abrir detalle", command=abrir_detalle).pack(pady=10)
+        sel_win.grab_set()
+        self.root.wait_window(sel_win)
+
+    def abrir_cierre_para_caja(self, caja_id, restore_session=None):
+        """Abre la vista de detalle/cierre para la caja indicada.
+        Si restore_session es una tupla (user, role), se restaurará al cerrar la caja o al volver de la vista.
+        """
+        try:
+            from caja_listado_view import CajaListadoView
+        except Exception:
+            from caja_listado_view import CajaListadoView
+        self.ocultar_frames()
+        # Vista temporal para el cierre
+        self.cajas_view = CajaListadoView(self.root, self.on_caja_cerrada)
+        # Propagar usuario/rol actuales (admin temporal)
+        try:
+            self.cajas_view.logged_user = getattr(self, 'logged_user', None)
+            self.cajas_view.logged_role = getattr(self, 'logged_role', None)
+        except Exception:
+            pass
+        # Envolver callback para restaurar sesión si corresponde
+        if restore_session is not None:
+            orig_user, orig_role = restore_session
+            def _restore_and_callback(*args, **kwargs):
+                try:
+                    self.logged_user = orig_user
+                    self.logged_role = orig_role
+                except Exception:
+                    pass
+                try:
+                    self.on_caja_cerrada(*args, **kwargs)
+                except Exception:
+                    pass
+            try:
+                self.cajas_view.on_caja_cerrada = _restore_and_callback
+            except Exception:
+                pass
+        # Mostrar detalle directamente
+        try:
+            self.cajas_view.ver_detalle(caja_id)
+        except Exception:
+            pass
+        self.cajas_view.pack(fill=tk.BOTH, expand=True)
 
     # abrir_backup_confirm eliminado: backup se gestiona desde Herramientas → Backups y Sincronización
 
@@ -443,6 +871,12 @@ class BarCanchaApp:
             self.ventas_view.pack_forget()
         if self.historial_view:
             self.historial_view.pack_forget()
+        # Ocultar vista de tickets de caja actual si existe
+        if getattr(self, 'tickets_caja_view', None):
+            try:
+                self.tickets_caja_view.pack_forget()
+            except Exception:
+                pass
         if self.cajas_view:
             try:
                 self.cajas_view.cerrar_detalle()
@@ -453,16 +887,45 @@ class BarCanchaApp:
             self.informe_view.pack_forget()
         if self.productos_view:
             self.productos_view.pack_forget()
+        # Ocultar reportes si están visibles
+        if getattr(self, 'reportes_kpi_view', None):
+            try:
+                self.reportes_kpi_view.pack_forget()
+            except Exception:
+                pass
+        if getattr(self, 'reportes_tabular_view', None):
+            try:
+                self.reportes_tabular_view.pack_forget()
+            except Exception:
+                pass
+        # Asegurar ocultar Usuarios para evitar superposición de pantallas
+        if getattr(self, 'usuarios_view', None):
+            try:
+                self.usuarios_view.pack_forget()
+            except Exception:
+                pass
         if self.ajustes_view:
             try:
                 self.ajustes_view.pack_forget()
             except Exception:
                 pass
 
+    def refrescar_ventas_productos(self):
+        try:
+            if getattr(self, 'ventas_view', None) and hasattr(self.ventas_view, 'recargar_productos'):
+                self.ventas_view.recargar_productos()
+        except Exception:
+            pass
+
     def mostrar_cajas(self):
         if not self.cajas_view:
             from caja_listado_view import CajaListadoView  # lazy import
             self.cajas_view = CajaListadoView(self.root, self.on_caja_cerrada)
+            try:
+                self.cajas_view.logged_user = getattr(self, 'logged_user', None)
+                self.cajas_view.logged_role = getattr(self, 'logged_role', None)
+            except Exception:
+                pass
         self.ocultar_frames()
         self.cajas_view.pack(fill=tk.BOTH, expand=True)
         self.mostrar_pie_caja(self.cajas_view)  # si tenés este pie en otras vistas
@@ -486,6 +949,21 @@ class BarCanchaApp:
             pass
         self.menu_view.pack(fill=tk.BOTH, expand=True)
         self.mostrar_pie_caja(self.menu_view)
+
+    def mostrar_usuarios(self):
+        # Solo admin
+        if str(getattr(self, 'logged_role', '')).lower() != 'administrador':
+            messagebox.showwarning('Usuarios', 'No tiene permisos para acceder a Usuarios.')
+            return
+        try:
+            self.ocultar_frames()
+            from usuarios_view import UsuariosView
+            self.usuarios_view = getattr(self, 'usuarios_view', None)
+            if self.usuarios_view is None:
+                self.usuarios_view = UsuariosView(self.root)
+            self.usuarios_view.pack(fill=tk.BOTH, expand=True)
+        except Exception as e:
+            messagebox.showerror('Usuarios', f'No se pudo abrir Usuarios.\n{e}')
 
     def mostrar_pie_caja(self, parent):
         # Elimina barras previas si existen
@@ -530,16 +1008,26 @@ class BarCanchaApp:
     def mostrar_ventas(self):
         # Solo permitir ventas si hay caja abierta
         if not getattr(self, 'caja_abierta_id', None):
-            messagebox.showwarning("Caja", "Debe abrir la caja antes de realizar ventas.")
+            ancho, alto = 540, 600
+            x = self.root.winfo_screenwidth() // 2 - ancho // 2
+            y = self.root.winfo_screenheight() // 2 - alto // 2
+            self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
             return
         if not self.ventas_view:
             from ventas_view_new import VentasViewNew  # lazy import
             self.ventas_view = VentasViewNew(
                 self.root,
                 cobrar_callback=self.on_cobrar,
-                imprimir_ticket_callback=self.imprimir_ticket
+                imprimir_ticket_callback=self.imprimir_ticket,
+                on_tickets_impresos=self.marcar_tickets_impresos,
+                controller=self
             )
-        # No es necesario llamar a actualizar_productos, la vista nueva se actualiza sola
+        # Siempre refrescar productos/stock/precios al entrar a Ventas
+        try:
+            if hasattr(self.ventas_view, 'recargar_productos'):
+                self.ventas_view.recargar_productos()
+        except Exception:
+            pass
         self.ocultar_frames()
         self.ventas_view.pack(fill=tk.BOTH, expand=True)
         # Ajusta el frame del carrito para que ocupe todo el alto disponible
@@ -560,7 +1048,7 @@ class BarCanchaApp:
         cursor.execute(
             """
             SELECT cd.codigo_caja, COALESCE(d.descripcion, cd.disciplina) AS disciplina,
-                   cd.usuario_apertura, cd.fecha, cd.hora_apertura, cd.fondo_inicial, cd.estado
+                   cd.usuario_apertura, cd.fecha, cd.hora_apertura, cd.fondo_inicial, cd.estado, COALESCE(cd.descripcion_evento, '')
               FROM caja_diaria cd
               LEFT JOIN disciplinas d ON d.codigo = cd.disciplina
              WHERE cd.id=?
@@ -569,10 +1057,11 @@ class BarCanchaApp:
         )
         info = cursor.fetchone()
         if info:
-            codigo_caja, disciplina, usuario_apertura, fecha, hora_apertura, fondo_inicial, estado = info
+            codigo_caja, disciplina, usuario_apertura, fecha, hora_apertura, fondo_inicial, estado, descripcion_evento = info
         else:
             codigo_caja = disciplina = usuario_apertura = fecha = hora_apertura = estado = ''
             fondo_inicial = 0
+            descripcion_evento = ''
 
         cursor.execute("SELECT tipo, monto, observacion FROM caja_movimiento WHERE caja_id=?", (caja_id,))
         ingresos = retiros = 0
@@ -664,6 +1153,7 @@ class BarCanchaApp:
         return {
             'codigo': codigo_caja,
             'disciplina': disciplina,
+            'descripcion_evento': descripcion_evento,
             'usuario_apertura': usuario_apertura,
             'fecha': fecha,
             'hora_apertura': hora_apertura,
@@ -685,6 +1175,11 @@ class BarCanchaApp:
         if not self.historial_view:
             from historial_view import HistorialView  # lazy import
             self.historial_view = HistorialView(self.root)
+            try:
+                self.historial_view.logged_user = getattr(self, 'logged_user', None)
+                self.historial_view.logged_role = getattr(self, 'logged_role', None)
+            except Exception:
+                pass
         self.ocultar_frames()
         self.historial_view.pack(fill=tk.BOTH, expand=True)
         # Asegurar que los botones de paginación/filtro estén visibles
@@ -698,6 +1193,69 @@ class BarCanchaApp:
             habilitar = bool(getattr(self, 'caja_abierta_id', None))
             self.historial_view.set_acciones_habilitadas(habilitar)
         self.mostrar_pie_caja(self.historial_view)
+
+    def mostrar_tickets_hoy(self):
+        # Mostrar la nueva vista filtrada sólo por la caja abierta
+        caja_id = getattr(self, 'caja_abierta_id', None)
+        if not caja_id:
+            try:
+                messagebox.showinfo("Tickets", "No hay caja abierta.")
+            except Exception:
+                pass
+            return
+        try:
+            from TicketCajaActual_view import TicketCajaActualView
+        except Exception:
+            from TicketCajaActual_view import TicketCajaActualView
+        self.ocultar_frames()
+        self.tickets_caja_view = TicketCajaActualView(self.root, controller=self)
+        self.tickets_caja_view.pack(fill=tk.BOTH, expand=True)
+        self.mostrar_pie_caja(self.tickets_caja_view)
+
+    def mostrar_reportes(self):
+        # Ventana temporal de Reportes (placeholder con accesos)
+        win = tk.Toplevel(self.root)
+        win.title("Reportes")
+        ancho, alto = 520, 420
+        x = self.root.winfo_screenwidth() // 2 - ancho // 2
+        y = self.root.winfo_screenheight() // 2 - alto // 2
+        win.geometry(f"{ancho}x{alto}+{x}+{y}")
+        tk.Label(win, text="Reportes", font=("Arial", 16, "bold")).pack(pady=12)
+        tk.Label(win, text="Próximamente: filtros por rango de fechas, disciplina, método de pago, categoría y producto.", wraplength=480, justify="left").pack(pady=(0,10))
+        frame = tk.Frame(win)
+        frame.pack(pady=8)
+        tk.Button(frame, text="Ventas por fecha", width=22, state=tk.DISABLED).grid(row=0, column=0, padx=6, pady=6)
+        tk.Button(frame, text="Por disciplina", width=22, state=tk.DISABLED).grid(row=0, column=1, padx=6, pady=6)
+        tk.Button(frame, text="Por producto", width=22, state=tk.DISABLED).grid(row=1, column=0, padx=6, pady=6)
+        tk.Button(frame, text="Exportar (CSV/Excel)", width=22, state=tk.DISABLED).grid(row=1, column=1, padx=6, pady=6)
+        tk.Button(win, text="Cerrar", command=win.destroy, width=14).pack(pady=10)
+
+    def mostrar_configuracion(self):
+        # Ventana con accesos a impresora, backups/sync y POS
+        win = tk.Toplevel(self.root)
+        win.title("Configuración")
+        ancho, alto = 520, 360
+        x = self.root.winfo_screenwidth() // 2 - ancho // 2
+        y = self.root.winfo_screenheight() // 2 - alto // 2
+        win.geometry(f"{ancho}x{alto}+{x}+{y}")
+        tk.Label(win, text="Configuración", font=("Arial", 16, "bold")).pack(pady=12)
+        btns = tk.Frame(win)
+        btns.pack(pady=8)
+        # Obtener herramientas view (crear si no existe)
+        try:
+            if getattr(self, 'herramientas_view', None) is None:
+                from herramientas_view import HerramientasView
+                self.herramientas_view = HerramientasView(self)
+            hv = self.herramientas_view
+        except Exception:
+            hv = None
+        tk.Button(btns, text="Config. Impresora", width=24, command=(lambda: hv.abrir_impresora_window(self.root) if hv else None)).grid(row=0, column=0, padx=6, pady=6)
+        tk.Button(btns, text="Backups y Sincronización", width=24, command=(lambda: hv.abrir_backup_window(self.root) if hv else None)).grid(row=0, column=1, padx=6, pady=6)
+        tk.Button(btns, text="Punto de Venta", width=24, command=(lambda: hv.abrir_pos_window(self.root) if hv else None)).grid(row=1, column=0, padx=6, pady=6)
+        # Usuarios solo visible para admin
+        if str(getattr(self, 'logged_role', '')).lower() == 'administrador':
+            tk.Button(btns, text="Usuarios", width=24, command=self.mostrar_usuarios).grid(row=1, column=1, padx=6, pady=6)
+        tk.Button(win, text="Cerrar", command=win.destroy, width=14).pack(pady=10)
 
     def mostrar_productos(self):
         self.ocultar_frames()
@@ -765,13 +1323,21 @@ class BarCanchaApp:
 
             # Crear un ticket por cada unidad vendida (un ticket por item x cantidad)
             prod_ids = [item[0] for item in carrito]
-            # Obtener datos necesarios de products: codigo_producto, categoria_id, stock_actual
-            cursor.execute(
-                f"SELECT id, codigo_producto, categoria_id, stock_actual FROM products WHERE id IN ({','.join('?' for _ in prod_ids)})",
-                prod_ids,
-            )
-            prod_rows = cursor.fetchall()
-            prod_info = {r[0]: {'codigo': r[1], 'categoria': r[2], 'stock': r[3]} for r in prod_rows}
+            # Obtener datos necesarios de products: codigo_producto, categoria_id, stock_actual, contabiliza_stock
+            try:
+                cursor.execute(
+                    f"SELECT id, codigo_producto, categoria_id, stock_actual, COALESCE(contabiliza_stock,1) FROM products WHERE id IN ({','.join('?' for _ in prod_ids)})",
+                    prod_ids,
+                )
+                prod_rows = cursor.fetchall()
+                prod_info = {r[0]: {'codigo': r[1], 'categoria': r[2], 'stock': r[3], 'contabiliza': int(r[4])} for r in prod_rows}
+            except Exception:
+                cursor.execute(
+                    f"SELECT id, codigo_producto, categoria_id, stock_actual FROM products WHERE id IN ({','.join('?' for _ in prod_ids)})",
+                    prod_ids,
+                )
+                prod_rows = cursor.fetchall()
+                prod_info = {r[0]: {'codigo': r[1], 'categoria': r[2], 'stock': r[3], 'contabiliza': 1} for r in prod_rows}
 
             # Para la secuencia por caja: si hay caja abierta, usaremos y actualizaremos total_tickets en caja_diaria
             def next_ticket_seq():
@@ -809,11 +1375,11 @@ class BarCanchaApp:
                             "INSERT INTO venta_items (ticket_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)",
                             (ticket_id, prod_id, 1, precio, precio),
                         )
-                        # Actualizar stock sólo si no es infinito (999)
+                        # Actualizar stock sólo si contabiliza_stock=1
                         try:
-                            if stock_actual is not None and int(stock_actual) != 999:
+                            if int(info.get('contabiliza', 1)) == 1:
                                 cursor.execute("UPDATE products SET stock_actual = stock_actual - 1 WHERE id = ?", (prod_id,))
-                                stock_actual -= 1
+                                stock_actual = (stock_actual - 1) if stock_actual is not None else stock_actual
                         except Exception:
                             # no crítico; continuar
                             pass
@@ -889,6 +1455,22 @@ class BarCanchaApp:
     def abrir_caja_window(self):
         import datetime
         from tkinter import ttk
+        # Si es cajero y ya hay una caja abierta en el sistema, forzar flujo de admin
+        try:
+            if str(getattr(self, 'logged_role', '')).lower() == 'cajero':
+                with get_connection() as _conn:
+                    _cur = _conn.cursor()
+                    _cur.execute("SELECT id, codigo_caja FROM caja_diaria WHERE estado='abierta'")
+                    _rows = _cur.fetchall()
+                if _rows:
+                    messagebox.showwarning('Caja', 'Ya existe una caja abierta. Un administrador debe cerrarla para abrir una nueva.')
+                    try:
+                        self._pedir_admin_para_cerrar_caja(_rows)
+                    except Exception:
+                        pass
+                    return
+        except Exception:
+            pass
         win = tk.Toplevel(self.root)
         win.title("Apertura de Caja")
         ancho = 370
@@ -898,7 +1480,7 @@ class BarCanchaApp:
         win.geometry(f"{ancho}x{alto}+{x}+{y}")
         win.transient(self.root)
         win.grab_set()
-        tk.Label(win, text="Usuario apertura:", font=("Arial", 12)).pack(pady=6)
+        tk.Label(win, text="Cajero apertura:", font=("Arial", 12)).pack(pady=6)
 
         def _limit_entry(max_len):
             return (win.register(lambda P: len(P) <= max_len), "%P")
@@ -909,7 +1491,9 @@ class BarCanchaApp:
             validate="key",
             validatecommand=_limit_entry(10),
         )
-        entry_usuario.insert(0, self.logged_user or "")
+        # Este campo representa el nombre de la persona que oficia de cajero al abrir
+        # No se autocompleta con el usuario del sistema para permitir ingresar el nombre del cajero humano.
+        entry_usuario.insert(0, "")
         entry_usuario.pack(pady=2)
         tk.Label(win, text="Fondo inicial:", font=("Arial", 12)).pack(pady=6)
         entry_fondo = tk.Entry(win, font=("Arial", 12))
@@ -935,25 +1519,7 @@ class BarCanchaApp:
         fecha = datetime.datetime.now().strftime("%Y-%m-%d")
         tk.Label(win, text=f"Fecha: {fecha}", font=("Arial", 11)).pack(pady=4)
         tk.Label(win, text=f"Hora: {hora_apertura}", font=("Arial", 11)).pack(pady=2)
-        tk.Label(win, text="Disciplina:", font=("Arial", 12)).pack(pady=6)
-        conn_disc = get_connection()
-        cur_disc = conn_disc.cursor()
-        try:
-            cur_disc.execute("SELECT codigo, COALESCE(descripcion, codigo) as desc FROM disciplinas ORDER BY desc, codigo")
-            _rows_disc = cur_disc.fetchall() or []
-        except Exception:
-            _rows_disc = []
-        conn_disc.close()
-        # Construir lista visible (descripciones) y mapa a código
-        _disc_map_desc_to_code = {}
-        _disc_descripciones = []
-        for _cd, _desc in _rows_disc:
-            _disc_map_desc_to_code[str(_desc)] = str(_cd)
-            _disc_descripciones.append(str(_desc))
-        if not _disc_descripciones:
-            _disc_descripciones = [""]
-        var_disc_desc = tk.StringVar(value=_disc_descripciones[0] if _disc_descripciones else "")
-        ttk.Combobox(win, values=_disc_descripciones, textvariable=var_disc_desc, state="readonly", width=22).pack(pady=2)
+        # La disciplina se tomará del login (self.disciplina_actual); no se muestra selector aquí
         # Selector de Punto de venta
         tk.Label(win, text="Punto de venta:", font=("Arial", 12)).pack(pady=6)
         try:
@@ -970,6 +1536,15 @@ class BarCanchaApp:
                 default_idx = idx; break
         var_caja_tpl = tk.StringVar(value=(caja_items[default_idx] if caja_items else ""))
         ttk.Combobox(win, values=caja_items, textvariable=var_caja_tpl, state="readonly", width=18).pack(pady=2)
+        # Descripción del evento (nuevo campo)
+        tk.Label(win, text="Descripción del evento:", font=("Arial", 12)).pack(pady=(8,4))
+        entry_evento = tk.Entry(win, font=("Arial", 12))
+        entry_evento.pack(pady=(0, 6))
+        # Limitar a 100 caracteres
+        def _limit_evento(P):
+            return len(P) <= 100
+        entry_evento.configure(validate="key", validatecommand=(win.register(_limit_evento), "%P"))
+
         tk.Label(win, text="Observaciones:", font=("Arial", 12)).pack(pady=6)
         entry_obs = tk.Text(win, font=("Arial", 12), height=3, width=32)
         entry_obs.pack(pady=2)
@@ -983,12 +1558,22 @@ class BarCanchaApp:
         entry_obs.bind("<KeyRelease>", lambda e: limitar_texto(entry_obs, 30))
 
         def confirmar():
-            usuario = entry_usuario.get().strip()
+            cajero_apertura = entry_usuario.get().strip()
+            usuario_apertura = (self.logged_user or "")
             fondo = entry_fondo.get().strip().replace(",", ".")
             observaciones = entry_obs.get("1.0", tk.END).strip()
-            # Obtener el código real a partir de la descripción seleccionada
-            _disc_sel_desc = var_disc_desc.get()
-            disciplina = _disc_map_desc_to_code.get(_disc_sel_desc, _disc_sel_desc)
+            descripcion_evento = entry_evento.get().strip()
+            # Disciplina definida por el login
+            disciplina = getattr(self, 'disciplina_actual', None)
+            if not disciplina:
+                # Fallback: primer código o 'BAR'
+                try:
+                    cur_tmp = get_connection().cursor()
+                    cur_tmp.execute("SELECT codigo FROM disciplinas ORDER BY codigo LIMIT 1")
+                    rowd = cur_tmp.fetchone()
+                    disciplina = rowd[0] if rowd and rowd[0] else 'BAR'
+                except Exception:
+                    disciplina = 'BAR'
             # Resolver plantilla de caja
             try:
                 sel_txt = var_caja_tpl.get()
@@ -998,10 +1583,10 @@ class BarCanchaApp:
             sel_row = _pos_cajas_rows[sel_idx] if _pos_cajas_rows else (None, 'Caja1', 'Caj01', 1)
             pos_caja_id = sel_row[0]
             caja_prefijo = sel_row[2]
-            if not usuario or not fondo:
-                messagebox.showwarning("Datos incompletos", "Complete usuario y fondo inicial.")
+            if not cajero_apertura or not fondo:
+                messagebox.showwarning("Datos incompletos", "Complete el Cajero de apertura y el fondo inicial.")
                 return
-            if len(usuario) > 10:
+            if len(cajero_apertura) > 10:
                 messagebox.showwarning("Usuario", "Máximo 10 caracteres.")
                 return
             try:
@@ -1011,6 +1596,9 @@ class BarCanchaApp:
                 return
             if len(observaciones) > 30:
                 messagebox.showwarning("Observaciones", "Máximo 30 caracteres.")
+                return
+            if len(descripcion_evento) > 100:
+                messagebox.showwarning("Descripción del evento", "Máximo 100 caracteres.")
                 return
             conn = get_connection()
             cursor = conn.cursor()
@@ -1040,14 +1628,28 @@ class BarCanchaApp:
             # Intentar insertar con pos_uuid y caja_uuid si las columnas existen (migración las crea)
             try:
                 cursor.execute(
-                    "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, apertura_dt, fondo_inicial, observaciones_apertura, estado, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'abierta', ?, ?, ?, ?)",
-                    (codigo_caja, disciplina, fecha, usuario, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, observaciones, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo)
+                    "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, cajero_apertura, hora_apertura, apertura_dt, fondo_inicial, descripcion_evento, observaciones_apertura, estado, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'abierta', ?, ?, ?, ?)",
+                    (codigo_caja, disciplina, fecha, usuario_apertura, cajero_apertura, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, descripcion_evento, observaciones, pos_uuid, caja_uuid, pos_caja_id, caja_prefijo)
                 )
             except Exception:
                 # Fallback: columnas no existen en bases viejas
-                cursor.execute(
-                    "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, apertura_dt, fondo_inicial, observaciones_apertura, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'abierta')",
-                    (codigo_caja, disciplina, fecha, usuario, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, observaciones))
+                try:
+                    cursor.execute(
+                        "ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT"
+                    )
+                except Exception:
+                    pass
+                # Intentar agregar cajero_apertura si existe; si no, omitir y luego actualizar
+                try:
+                    cursor.execute(
+                        "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, cajero_apertura, hora_apertura, apertura_dt, fondo_inicial, descripcion_evento, observaciones_apertura, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'abierta')",
+                        (codigo_caja, disciplina, fecha, usuario_apertura, cajero_apertura, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, descripcion_evento, observaciones)
+                    )
+                except Exception:
+                    cursor.execute(
+                        "INSERT INTO caja_diaria (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, apertura_dt, fondo_inicial, descripcion_evento, observaciones_apertura, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'abierta')",
+                        (codigo_caja, disciplina, fecha, usuario_apertura, hora_apertura, f"{fecha} {hora_apertura}", fondo_val, descripcion_evento, observaciones)
+                    )
             caja_id = cursor.lastrowid
             conn.commit()
             conn.close()
@@ -1056,21 +1658,12 @@ class BarCanchaApp:
             self.menu_view.actualizar_caja_info()
             self.mostrar_pie_caja(self.menu_view)
             win.destroy()
-            # Ventana de éxito y botón para ir a stock
-            def ir_a_stock():
-                self.abrir_stock_window()
-                top.destroy()
-            top = tk.Toplevel(self.root)
-            top.title("Caja abierta")
-            ancho, alto = 350, 180
-            x = top.winfo_screenwidth() // 2 - ancho // 2
-            y = top.winfo_screenheight() // 2 - alto // 2
-            top.geometry(f"{ancho}x{alto}+{x}+{y}")
-            tk.Label(top, text="¡Caja abierta correctamente!", font=("Arial", 13, "bold"), fg="#388e3c").pack(pady=18)
-            btn_stock = tk.Button(top, text="Agregar stock/precios", command=ir_a_stock, bg="#1976d2", fg="white", font=("Arial", 12), width=24)
-            btn_stock.pack(pady=8)
-            btn_ok = tk.Button(top, text="Cerrar", command=top.destroy, font=("Arial", 12), width=12)
-            btn_ok.pack(pady=4)
+            # Ir a Ventas y abrir la ventana de stock/precios en modo modal
+            try:
+                self.mostrar_ventas()
+            except Exception:
+                pass
+            self.abrir_stock_window()
 
         btn_confirmar = tk.Button(win, text="Confirmar apertura", command=confirmar, bg="#4CAF50", fg="white", font=("Arial", 12), width=16)
         btn_confirmar.pack(pady=16)
@@ -1089,48 +1682,114 @@ class BarCanchaApp:
         stock_win.geometry(f"{ancho}x{alto}+{x}+{y}")
         stock_win.transient(self.root)
         stock_win.grab_set()
-        tk.Label(stock_win, text="Agregar stock/precios", font=("Arial", 15, "bold")).pack(pady=10)
+        header = tk.Frame(stock_win)
+        header.pack(fill=tk.X, pady=10)
+        tk.Label(header, text="Agregar stock/precios", font=("Arial", 15, "bold")).pack(side=tk.LEFT, padx=(0,8))
+        
+        def _refrescar_grid():
+            # Limpiar filas anteriores (mantener encabezados en row 0)
+            for w in frame.grid_slaves():
+                info = w.grid_info()
+                try:
+                    if int(info.get('row', 0)) > 0:
+                        w.destroy()
+                except Exception:
+                    pass
+            # Obtener productos nuevamente
+            conn = get_connection(); cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "SELECT p.id, p.nombre, p.stock_actual, p.visible, p.precio_venta, COALESCE(p.contabiliza_stock,1), c.descripcion as categoria FROM products p LEFT JOIN Categoria_Producto c ON p.categoria_id = c.id ORDER BY c.descripcion, p.nombre"
+                )
+            except Exception:
+                cursor.execute(
+                    "SELECT p.id, p.nombre, p.stock_actual, p.visible, p.precio_venta, 1 as contabiliza_stock, c.descripcion as categoria FROM products p LEFT JOIN Categoria_Producto c ON p.categoria_id = c.id ORDER BY c.descripcion, p.nombre"
+                )
+            productos2 = cursor.fetchall(); conn.close()
+            nonlocal_entries_stock.clear(); nonlocal_entries_precio.clear(); nonlocal_checks.clear(); nonlocal_checks_contab.clear()
+            last_categoria = None; row_idx = 1
+            for prod in productos2:
+                pid, nombre, stock, visible, precio, contabiliza, categoria = prod
+                if categoria != last_categoria:
+                    tk.Label(frame, text=f"{categoria if categoria else 'Sin categoría'}", font=("Arial", 11, "bold"), fg="#1976d2").grid(row=row_idx, column=0, columnspan=6, sticky="w", pady=(10,2))
+                    row_idx += 1
+                    last_categoria = categoria
+                tk.Label(frame, text=nombre, font=("Arial", 11)).grid(row=row_idx, column=0, sticky="w", padx=4)
+                var_stock = tk.StringVar(value=str(stock))
+                entry_stock = tk.Entry(frame, textvariable=var_stock, width=8, font=("Arial", 11))
+                entry_stock.grid(row=row_idx, column=1, padx=4)
+                nonlocal_entries_stock[pid] = var_stock
+                var_precio = tk.StringVar(value=str(precio))
+                entry_precio = tk.Entry(frame, textvariable=var_precio, width=8, font=("Arial", 11))
+                entry_precio.grid(row=row_idx, column=2, padx=4)
+                nonlocal_entries_precio[pid] = var_precio
+                # Ocultar: True => oculto (visible=0). Usar checkbox sencillo.
+                var_ocultar = tk.BooleanVar(value=(not bool(visible)))
+                tk.Checkbutton(frame, variable=var_ocultar).grid(row=row_idx, column=3)
+                nonlocal_checks[pid] = var_ocultar
+                var_ct = tk.BooleanVar(value=bool(contabiliza))
+                # Toggle habilitación del campo Stock según "Contabilizar Stock"
+                def _make_toggle(e_widget, v_stock, v_ct):
+                    def _t():
+                        try:
+                            if v_ct.get():
+                                e_widget.config(state='normal')
+                            else:
+                                v_stock.set('0')
+                                e_widget.config(state='disabled')
+                        except Exception:
+                            pass
+                    return _t
+                ct_btn = tk.Checkbutton(frame, variable=var_ct, command=_make_toggle(entry_stock, var_stock, var_ct))
+                ct_btn.grid(row=row_idx, column=4)
+                # Estado inicial del stock según contabiliza
+                try:
+                    if not bool(contabiliza):
+                        var_stock.set('0'); entry_stock.config(state='disabled')
+                except Exception:
+                    pass
+                nonlocal_checks_contab[pid] = var_ct
+                row_idx += 1
+
+        def _abrir_alta_desde_stock():
+            # Abrir el modal de alta reutilizando ProductosView, y refrescar la grilla al guardar
+            try:
+                from productos_view import ProductosView
+                # Crear un frame no visible dentro de esta ventana como master del modal
+                pv_hidden = ProductosView(stock_win)
+                try:
+                    pv_hidden.pack_forget()
+                except Exception:
+                    pass
+                # Reemplazar su método cargar_productos para que refresque esta grilla cuando el alta confirme
+                pv_hidden.cargar_productos = lambda: _refrescar_grid()
+                pv_hidden._abrir_agregar_producto()
+            except Exception as e:
+                messagebox.showerror("Productos", f"No se pudo abrir el alta de productos.\n{e}")
+        btn_nuevo = tk.Button(header, text="Agregar producto nuevo", command=_abrir_alta_desde_stock, bg="#1976d2", fg="white", font=("Arial", 11))
+        # Dejar un margen entre el botón y el borde derecho
+        btn_nuevo.pack(side=tk.RIGHT, padx=(0, 14))
         frame = tk.Frame(stock_win)
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         # Encabezados
-        headers = ["Producto", "Stock", "Precio", "Ocultar", ""]
+        headers = ["Producto", "Stock", "Precio Venta", "Ocultar", "Contabilizar Stock", ""]
         for i, h in enumerate(headers):
             tk.Label(frame, text=h, font=("Arial", 11, "bold")).grid(row=0, column=i, padx=6, pady=4)
-        # Obtener productos
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT p.id, p.nombre, p.stock_actual, p.visible, p.precio_venta, c.descripcion as categoria FROM products p LEFT JOIN Categoria_Producto c ON p.categoria_id = c.id ORDER BY c.descripcion, p.nombre"
-        )
-        productos = cursor.fetchall()
-        conn.close()
-        entries_stock = {}
-        entries_precio = {}
-        checks = {}
-        last_categoria = None
-        row_idx = 1
-        for prod in productos:
-            pid, nombre, stock, visible, precio, categoria = prod
-            if categoria != last_categoria:
-                tk.Label(frame, text=f"{categoria if categoria else 'Sin categoría'}", font=("Arial", 11, "bold"), fg="#1976d2").grid(row=row_idx, column=0, columnspan=5, sticky="w", pady=(10,2))
-                row_idx += 1
-                last_categoria = categoria
-            tk.Label(frame, text=nombre, font=("Arial", 11)).grid(row=row_idx, column=0, sticky="w", padx=4)
-            var_stock = tk.StringVar(value=str(stock))
-            entry_stock = tk.Entry(frame, textvariable=var_stock, width=8, font=("Arial", 11))
-            entry_stock.grid(row=row_idx, column=1, padx=4)
-            entries_stock[pid] = var_stock
-            var_precio = tk.StringVar(value=str(precio))
-            entry_precio = tk.Entry(frame, textvariable=var_precio, width=8, font=("Arial", 11))
-            entry_precio.grid(row=row_idx, column=2, padx=4)
-            entries_precio[pid] = var_precio
-            var_chk = tk.BooleanVar(value=bool(visible))
-            chk = tk.Checkbutton(frame, variable=var_chk)
-            chk.grid(row=row_idx, column=3)
-            checks[pid] = var_chk
-            row_idx += 1
+
+        # Estructuras mutables que usaremos en refrescos
+        nonlocal_entries_stock = {}
+        nonlocal_entries_precio = {}
+        nonlocal_checks = {}
+        nonlocal_checks_contab = {}
+        entries_stock = nonlocal_entries_stock
+        entries_precio = nonlocal_entries_precio
+        checks = nonlocal_checks
+        checks_contab = nonlocal_checks_contab
+
+        # Primera carga
+        _refrescar_grid()
         # Label info
-        label_info = tk.Label(stock_win, text="Si el Stock es 999, no se descuenta al realizar una venta.", font=("Arial", 10), fg="#555")
+        label_info = tk.Label(stock_win, text="Se descuenta stock sólo si 'Contabilizar Stock' está activado.", font=("Arial", 10), fg="#555")
         label_info.pack(pady=(0, 8))
         # Validación y guardado
         def guardar_stock():
@@ -1138,36 +1797,66 @@ class BarCanchaApp:
             for pid in entries_stock:
                 try:
                     val = int(entries_stock[pid].get())
-                    if val < 1:
+                    if val < 0:
                         raise ValueError
                 except Exception:
-                    messagebox.showerror("Stock", f"Stock inválido para el producto ID {pid}. Debe ser un número mayor a 0.")
+                    messagebox.showerror("Stock", f"Stock inválido para el producto ID {pid}. Debe ser un número >= 0.")
                     return
                 try:
                     precio_str = entries_precio[pid].get().replace(",", ".")
                     precio_val = float(precio_str)
-                    if precio_val <= 0 or precio_val > 999999:
+                    if precio_val < 0 or precio_val > 999999:
                         raise ValueError
                 except Exception:
                     messagebox.showerror("Precio", f"Precio inválido para el producto ID {pid}.")
                     return
-                visible = 1 if checks[pid].get() else 0
-                cambios.append((val, visible, precio_val, pid))
+                contab = 1 if checks_contab[pid].get() else 0
+                # Si no contabiliza, el stock debe guardarse como 0
+                val_to_save = 0 if contab == 0 else val
+                # visible = 0 si "ocultar" está activo; 1 si no
+                visible_final = 0 if checks[pid].get() else 1
+                cambios.append((val_to_save, visible_final, precio_val, contab, pid))
             conn = get_connection()
             cursor = conn.cursor()
-            for val, visible, precio, pid in cambios:
-                cursor.execute(
-                    "UPDATE products SET stock_actual=?, visible=?, precio_venta=? WHERE id=?",
-                    (val, visible, precio, pid),
-                )
+            for val, visible, precio, contab, pid in cambios:
+                try:
+                    cursor.execute(
+                        "UPDATE products SET stock_actual=?, visible=?, precio_venta=?, contabiliza_stock=? WHERE id=?",
+                        (val, visible, precio, contab, pid),
+                    )
+                except Exception:
+                    cursor.execute(
+                        "UPDATE products SET stock_actual=?, visible=?, precio_venta=? WHERE id=?",
+                        (val, visible, precio, pid),
+                    )
             conn.commit()
             conn.close()
             messagebox.showinfo("Stock", "Stock y precios actualizados correctamente.")
+            try:
+                stock_win.grab_release()
+            except Exception:
+                pass
             stock_win.destroy()
+            # Refrescar productos en Ventas si está abierta
+            try:
+                self.refrescar_ventas_productos()
+            except Exception:
+                pass
         btn_guardar = tk.Button(stock_win, text="Guardar Cambios", command=guardar_stock, bg="#388e3c", fg="white", font=("Arial", 12), width=18)
         btn_guardar.pack(pady=10)
-        btn_cancelar = tk.Button(stock_win, text="Cancelar", command=stock_win.destroy, font=("Arial", 12), width=12)
-        btn_cancelar.pack()
+        def cancelar_stock():
+            try:
+                stock_win.grab_release()
+            except Exception:
+                pass
+            stock_win.destroy()
+            try:
+                self.refrescar_ventas_productos()
+            except Exception:
+                pass
+        btn_cancelar = tk.Button(stock_win, text="Cancelar", command=cancelar_stock, font=("Arial", 12), width=12)
+        # Dejar margen inferior para que no quede pegado al borde
+        btn_cancelar.pack(pady=(0, 14))
 
     def cerrar_caja_window(self):
         """Abre la vista de detalle/cierre para la caja abierta."""
@@ -1229,13 +1918,14 @@ class BarCanchaApp:
                 pos_caja_id, caja_prefijo = (rowp[0], rowp[1]) if rowp else (None, 'Caj01')
             except Exception:
                 pos_caja_id, caja_prefijo = (None, 'Caj01')
-            # Disciplina por defecto si no hay selector en este flujo
-            disciplina = 'BAR'
+            # Disciplina por defecto tomando la elegida en sesión si existe
+            disciplina = getattr(self, 'disciplina_actual', None) or 'BAR'
             try:
-                c.execute("SELECT codigo FROM disciplinas ORDER BY codigo LIMIT 1")
-                rowd = c.fetchone()
-                if rowd and rowd[0]:
-                    disciplina = rowd[0]
+                if not disciplina:
+                    c.execute("SELECT codigo FROM disciplinas ORDER BY codigo LIMIT 1")
+                    rowd = c.fetchone()
+                    if rowd and rowd[0]:
+                        disciplina = rowd[0]
             except Exception:
                 pass
             base_code = f"{caja_prefijo}-{fecha.replace('-', '')}-{disciplina}"
@@ -1334,7 +2024,7 @@ class BarCanchaApp:
 
         try:
             ahora = datetime.datetime.now().strftime("%H:%M:%S")
-            usuario_cierre = getattr(self, "usuario_logueado", "") or ""
+            usuario_cierre = getattr(self, 'logged_user', None) or getattr(self, "usuario_logueado", "") or ""
             conn = get_connection(); c = conn.cursor()
             c.execute("""
                 UPDATE caja_diaria

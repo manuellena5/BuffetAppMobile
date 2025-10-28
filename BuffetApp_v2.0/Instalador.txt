@@ -1,1 +1,0 @@
-pyinstaller BuffetApp_v1.4\BuffetApp.spec --clean

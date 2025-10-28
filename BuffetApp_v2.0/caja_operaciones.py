@@ -15,6 +15,14 @@ from theme import (
     COLORS, FONTS, FINANCE_COLORS, format_currency,
     themed_button, apply_theme
 )
+# Importación opcional de sincronización en la nube
+try:
+    from cloud_sync import is_configured as cloud_is_configured, sync_caja as cloud_sync_caja
+except Exception:
+    def cloud_is_configured():
+        return False
+    def cloud_sync_caja(_caja_id: int):
+        raise RuntimeError("Sincronización en la nube no disponible")
 class DetalleCajaFrame(tk.Frame):
     def __init__(self, parent, caja_id, on_close=None, disable_movimientos=True):
         super().__init__(parent)
@@ -214,6 +222,19 @@ class DetalleCajaFrame(tk.Frame):
         )
         closure_frame.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(15, 0))
 
+        # Mostrar Disciplina en el panel de cierre
+        try:
+            self.disciplina_label = tk.Label(
+                closure_frame,
+                text="Disciplina: -",
+                bg=COLORS['surface'],
+                font=(FONTS['normal'][0], max(FONTS['normal'][1] - 1, 10)),
+                fg=COLORS.get('text', '#000')
+            )
+            self.disciplina_label.pack(anchor='w', pady=(8, 2))
+        except Exception:
+            pass
+
         # Título/observaciones de apertura (solo lectura)
         label_bigger_font = (FONTS['normal'][0], max(FONTS['normal'][1] - 1, 10))
         tk.Label(
@@ -267,10 +288,11 @@ class DetalleCajaFrame(tk.Frame):
 
         tk.Label(
             self.campos_cierre_frame,
-            text="👤 Usuario cierre:",
+            text="👤 Cajero cierre:",
             bg=COLORS['surface'],
             font=label_bigger_font,
         ).pack(anchor='w')
+        # Campo para ingresar el nombre del cajero humano que cierra
         self.usuario_entry = tk.Entry(
             self.campos_cierre_frame,
             font=(label_bigger_font[0], max(label_bigger_font[1] - 1, 9)),
@@ -514,7 +536,7 @@ class DetalleCajaFrame(tk.Frame):
                            cd.observaciones_apertura, cd.obs_cierre, cd.total_ventas,
                            cd.total_efectivo_teorico, cd.conteo_efectivo_final, cd.transferencias_final,
                            cd.ingresos, cd.retiros, cd.diferencia, cd.total_tickets, cd.estado,
-                           d.descripcion as nombre_disciplina
+                           d.descripcion as nombre_disciplina, cd.descripcion_evento
                     FROM caja_diaria cd
                     LEFT JOIN disciplinas d ON d.codigo = cd.disciplina
                     WHERE cd.id = ?
@@ -572,6 +594,7 @@ class DetalleCajaFrame(tk.Frame):
                 except Exception:
                     self.tickets_anulados = 0
                 self.nombre_disciplina = caja.get('nombre_disciplina') or ''
+                self.descripcion_evento = caja.get('descripcion_evento') or ''
                 # estado de la caja
                 self.estado = caja.get('estado') or ''
             except Exception:
@@ -625,8 +648,17 @@ class DetalleCajaFrame(tk.Frame):
             try:
                 self.obs_apertura_text.config(state='normal')
                 self.obs_apertura_text.delete('1.0', tk.END)
-                self.obs_apertura_text.insert('1.0', getattr(self, 'observaciones_apertura', ''))
+                texto_ap = getattr(self, 'observaciones_apertura', '')
+                if getattr(self, 'descripcion_evento', ''):
+                    texto_ap = f"Evento: {self.descripcion_evento}\n" + (texto_ap or '')
+                self.obs_apertura_text.insert('1.0', texto_ap)
                 self.obs_apertura_text.config(state='disabled')
+            except Exception:
+                pass
+            # Actualizar etiqueta de disciplina en el panel de cierre
+            try:
+                nombre = getattr(self, 'nombre_disciplina', '') or '-'
+                self.disciplina_label.config(text=f"Disciplina: {nombre}")
             except Exception:
                 pass
             # Listar movimientos y sus observaciones en el textbox correspondiente
@@ -905,11 +937,18 @@ class DetalleCajaFrame(tk.Frame):
         try:
             conteo = float(self.conteo_entry.get().replace(',', '.') or 0)
             transf = float(self.transf_entry.get().replace(',', '.') or 0)
-            usuario = self.usuario_entry.get().strip()
+            cajero = self.usuario_entry.get().strip()
+            usuario_sistema = getattr(getattr(self, 'controller', None), 'logged_user', None)
+            if not usuario_sistema:
+                try:
+                    # fallback: intentar desde master
+                    usuario_sistema = getattr(getattr(self, 'master', None), 'logged_user', None)
+                except Exception:
+                    usuario_sistema = None
             obs = self.obs_text.get("1.0", tk.END).strip()
             
-            if not usuario:
-                messagebox.showwarning("Validación", "Debe ingresar el usuario de cierre")
+            if not cajero:
+                messagebox.showwarning("Validación", "Debe ingresar el cajero de cierre")
                 return
                 
             if messagebox.askyesno("Confirmar", 
@@ -932,6 +971,7 @@ class DetalleCajaFrame(tk.Frame):
                         SET estado = 'cerrada',
                             hora_cierre = ?,
                             usuario_cierre = ?,
+                            cajero_cierre = ?,
                             conteo_efectivo_final = ?,
                             transferencias_final = ?,
                             diferencia = ?,
@@ -939,7 +979,8 @@ class DetalleCajaFrame(tk.Frame):
                         WHERE id = ?
                     """, (
                         now.strftime('%H:%M:%S'),
-                        usuario,
+                        usuario_sistema or '',
+                        cajero,
                         conteo,
                         transf,
                         diferencia,
@@ -1049,6 +1090,41 @@ class DetalleCajaFrame(tk.Frame):
                     except Exception:
                         pass
                     messagebox.showinfo("Éxito", "Caja cerrada correctamente")
+                    # Ofrecer sincronizar con la nube (Supabase) inmediatamente
+                    try:
+                        if cloud_is_configured():
+                            if messagebox.askyesno("Sincronización", "¿Deseás sincronizar esta caja con la nube ahora?"):
+                                top = self.winfo_toplevel()
+                                try:
+                                    top.config(cursor="watch")
+                                    top.update_idletasks()
+                                except Exception:
+                                    pass
+                                try:
+                                    res = cloud_sync_caja(self.caja_id)
+                                    msg = (
+                                        f"Caja sincronizada correctamente.\n"
+                                        f"Caja: {res.get('codigo_caja','?')}\n"
+                                        f"Tickets subidos: {res.get('tickets_subidos','?')}\n"
+                                        f"Ítems subidos: {res.get('items_subidos','?')}\n"
+                                        f"Productos nuevos: {res.get('new_products',0)}\n"
+                                        f"UUID: {res.get('uuid')}"
+                                    )
+                                    messagebox.showinfo("Nube", msg)
+                                except Exception as _e_sync:
+                                    messagebox.showerror("Nube", f"No se pudo sincronizar la caja: {_e_sync}")
+                                finally:
+                                    try:
+                                        top.config(cursor="")
+                                        top.update_idletasks()
+                                    except Exception:
+                                        pass
+                        else:
+                            # Si no está configurado, no interrumpir el flujo
+                            pass
+                    except Exception:
+                        # Evitar que un error en el flujo de sync rompa el cierre
+                        pass
                     # Notify caller that the caja was actually closed
                     if self.on_close:
                         try:
@@ -1111,7 +1187,7 @@ class DetalleCajaFrame(tk.Frame):
                 # Cabecera con columnas solicitadas
                 columns = [
                     'Codigo Caja', 'Fecha', 'Hora Apertura', 'Hora Cierre',
-                    'Usuario Apertura', 'Usuario Cierre', 'Disciplina',
+                    'Cajero Apertura', 'Cajero Cierre', 'Disciplina', 'Descripcion evento',
                     'Fondo inicial', 'Total ventas', 'Total efectivo teorico',
                     'Conteo efectivo final', 'Transferencias final', 'Ingresos', 'Retiros',
                     'Diferencia', 'Total tickets', 'Observacion apertura', 'Observacion cierre',
@@ -1166,9 +1242,10 @@ class DetalleCajaFrame(tk.Frame):
                     getattr(self, 'fecha', ''),
                     getattr(self, 'hora_apertura', ''),
                     getattr(self, 'hora_cierre', ''),
-                    getattr(self, 'usuario_apertura', ''),
-                    getattr(self, 'usuario_cierre', ''),
+                    getattr(self, 'cajero_apertura', getattr(self, 'usuario_apertura', '')),
+                    getattr(self, 'cajero_cierre', getattr(self, 'usuario_cierre', '')),
                     getattr(self, 'nombre_disciplina', ''),
+                    getattr(self, 'descripcion_evento', ''),
                     getattr(self, 'fondo_inicial', self.conteo_entry.get()),
                     getattr(self, 'total_ventas', ''),
                     getattr(self, 'total_teorico', ''),
@@ -1191,7 +1268,7 @@ class DetalleCajaFrame(tk.Frame):
             except Exception:
                 # fallback simple CSV-like TXT
                 with open(filename, 'w', encoding='utf-8') as f:
-                    cols = ['Codigo Caja','Fecha','Hora Apertura','Hora Cierre','Usuario Apertura','Usuario Cierre','Disciplina','Fondo inicial','Total ventas','Total efectivo teorico','Conteo efectivo final','Transferencias final','Ingresos','Retiros','Diferencia','Total tickets','Observacion apertura','Observacion cierre','Movimientos','Items vendidos']
+                    cols = ['Codigo Caja','Fecha','Hora Apertura','Hora Cierre','Cajero Apertura','Cajero Cierre','Disciplina','Descripcion evento','Fondo inicial','Total ventas','Total efectivo teorico','Conteo efectivo final','Transferencias final','Ingresos','Retiros','Diferencia','Total tickets','Observacion apertura','Observacion cierre','Movimientos','Items vendidos']
                     f.write(';'.join(cols) + '\n')
                     try:
                         mov = ' | '.join(self._movimientos_list)
@@ -1228,9 +1305,10 @@ class DetalleCajaFrame(tk.Frame):
                         str(getattr(self, 'fecha', '')),
                         str(getattr(self, 'hora_apertura', '')),
                         str(getattr(self, 'hora_cierre', '')),
-                        str(getattr(self, 'usuario_apertura', '')),
-                        str(getattr(self, 'usuario_cierre', '')),
+                        str(getattr(self, 'cajero_apertura', getattr(self, 'usuario_apertura', ''))),
+                        str(getattr(self, 'cajero_cierre', getattr(self, 'usuario_cierre', ''))),
                         str(getattr(self, 'nombre_disciplina', '')),
+                        str(getattr(self, 'descripcion_evento', '')),
                         str(getattr(self, 'fondo_inicial', self.conteo_entry.get())),
                         str(getattr(self, 'total_ventas', '')),
                         str(getattr(self, 'total_teorico', '')),
@@ -1453,10 +1531,16 @@ class DetalleCajaFrame(tk.Frame):
                 ticket.append("=" * 40)
                 ticket.append(f"Codigo caja: {getattr(self, 'codigo_caja', '')}")
                 ticket.append(f"Fecha apertura: {getattr(self, 'fecha', '')} {getattr(self, 'hora_apertura', '')}")
-                ticket.append(f"Usuario apertura: {getattr(self, 'usuario_apertura', '')}")
+                ticket.append(f"Cajero apertura: {getattr(self, 'cajero_apertura', getattr(self, 'usuario_apertura', ''))}")
                 ticket.append(f"Disciplina: {getattr(self, 'nombre_disciplina', '')}")
+                # Mostrar evento si existe
+                try:
+                    if getattr(self, 'descripcion_evento', ''):
+                        ticket.append(f"Evento: {self.descripcion_evento}")
+                except Exception:
+                    pass
                 ticket.append(f"Fecha cierre: {getattr(self, 'fecha', '')} {getattr(self, 'hora_cierre', '')}")
-                ticket.append(f"Usuario cierre: {getattr(self, 'usuario_cierre', '')}")
+                ticket.append(f"Cajero cierre: {getattr(self, 'cajero_cierre', getattr(self, 'usuario_cierre', ''))}")
                 ticket.append("-" * 40)
                 
                 # Totales por método de pago

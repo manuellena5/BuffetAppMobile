@@ -21,7 +21,8 @@ class CajaListadoView(tk.Frame):
 	COLUMNS = [
 		('codigo', 'Código'),
 		('fecha', 'Fecha'),
-		('usuario', 'Usuario Apertura'),
+		('descripcion_evento', 'Evento'),
+		('usuario', 'Cajero Apertura'),
 		('fondo_inicial', 'Fondo Inicial'),
 		('total_ventas', 'Total Ventas'),
 		('ventas_efectivo', 'Ventas Efectivo'),
@@ -95,7 +96,7 @@ class CajaListadoView(tk.Frame):
 			cur = conn.cursor()
 			# Base query
 			query = (
-				"SELECT cd.id, cd.codigo_caja, cd.fecha, cd.usuario_apertura, COALESCE(cd.fondo_inicial,0),"
+					"SELECT cd.id, cd.codigo_caja, cd.fecha, COALESCE(cd.cajero_apertura, cd.usuario_apertura) as cajero_apertura, COALESCE(cd.fondo_inicial,0),"
 				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_ventas,"
 				# Ventas en efectivo: siempre por método de pago efectivo
 				" (SELECT COALESCE(SUM(t.total_ticket),0) FROM tickets t JOIN ventas v ON v.id=t.venta_id LEFT JOIN metodos_pago mp ON mp.id=v.metodo_pago_id WHERE v.caja_id=cd.id AND t.status!='Anulado' AND (LOWER(mp.descripcion) LIKE 'efectivo%' OR LOWER(mp.descripcion)='efectivo')) as ventas_efectivo,"
@@ -119,10 +120,22 @@ class CajaListadoView(tk.Frame):
 				" COALESCE(cd.diferencia,0),"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status!='Anulado') as total_tickets,"
 				" (SELECT COUNT(*) FROM tickets t JOIN ventas v ON v.id=t.venta_id WHERE v.caja_id=cd.id AND t.status='Anulado') as tickets_anulados,"
-				" COALESCE(cd.estado, '')"
+				" COALESCE(cd.estado, ''), COALESCE(cd.descripcion_evento, '')"
 				" FROM caja_diaria cd"
 			)
 			params = []
+			# Si el rol es cajero, limitar a sus cajas
+			try:
+				if getattr(self, 'logged_role', '').lower() == 'cajero':
+					user = getattr(self, 'logged_user', None)
+					if user:
+						if 'WHERE' in query:
+							query += " AND cd.usuario_apertura = ?"
+						else:
+							query += " WHERE cd.usuario_apertura = ?"
+						params.append(user)
+			except Exception:
+				pass
 			if self._filter_date:
 				query += " WHERE cd.fecha = ? ORDER BY cd.fecha DESC, cd.codigo_caja DESC"
 				params.append(self._filter_date)
@@ -132,7 +145,7 @@ class CajaListadoView(tk.Frame):
 			rows = cur.fetchall()
 
 			for row in rows:
-				(cid, codigo, fecha, usuario, fondo_inicial, total_ventas, ventas_efectivo,  transfer, ingresos, retiros, conteo_final, diferencia_db,total_tickets, tickets_anulados, estado) = row
+				(cid, codigo, fecha, usuario, fondo_inicial, total_ventas, ventas_efectivo,  transfer, ingresos, retiros, conteo_final, diferencia_db,total_tickets, tickets_anulados, estado, descripcion_evento) = row
 
 				# Si diferencia guardada es NULL => calcular por la fórmula del negocio
 				if diferencia_db is None:
@@ -148,7 +161,7 @@ class CajaListadoView(tk.Frame):
 					diferencia = diferencia_db or 0
 
 				# Build visible values (omit internal id, append estado)
-				values = [codigo, fecha, usuario, fondo_inicial, total_ventas, ventas_efectivo,  transfer, ingresos, retiros, conteo_final, diferencia,total_tickets, tickets_anulados, estado]
+				values = [codigo, fecha, descripcion_evento, usuario, fondo_inicial, total_ventas, ventas_efectivo,  transfer, ingresos, retiros, conteo_final, diferencia,total_tickets, tickets_anulados, estado]
 				tags = ()
 				if str(estado).lower() == 'abierta':
 					tags = ('abierta',)

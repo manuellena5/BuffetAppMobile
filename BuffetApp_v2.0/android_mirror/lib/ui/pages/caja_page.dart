@@ -17,7 +17,7 @@ class _CajaPageState extends State<CajaPage> {
   Map<String, dynamic>? _resumen;
   bool _loading = true;
 
-  final _usuario = TextEditingController();
+  final _usuario = TextEditingController(text: '');
   final _efectivo = TextEditingController(text: '');
   final _transfer = TextEditingController(text: '');
   final _obs = TextEditingController();
@@ -67,10 +67,10 @@ class _CajaPageState extends State<CajaPage> {
           padding: const EdgeInsets.all(16),
           children: [
       Text(
-        '${_caja!['codigo_caja']} • Disciplina: ${_caja!['disciplina']} • Usuario: ${_caja!['usuario_apertura']}'),
+        '${_caja!['codigo_caja']} • Disciplina: ${_caja!['disciplina']} • Cajero: ${_caja!['cajero_apertura'] ?? ''}'),
             const SizedBox(height: 8),
-            Text(
-                'Fondo inicial: ${formatCurrency(_caja!['fondo_inicial'] as num)}'),
+      Text(
+        'Fondo inicial: ${formatCurrency(_caja!['fondo_inicial'] as num)}'),
             const Divider(height: 24),
       Text('Totales', style: Theme.of(context).textTheme.titleMedium),
       Text('Total ventas: ${formatCurrency(resumen['total'] as num)}',
@@ -113,9 +113,9 @@ class _CajaPageState extends State<CajaPage> {
             Text('Cierre de caja',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 6),
-            TextField(
-                controller: _usuario,
-                decoration: const InputDecoration(labelText: 'Usuario cierre')),
+      TextField(
+        controller: _usuario,
+        decoration: const InputDecoration(labelText: 'Cajero de cierre')),
             const SizedBox(height: 6),
             TextField(
                 controller: _efectivo,
@@ -193,10 +193,21 @@ class _CajaPageState extends State<CajaPage> {
                   observacion:
                       _obs.text.trim().isEmpty ? null : _obs.text.trim(),
                 );
-                // Intentar imprimir el cierre/resumen
+                // Intentar imprimir el cierre/resumen (USB por defecto, mostrar mensaje si no se pudo)
                 try {
-                  await PrintService().printCajaResumen(_caja!['id'] as int);
-                } catch (_) {}
+                  final ok = await PrintService().printCajaResumenUsbOrPdf(_caja!['id'] as int);
+                  if (!ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('No se pudo imprimir por USB. Se abrió PDF como alternativa.')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al imprimir: $e')),
+                    );
+                  }
+                }
                 // Export automático y opción de compartir
                 try {
                   final file = await ExportService()
@@ -225,7 +236,7 @@ class _CajaPageState extends State<CajaPage> {
                 } catch (_) {
                   // Si falla export/compartir no bloqueamos el cierre
                 }
-                if (!mounted) return;
+                if (!context.mounted) return;
                 nav.pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const HomePage()),
                   (route) => false,

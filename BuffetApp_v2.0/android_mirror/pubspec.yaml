@@ -1,7 +1,7 @@
 name: buffet_mirror
 description: App espejo Android (offline-first) para BuffetApp.
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.4+5
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -14,26 +14,29 @@ dependencies:
   path: ^1.9.0
   uuid: ^4.5.1
   provider: ^6.1.2
-  share_plus: ^10.0.2
-  intl: ^0.19.0
+  # share_plus v12 requiere AGP/Kotlin muy recientes. Fijamos a 11.x para compatibilidad con el proyecto actual.
+  share_plus: ^11.1.0
+  intl: ^0.20.2
   # Impresión PREVIEW (luego podemos agregar printing/pdf si lo preferís)
   printing: ^5.13.3
   pdf: ^3.11.1
   shared_preferences: ^2.3.2
-  package_info_plus: ^8.0.2
+  package_info_plus: ^8.3.1
   image_picker: ^1.1.2
+  image: ^4.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
     - assets/sql/
     - assets/sync/
+    - assets/icons/
 
 flutter_launcher_icons:
   android: true

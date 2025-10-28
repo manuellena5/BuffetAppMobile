@@ -3,6 +3,9 @@ import '../../services/caja_service.dart';
 import '../../services/export_service.dart';
 import '../../services/print_service.dart';
 import '../format.dart';
+import 'package:printing/printing.dart';
+import '../../services/usb_printer_service.dart';
+import 'printer_test_page.dart';
 
 class CajaListPage extends StatefulWidget {
   const CajaListPage({super.key});
@@ -65,7 +68,7 @@ class _CajaListPageState extends State<CajaListPage> {
                             MaterialPageRoute(
                                 builder: (_) =>
                                     CajaResumenPage(cajaId: c['id'] as int)));
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         await _load();
                       },
                     ),
@@ -120,34 +123,46 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
     final resumen = _resumen!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Resumen de caja'),
+          title: const Text('Caja'),
         actions: [
+          // Imprimir por USB (por defecto)
           IconButton(
-            tooltip: 'Imprimir',
+            tooltip: 'Imprimir en térmica (USB)',
             icon: const Icon(Icons.print),
             onPressed: () async {
-              // Capturar messenger antes de awaits
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await PrintService().printCajaResumen(_caja!['id'] as int);
-              } catch (e) {
-                if (!mounted) return;
-                messenger.showSnackBar(
-                    const SnackBar(content: Text('No se pudo imprimir')));
-              }
+              await _printCajaConDecision();
             },
           ),
+          // Exportar JSON (ya existente)
           IconButton(
-            tooltip: 'Exportar/Compartir',
+            tooltip: 'Exportar/Compartir (JSON)',
             icon: const Icon(Icons.ios_share),
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
               try {
                 await ExportService().shareCajaFile(_caja!['id'] as int);
               } catch (e) {
-                if (!mounted) return;
+                if (!context.mounted) return;
                 messenger.showSnackBar(const SnackBar(
                     content: Text('No se pudo exportar la caja')));
+              }
+            },
+          ),
+          // Exportar a PDF (visualización actual)
+          IconButton(
+            tooltip: 'Exportar a PDF',
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () async {
+              try {
+                await Printing.layoutPdf(
+                  onLayout: (f) => PrintService().buildCajaResumenPdf(_caja!['id'] as int),
+                  name: 'cierre_caja_${_caja!['id']}.pdf',
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('No se pudo generar el PDF: $e')),
+                );
               }
             },
           ),
@@ -182,9 +197,11 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
               Text('Disciplina: ${_caja!['disciplina']}'),
             Text('Fondo inicial: ${formatCurrency((_caja!['fondo_inicial'] as num?) ?? 0)}'),
             const SizedBox(height: 8),
+            if ((_caja!['descripcion_evento'] as String?)?.isNotEmpty == true)
+              Text('Descripción del evento: ${_caja!['descripcion_evento']}'),
             if ((_caja!['observaciones_apertura'] as String?)?.isNotEmpty ==
                 true)
-              Text('Descripción: ${_caja!['observaciones_apertura']}'),
+              Text('Obs. apertura: ${_caja!['observaciones_apertura']}'),
             if ((_caja!['obs_cierre'] as String?)?.isNotEmpty == true)
               Text('Obs. cierre: ${_caja!['obs_cierre']}'),
             if ((_caja!['diferencia'] as num?) != null)
@@ -225,6 +242,65 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
       }()),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _printCajaConDecision() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final usb = UsbPrinterService();
+    try {
+      final connected = await usb.isConnected();
+      if (!connected) {
+        if (!context.mounted) return;
+        await _mostrarDialogoImpresionFallback();
+        return;
+      }
+      final ok = await PrintService()
+          .printCajaResumenUsbOnly(_caja!['id'] as int);
+      if (!ok) {
+        if (!context.mounted) return;
+        await _mostrarDialogoImpresionFallback();
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error al imprimir: $e')),
+      );
+    }
+  }
+
+  Future<void> _mostrarDialogoImpresionFallback() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Impresora no disponible'),
+        content: const Text(
+            '¿Querés ir a Configurar impresora o ver Previsualización PDF?'),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Printing.layoutPdf(
+                onLayout: (f) => PrintService()
+                    .buildCajaResumenPdf(_caja!['id'] as int),
+                name: 'cierre_caja_${_caja!['id']}.pdf',
+              );
+            },
+            child: const Text('Previsualización PDF'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const PrinterTestPage()),
+              );
+            },
+            child: const Text('Config impresora'),
+          ),
+        ],
       ),
     );
   }

@@ -12,7 +12,7 @@ class CajaOpenPage extends StatefulWidget {
 
 class _CajaOpenPageState extends State<CajaOpenPage> {
   final _form = GlobalKey<FormState>();
-  final _usuario = TextEditingController();
+  final _usuario = TextEditingController(text: '');
   final _fondo = TextEditingController(text: '');
   final _desc = TextEditingController();
   final _obs = TextEditingController();
@@ -110,14 +110,16 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         // Ir a Productos
         // Importación perezosa para evitar dependencias circulares
         // ignore: use_build_context_synchronously
+    if (!context.mounted) return;
     Navigator.pushReplacement(
       context, MaterialPageRoute(builder: (_) => const ProductsPage()));
       } else {
+        if (!context.mounted) return;
         Navigator.pushReplacement(
             context, MaterialPageRoute(builder: (_) => const PosMainPage()));
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       final msg = e.toString();
       String uiMsg = 'No se pudo abrir la caja.';
       if (msg.contains('UNIQUE') && msg.contains('codigo_caja')) {
@@ -150,9 +152,9 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
           child: ListView(
             children: [
               TextFormField(
-                controller: _usuario,
-                decoration:
-                    const InputDecoration(labelText: 'Usuario apertura'),
+        controller: _usuario,
+        decoration:
+          const InputDecoration(labelText: 'Cajero apertura'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Requerido' : null,
               ),
@@ -173,7 +175,8 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                   final items = snap.data ?? _disciplinas;
                   final value = _disciplina ?? (items.isNotEmpty ? items.first : null);
                   return DropdownButtonFormField<String>(
-                    value: value,
+                    key: ValueKey('disciplina_${items.length}_${value ?? ''}'),
+                    initialValue: value,
                     items: [
                       for (final d in items)
                         DropdownMenuItem(value: d, child: Text(d))
@@ -190,7 +193,8 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                   final items = snap.data ?? _puntos;
                   final value = _puntoVentaCodigo ?? (items.isNotEmpty ? items.first['codigo'] as String : null);
                   return DropdownButtonFormField<String>(
-                    value: value,
+                    key: ValueKey('pv_${items.length}_${value ?? ''}'),
+                    initialValue: value,
                     items: [
                       for (final e in items)
                         DropdownMenuItem(

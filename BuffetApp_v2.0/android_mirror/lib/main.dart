@@ -6,10 +6,15 @@ import 'ui/pages/home_page.dart';
 import 'ui/state/cart_model.dart';
 import 'services/caja_service.dart';
 import 'ui/state/app_settings.dart';
+import 'services/usb_printer_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_AR', null);
+  // Autoconectar impresora térmica USB si hay una guardada
+  try {
+    await UsbPrinterService().autoConnectSaved();
+  } catch (_) {}
   runApp(const App());
 }
 

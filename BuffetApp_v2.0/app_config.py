@@ -21,6 +21,9 @@ DEFAULTS: Dict[str, Any] = {
     "fuente_boton": "Arial",
     "lenguaje": "es",
     "printer_name": None,
+    # Supabase (opcional): si se setean acá, la app los usa en vez de variables de entorno
+    "supabase_url": "https://mncemnlhtgvtubtkvivd.supabase.co",
+    "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uY2VtbmxodGd2dHVidGt2aXZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwNTk5NzIsImV4cCI6MjA3NjYzNTk3Mn0.CSwnyynuvRGdAusGLYCA0f_ws8LRoYiG9pe4e5n6dpA",
 }
 
 
@@ -106,3 +109,30 @@ def get_printer_name() -> str | None:
 def set_printer_name(name: str | None) -> None:
     """Guarda el nombre de la impresora seleccionada. Pasar None para limpiar y usar la predeterminada del sistema."""
     save_config({"printer_name": name})
+
+
+# -------- Supabase (URL y Anon Key) ---------
+def get_supabase_url() -> str | None:
+    """Devuelve la URL de Supabase (https://xxxxx.supabase.co) si fue configurada en config.json, o None."""
+    url = get_config().get("supabase_url")
+    if url:
+        return str(url).strip()
+    return None
+
+
+def set_supabase_url(url: str | None) -> None:
+    url = (url or "").strip() or None
+    save_config({"supabase_url": url})
+
+
+def get_supabase_anon_key() -> str | None:
+    """Devuelve la anon key si fue configurada en config.json, o None."""
+    key = get_config().get("supabase_anon_key")
+    if key:
+        return str(key).strip()
+    return None
+
+
+def set_supabase_anon_key(key: str | None) -> None:
+    key = (key or "").strip() or None
+    save_config({"supabase_anon_key": key})

@@ -41,15 +41,15 @@ class AppDatabase {
             'FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id)'
             ')');
 
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS caja_diaria ('
-            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-            'codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, '
-            'usuario_apertura TEXT, hora_apertura TEXT, apertura_dt TEXT, '
-            'fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, '
-            'retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, '
-      'hora_cierre TEXT, cierre_dt TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT'
-            ')');
+    await db.execute(
+    'CREATE TABLE IF NOT EXISTS caja_diaria ('
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+    'codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, '
+    'usuario_apertura TEXT, cajero_apertura TEXT, hora_apertura TEXT, apertura_dt TEXT, '
+    'fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, '
+    'retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, '
+  'hora_cierre TEXT, cierre_dt TEXT, usuario_cierre TEXT, cajero_cierre TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT'
+    ')');
 
         await db.execute(
             'CREATE TABLE IF NOT EXISTS ventas ('
@@ -334,6 +334,23 @@ class AppDatabase {
         final hasDescEvento = infoCaja.any((c) => (c['name'] as String?) == 'descripcion_evento');
         if (!hasDescEvento) {
           await db.execute('ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT');
+        }
+        // Migración: agregar cajero_apertura/cajero_cierre si faltan
+        final hasCajeroA = infoCaja.any((c) => (c['name'] as String?) == 'cajero_apertura');
+        if (!hasCajeroA) {
+          await db.execute('ALTER TABLE caja_diaria ADD COLUMN cajero_apertura TEXT');
+          // Inicializar con usuario_apertura si existe; sino 'admin'
+          await db.rawUpdate("UPDATE caja_diaria SET cajero_apertura = COALESCE(usuario_apertura, 'admin')");
+        }
+        final hasCajeroC = infoCaja.any((c) => (c['name'] as String?) == 'cajero_cierre');
+        if (!hasCajeroC) {
+          await db.execute('ALTER TABLE caja_diaria ADD COLUMN cajero_cierre TEXT');
+        }
+        // Migración: agregar usuario_cierre si falta
+        final hasUsuarioCierre = infoCaja.any((c) => (c['name'] as String?) == 'usuario_cierre');
+        if (!hasUsuarioCierre) {
+          await db.execute('ALTER TABLE caja_diaria ADD COLUMN usuario_cierre TEXT');
+          // Inicializar en NULL; se completará al cerrar cajas a partir de ahora
         }
 
         // Migración: agregar columna orden_visual si falta y setear orden inicial

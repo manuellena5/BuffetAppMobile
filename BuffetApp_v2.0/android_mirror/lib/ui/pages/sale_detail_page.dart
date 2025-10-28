@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../data/dao/db.dart';
 import '../format.dart';
 import '../../services/print_service.dart';
+import '../../services/usb_printer_service.dart';
 
 class SaleDetailPage extends StatefulWidget {
   final int ticketId;
@@ -47,7 +48,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
     final rawStatus = (t['status'] as String?) ?? 'No Impreso';
     final norm = rawStatus.toLowerCase();
     final isAnulado = norm == 'anulado';
-    final isNoImpreso = norm == 'no impreso';
+  final isNoImpreso = norm == 'no impreso';
     final displayStatus =
         isAnulado ? 'Anulado' : (isNoImpreso ? 'No Impreso' : 'Impreso');
     return Scaffold(
@@ -119,7 +120,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
             const Divider(height: 1),
             const SizedBox(height: 12),
             Row(children: [
-              if (isNoImpreso)
+              if (!isAnulado)
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
@@ -140,22 +141,47 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                       );
                       if (ok != true) return;
                       final db = await AppDatabase.instance();
-                      await db.update('tickets', {'status': 'Impreso'},
-                          where: 'id=?', whereArgs: [t['id']]);
+                      if (isNoImpreso) {
+                        await db.update('tickets', {'status': 'Impreso'},
+                            where: 'id=?', whereArgs: [t['id']]);
+                      }
                       try {
-                        await PrintService().printTicket(t['id'] as int);
-                      } catch (_) {}
+                        // Validar USB conectada y sólo imprimir por USB
+                        final connected = await UsbPrinterService().isConnected();
+                        if (!connected) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('No hay impresora USB conectada.')),
+                            );
+                          }
+                          return;
+                        }
+                        final usb = await PrintService().printTicketUsbOnly(t['id'] as int);
+                        if (context.mounted && !usb) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('No se pudo imprimir por USB.')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error al imprimir: $e')),
+                          );
+                        }
+                      }
                       if (context.mounted) {
                         Navigator.pop(context, true);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Ticket marcado como Impreso')));
+                        if (isNoImpreso) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Ticket marcado como Impreso')));
+                        }
                       }
                     },
                     child: const Text('REIMPRIMIR'),
                   ),
                 ),
-              if (isNoImpreso) const SizedBox(width: 12),
+              if (!isAnulado) const SizedBox(width: 12),
               if (!isAnulado)
                 Expanded(
                   child: OutlinedButton(

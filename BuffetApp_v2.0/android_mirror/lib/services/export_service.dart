@@ -100,7 +100,13 @@ class ExportService {
   Future<void> shareCajaFile(int cajaId) async {
     final file = await exportCajaToJson(cajaId);
   final base = p.basename(file.path);
-  await Share.shareXFiles([XFile(file.path)], subject: 'Caja $base');
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [XFile(file.path)],
+      subject: 'Caja $base',
+      title: 'Caja $base',
+    ),
+  );
   }
 
   Future<void> _pruneOldBackups(Directory exportDir) async {

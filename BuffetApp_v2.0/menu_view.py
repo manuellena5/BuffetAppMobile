@@ -55,25 +55,25 @@ class MenuView(tk.Frame):
         grid.grid_columnconfigure(0, weight=1)
         grid.grid_columnconfigure(1, weight=1)
 
-        # Columna izquierda: VENTAS / HISTORIAL / PRODUCTOS
+        # Columna izquierda: VENTAS / TICKETS (hoy) / PRODUCTOS
         left = tk.Frame(grid)
         left.grid(row=0, column=0, sticky='n', padx=(0, 8))
         card_ventas, self.btn_ventas = make_card_button(left, "🧾", "VENTAS", self._on_ventas)
         card_ventas.grid(row=0, column=0, sticky='n', pady=(0, 8))
-        card_historial, self.btn_historial = make_card_button(left, "📚", "HISTORIAL", self._on_historial)
-        card_historial.grid(row=1, column=0, sticky='n', pady=(0, 8))
+        card_tickets, self.btn_tickets = make_card_button(left, "🎟️", "TICKETS", self._on_tickets_hoy)
+        card_tickets.grid(row=1, column=0, sticky='n', pady=(0, 8))
         card_productos, self.btn_productos = make_card_button(left, "🧃", "PRODUCTOS", self._on_productos)
-        card_productos.grid(row=2, column=0, sticky='n')
+        card_productos.grid(row=2, column=0, sticky='n', pady=(0, 8))
 
-        # Columna derecha: ABRIR CAJA / CERRAR CAJA / LISTADO DE CAJAS
+        # Columna derecha: ABRIR CAJA / CERRAR CAJA / CONFIGURACION
         right = tk.Frame(grid)
         right.grid(row=0, column=1, sticky='n', padx=(8, 0))
         card_abrir, self.btn_abrir = make_card_button(right, "📥", "ABRIR CAJA", self.on_abrir_caja)
         card_abrir.grid(row=0, column=0, sticky='n', pady=(0, 8))
         card_cerrar, self.btn_cerrar = make_card_button(right, "📤", "CERRAR CAJA", self.on_cerrar_caja)
         card_cerrar.grid(row=1, column=0, sticky='n', pady=(0, 8))
-        card_listado, self.btn_listado = make_card_button(right, "📋", "LISTADO DE CAJAS", self._on_listado_cajas)
-        card_listado.grid(row=2, column=0, sticky='n')
+        card_config, self.btn_config = make_card_button(right, "⚙️", "CONFIGURACION", self._on_configuracion)
+        card_config.grid(row=2, column=0, sticky='n')
 
         # Estado inicial de botones
         self.actualizar_caja_info()
@@ -83,17 +83,19 @@ class MenuView(tk.Frame):
         if self.controller and hasattr(self.controller, 'mostrar_ventas'):
             self.controller.mostrar_ventas()
 
-    def _on_listado_cajas(self):
-        if self.controller and hasattr(self.controller, 'mostrar_listado_cajas'):
-            self.controller.mostrar_listado_cajas()
+    def _on_tickets_hoy(self):
+        if self.controller and hasattr(self.controller, 'mostrar_tickets_hoy'):
+            self.controller.mostrar_tickets_hoy()
 
     def _on_productos(self):
         if self.controller and hasattr(self.controller, 'mostrar_productos'):
             self.controller.mostrar_productos()
 
-    def _on_historial(self):
-        if self.controller and hasattr(self.controller, 'mostrar_historial'):
-            self.controller.mostrar_historial()
+    # Se elimina botón Reportes de la vista principal
+
+    def _on_configuracion(self):
+        if self.controller and hasattr(self.controller, 'mostrar_configuracion'):
+            self.controller.mostrar_configuracion()
 
     def actualizar_caja_info(self):
         """Actualiza encabezado y habilita/deshabilita acciones según estado de caja."""
