@@ -47,7 +47,7 @@ class AppDatabase {
     'codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, '
     'usuario_apertura TEXT, cajero_apertura TEXT, hora_apertura TEXT, apertura_dt TEXT, '
     'fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, '
-    'retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, '
+    'retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, tickets_anulados INTEGER, entradas INTEGER, '
   'hora_cierre TEXT, cierre_dt TEXT, usuario_cierre TEXT, cajero_cierre TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT'
     ')');
 
@@ -118,6 +118,31 @@ class AppDatabase {
         await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_mov_caja_id ON caja_movimiento(caja_id)');
 
+    // Outbox de sincronización con Supabase
+    await db.execute(
+      "CREATE TABLE IF NOT EXISTS sync_outbox ("
+      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+      "tipo TEXT NOT NULL, "
+      "ref TEXT NOT NULL, "
+      "payload TEXT NOT NULL, "
+      "estado TEXT NOT NULL DEFAULT 'pending', "
+      "reintentos INTEGER NOT NULL DEFAULT 0, "
+      "last_error TEXT, "
+      "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+      ")");
+    // Índice único para idempotencia por clave natural
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
+
+    // Log local de errores de sincronización/auditoría
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS sync_error_log ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'scope TEXT, '
+      'message TEXT, '
+      'payload TEXT, '
+      'created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
+      ')');
+
         // Semillas iniciales en creación (única vez)
         await db.insert('metodos_pago',
             {'id': 1, 'descripcion': 'Efectivo'},
@@ -126,31 +151,12 @@ class AppDatabase {
             {'id': 2, 'descripcion': 'Transferencia'},
             conflictAlgorithm: ConflictAlgorithm.ignore);
 
-        await db.insert('Categoria_Producto',
-            {'id': 1, 'descripcion': 'Comida'},
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-        await db.insert('Categoria_Producto',
-            {'id': 2, 'descripcion': 'Bebida'},
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-        await db.insert('Categoria_Producto',
-            {'id': 3, 'descripcion': 'Otros'},
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-
-        // Productos precargados (DONA/HIEL/PAPF)
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'DONA',
-            'nombre': 'Donacion',
-            'precio_venta': 0,
-            'stock_actual': 999,
-            'stock_minimo': 3,
-            'orden_visual': 13,
-            'categoria_id': 3,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+    await db.insert('Categoria_Producto',
+      {'id': 1, 'descripcion': 'Comida'},
+      conflictAlgorithm: ConflictAlgorithm.ignore);
+    await db.insert('Categoria_Producto',
+      {'id': 2, 'descripcion': 'Bebidas'},
+      conflictAlgorithm: ConflictAlgorithm.ignore);
         await db.insert(
           'products',
           {
@@ -328,12 +334,29 @@ class AppDatabase {
       },
       onOpen: (db) async {
         await db.execute('PRAGMA foreign_keys=ON');
+    // Asegurar categorías base (evita errores FK en tickets para categoria_id=2)
+    await db.insert('Categoria_Producto',
+      {'id': 1, 'descripcion': 'Comida'},
+      conflictAlgorithm: ConflictAlgorithm.ignore);
+    await db.insert('Categoria_Producto',
+      {'id': 2, 'descripcion': 'Bebidas'},
+      conflictAlgorithm: ConflictAlgorithm.ignore);
 
         // Migración: agregar columna descripcion_evento si falta
         final infoCaja = await db.rawQuery("PRAGMA table_info(caja_diaria)");
         final hasDescEvento = infoCaja.any((c) => (c['name'] as String?) == 'descripcion_evento');
         if (!hasDescEvento) {
           await db.execute('ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT');
+        }
+        // Migración: agregar tickets_anulados si falta
+        final hasTicketsAnulados = infoCaja.any((c) => (c['name'] as String?) == 'tickets_anulados');
+        if (!hasTicketsAnulados) {
+          await db.execute('ALTER TABLE caja_diaria ADD COLUMN tickets_anulados INTEGER');
+        }
+        // Migración: agregar entradas si falta
+        final hasEntradas = infoCaja.any((c) => (c['name'] as String?) == 'entradas');
+        if (!hasEntradas) {
+          await db.execute('ALTER TABLE caja_diaria ADD COLUMN entradas INTEGER');
         }
         // Migración: agregar cajero_apertura/cajero_cierre si faltan
         final hasCajeroA = infoCaja.any((c) => (c['name'] as String?) == 'cajero_apertura');
@@ -385,6 +408,33 @@ class AppDatabase {
 
         // Asegurar catálogos también en onOpen para instalaciones previas
         await _ensureCatalogos(db);
+
+        // Asegurar tabla outbox en instalaciones previas
+    await db.execute(
+      "CREATE TABLE IF NOT EXISTS sync_outbox ("
+      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+      "tipo TEXT NOT NULL, "
+      "ref TEXT NOT NULL, "
+      "payload TEXT NOT NULL, "
+      "estado TEXT NOT NULL DEFAULT 'pending', "
+      "reintentos INTEGER NOT NULL DEFAULT 0, "
+      "last_error TEXT, "
+      "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+      ")");
+    // Deduplicar (mantener última fila por tipo/ref) antes de aplicar índice único
+    await db.rawDelete(
+      'DELETE FROM sync_outbox WHERE id NOT IN (SELECT MAX(id) FROM sync_outbox GROUP BY tipo, ref)'
+    );
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
+
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS sync_error_log ('
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'scope TEXT, '
+      'message TEXT, '
+      'payload TEXT, '
+      'created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
+      ')');
       },
     );
 

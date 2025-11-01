@@ -1,4 +1,5 @@
 import '../data/dao/db.dart';
+import 'supabase_sync_service.dart';
 
 class CajaService {
   Future<List<Map<String, dynamic>>> listarPuntosVenta() async {
@@ -72,7 +73,7 @@ class CajaService {
         codigo = '$baseCodigo-${maxSufijo + 1}';
       }
     }
-    return await db.insert('caja_diaria', {
+    final newId = await db.insert('caja_diaria', {
       'codigo_caja': codigo,
       'disciplina': disciplina,
       'fecha': fecha,
@@ -90,7 +91,26 @@ class CajaService {
       'ingresos': 0,
       'retiros': 0,
       'total_tickets': 0,
+      'tickets_anulados': 0,
+      'entradas': null,
     });
+    // Encolar apertura para sync (idempotente por codigo_caja)
+    await SupaSyncService.I.enqueueCaja({
+      'codigo_caja': codigo,
+      'caja_local_id': newId,
+      'disciplina': disciplina,
+      'fecha_apertura': '$fecha $hora',
+      'usuario_apertura': 'admin',
+      'cajero_apertura': usuario,
+      'fondo_inicial': fondoInicial,
+      'total_efectivo_teorico': fondoInicial, // ventas en efectivo = 0 al abrir
+      'estado': 'ABIERTA',
+      'descripcion_evento': descripcionEvento,
+      'observaciones_apertura': (observacion ?? ''),
+      'tickets': 0,
+      'tickets_anulados': 0,
+    });
+    return newId;
   }
 
   Future<void> cerrarCaja(
@@ -98,7 +118,8 @@ class CajaService {
       required double efectivoEnCaja,
       required double transferencias,
     required String usuarioCierre,
-      String? observacion}) async {
+      String? observacion,
+      int? entradas}) async {
     final db = await AppDatabase.instance();
     final now = DateTime.now();
     final hora =
@@ -111,9 +132,26 @@ class CajaService {
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
     ''', [cajaId]);
     final totalVentas = (tot.first['total'] as num?)?.toDouble() ?? 0.0;
+    // Ventas por efectivo (para total_efectivo_teorico)
+    final tef = await db.rawQuery('''
+      SELECT COALESCE(SUM(t.total_ticket),0) as total
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id
+      JOIN metodos_pago m ON m.id = v.metodo_pago_id
+      WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado' AND LOWER(m.descripcion) = 'efectivo'
+    ''', [cajaId]);
+    final totalEfectivoVentas = (tef.first['total'] as num?)?.toDouble() ?? 0.0;
+    // Tickets emitidos (sin contar anulados)
+    final tk = await db.rawQuery('''
+      SELECT COALESCE(COUNT(1),0) as c
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id
+      WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
+    ''', [cajaId]);
+    final totalTicketsEmitidos = (tk.first['c'] as num?)?.toInt() ?? 0;
     // Fórmula pedida: Total Ventas = (Efectivo - Fondo Inicial) + Transferencias
     // => Diferencia = ((Efectivo - Fondo) + Transferencias) - TotalVentas
-    final cajaRow = await db.query('caja_diaria', columns: ['fondo_inicial'], where: 'id=?', whereArgs: [cajaId], limit: 1);
+  final cajaRow = await db.query('caja_diaria', columns: ['fondo_inicial','codigo_caja','fecha','apertura_dt','disciplina','descripcion_evento','observaciones_apertura'], where: 'id=?', whereArgs: [cajaId], limit: 1);
     final fondo = ((cajaRow.first['fondo_inicial'] as num?) ?? 0).toDouble();
     final totalPorFormula = (efectivoEnCaja - fondo) + transferencias;
     final diferencia = totalPorFormula - totalVentas;
@@ -122,15 +160,53 @@ class CajaService {
         {
           'estado': 'CERRADA',
           'hora_cierre': hora,
-      'cierre_dt':
-        now.toIso8601String().substring(0, 19).replaceAll('T', ' '),
+          'cierre_dt': '${now.year.toString().padLeft(4,'0')}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')} ${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}:${now.second.toString().padLeft(2,'0')}',
           'usuario_cierre': 'admin',
           'cajero_cierre': usuarioCierre,
           'obs_cierre': observacion,
           'diferencia': diferencia,
+          'entradas': entradas,
+          'total_tickets': totalTicketsEmitidos,
+          // contar anulados aparte
+          'tickets_anulados': (await db.rawQuery('''
+            SELECT COALESCE(COUNT(1),0) as c
+            FROM tickets t
+            JOIN ventas v ON v.id = t.venta_id
+            WHERE v.caja_id = ? AND t.status = 'Anulado'
+          ''', [cajaId])).first['c'] ?? 0,
         },
         where: 'id=?',
         whereArgs: [cajaId]);
+    // Encolar cierre (incluye totales y diferencia)
+    final codigo = (cajaRow.first['codigo_caja'] as String?) ?? '';
+    await SupaSyncService.I.enqueueCaja({
+      'codigo_caja': codigo,
+      'caja_local_id': cajaId,
+      'disciplina': cajaRow.first['disciplina'],
+      'descripcion_evento': cajaRow.first['descripcion_evento'],
+      'fondo_inicial': fondo,
+      'fecha_apertura': (cajaRow.first['apertura_dt'] ?? cajaRow.first['fecha'])?.toString(),
+      'observaciones_apertura': cajaRow.first['observaciones_apertura'],
+      'fecha_cierre': '${now.year.toString().padLeft(4,'0')}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')} ${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}:${now.second.toString().padLeft(2,'0')}',
+      'usuario_cierre': 'admin',
+      'cajero_cierre': usuarioCierre,
+      'conteo_efectivo_final': efectivoEnCaja,
+      'transferencias_final': transferencias,
+      'total_ventas': totalVentas,
+      'total_efectivo_teorico': fondo + totalEfectivoVentas,
+      'tickets': totalTicketsEmitidos,
+      'tickets_anulados': (await db.rawQuery('''
+        SELECT COALESCE(COUNT(1),0) as c
+        FROM tickets t
+        JOIN ventas v ON v.id = t.venta_id
+        WHERE v.caja_id = ? AND t.status = 'Anulado'
+      ''', [cajaId])).first['c'] ?? 0,
+      'diferencia': diferencia,
+      'estado': 'CERRADA',
+      'obs_cierre': observacion,
+      'entradas': entradas,
+    });
+    // Sync manual por demanda: no forzar aquí
     // Se podría registrar un movimiento resumen si hiciera falta; por ahora solo cerramos estado
   }
 

@@ -59,15 +59,15 @@ class PrintService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              pw.Text('BUFFET', style: header),
-              pw.SizedBox(height: 2),
+        pw.Center(child: pw.Text('Buffet - C.D.M', style: header)),
+        pw.SizedBox(height: 2),
               pw.Text(identificador),
               pw.Text(fechaHora),
               pw.Text(cajaCodigo),
               pw.SizedBox(height: 10),
               pw.Text(producto.toUpperCase(),
-                  style: pw.TextStyle(
-                      fontSize: 26, fontWeight: pw.FontWeight.bold)),
+          style: pw.TextStyle(
+            fontSize: 26, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 6),
               pw.Text(_formatCurrency(total), style: bold),
             ],
@@ -90,6 +90,7 @@ class PrintService {
   final obsCierre = (c['obs_cierre'] as String?) ?? '';
   final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
   final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
+  final entradasVendidas = ((c['entradas'] as num?) ?? 0).toInt();
 
     final doc = pw.Document();
     pw.TextStyle s([bool b = false]) => pw.TextStyle(
@@ -171,6 +172,7 @@ class PrintService {
               pw.Text(
           'Diferencia: ${_formatCurrency(diferencia)}',
                   style: s(true)),
+        pw.Text('Entradas vendidas: $entradasVendidas', style: s()),
               pw.Text(
                   'Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}',
                   style: s()),
@@ -224,7 +226,7 @@ class PrintService {
     void boldOn() => b.add([0x1B, 0x45, 0x01]);
     void boldOff() => b.add([0x1B, 0x45, 0x00]);
     void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
-  void sizeDoubleWH() => b.add([0x1D, 0x21, 0x11]);
+  // sizeDoubleWH() ya no se usa para reducir el alto del ticket
   void sizeDoubleH() => b.add([0x1D, 0x21, 0x01]);
   void fontA() => b.add([0x1B, 0x4D, 0x00]); // normal
   void fontB() => b.add([0x1B, 0x4D, 0x01]); // un punto más chico
@@ -244,8 +246,8 @@ class PrintService {
 
     init();
     alignCenter();
-    boldOn(); sizeDoubleH(); // un paso menos que doble completo
-    text('BUFFET');
+    boldOn(); sizeDoubleH();
+    text('Buffet - C.D.M');
     sizeNormal(); boldOff();
     fontB(); // fechas y códigos más chicos
     text(identificador);
@@ -253,17 +255,88 @@ class PrintService {
     text(cajaCodigo);
     fontA();
     feed();
-    boldOn(); sizeDoubleWH();
+    boldOn();
+    // tamaño grande como antes para descripción e importe
+    b.add([0x1D, 0x21, 0x11]); // sizeDoubleWH
     text(producto.toUpperCase());
-    // Monto igual tamaño que la descripción
     text(_formatCurrency(total));
     sizeNormal();
     boldOff();
-    feed(2);
+    feed(1);
     // Corte parcial
     b.add([0x1D, 0x56, 0x42, 0x00]);
 
     return Uint8List.fromList(b.toBytes());
+  }
+
+  /// Construye bytes ESC/POS de un cierre de caja de ejemplo (sin datos reales)
+  Future<Uint8List> buildCajaResumenEscPosSample({int lineWidth = 48}) async {
+    final b = BytesBuilder();
+    void init() { b.add([0x1B, 0x40]); }
+    void alignCenter() => b.add([0x1B, 0x61, 0x01]);
+    void alignLeft() => b.add([0x1B, 0x61, 0x00]);
+    void boldOn() => b.add([0x1B, 0x45, 0x01]);
+    void boldOff() => b.add([0x1B, 0x45, 0x00]);
+    void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
+    void sizeDouble() => b.add([0x1D, 0x21, 0x11]);
+    void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
+    String sep() => ''.padLeft(lineWidth, '=');
+    void text(String s) { b.add(utf8.encode(s)); feed(); }
+
+    init();
+    // Logo si está disponible
+    try {
+      final data = await rootBundle.load('assets/icons/app_icon_foreground.png');
+      final decoded = img.decodeImage(Uint8List.view(data.buffer));
+      if (decoded != null) {
+        final targetW = lineWidth >= 48 ? 576 : 384;
+        final scaled = img.copyResize(decoded, width: targetW, interpolation: img.Interpolation.average);
+        _appendRasterImage(b, scaled);
+        feed();
+      }
+    } catch (_) {}
+
+    alignCenter(); boldOn();
+    text(sep());
+    sizeDouble(); text('CIERRE DE CAJA'); sizeNormal();
+    text(sep());
+    alignLeft(); boldOff();
+    final now = DateTime.now();
+    final fecha = '${now.day.toString().padLeft(2,'0')}/${now.month.toString().padLeft(2,'0')}/${now.year}';
+    final hora = '${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}';
+    text('Codigo caja: DEMO-001');
+    text('Estado: Cerrada');
+    text('Fecha apertura: $fecha $hora');
+    text('Cajero apertura: Demo User');
+    text('Disciplina: General');
+    feed();
+    boldOn(); text('TOTALES POR MEDIO DE PAGO'); boldOff();
+    text('Efectivo: ${_formatCurrency(32450)}');
+    text('Transferencia: ${_formatCurrency(18750)}');
+    sizeDouble(); boldOn(); text('TOTAL: ${_formatCurrency(51200)}'); boldOff(); sizeNormal();
+    feed();
+    text('Fondo inicial: ${_formatCurrency(5000)}');
+    boldOn(); text('Diferencia: ${_formatCurrency(0)}'); boldOff();
+    text('Tickets anulados: 0');
+    feed();
+    boldOn(); text('ITEMS VENDIDOS:'); boldOff();
+    text('(Hamburguesa x 12) = ${_formatCurrency(24000)}');
+    text('(Gaseosa x 20) = ${_formatCurrency(16000)}');
+    text('(Papas x 8) = ${_formatCurrency(11200)}');
+    feed(2);
+    b.add([0x1D, 0x56, 0x42, 0x00]);
+    return Uint8List.fromList(b.toBytes());
+  }
+
+  /// Imprime solo por USB el cierre de caja de ejemplo
+  Future<bool> printCajaResumenSampleUsbOnly() async {
+    try {
+      final bytes = await buildCajaResumenEscPosSample();
+      if (bytes.isEmpty) return false;
+      return await _usb.printBytes(bytes);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Construye bytes ESC/POS para cierre/resumen de caja
@@ -277,6 +350,7 @@ class PrintService {
     final obsCierre = (c['obs_cierre'] as String?) ?? '';
     final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
     final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
+  final entradasVendidas = ((c['entradas'] as num?) ?? 0).toInt();
 
     final totalesMp = (resumen['por_mp'] as List).cast<Map<String, Object?>>();
     final porProd = (resumen['por_producto'] as List).cast<Map<String, Object?>>();
@@ -360,6 +434,7 @@ class PrintService {
     feed();
     text('Fondo inicial: ${_formatCurrency(fondo)}');
     boldOn(); text('Diferencia: ${_formatCurrency(diferencia)}'); boldOff();
+  text('Entradas vendidas: $entradasVendidas');
     text('Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}');
     feed();
     boldOn(); text('ITEMS VENDIDOS:'); boldOff();
@@ -465,7 +540,7 @@ class PrintService {
     bool allOk = true;
     for (final r in rows) {
       final id = r['id'] as int;
-      final ok = await printTicketUsbOnly(id);
+      final ok = await printTicketUsbOnly(id).timeout(const Duration(seconds: 4), onTimeout: () => false);
       allOk = allOk && ok;
     }
     return allOk;

@@ -21,6 +21,7 @@ class _CajaPageState extends State<CajaPage> {
   final _efectivo = TextEditingController(text: '');
   final _transfer = TextEditingController(text: '');
   final _obs = TextEditingController();
+  final _entradas = TextEditingController(text: '');
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _CajaPageState extends State<CajaPage> {
     _efectivo.dispose();
     _transfer.dispose();
     _obs.dispose();
+    _entradas.dispose();
     super.dispose();
   }
 
@@ -68,6 +70,9 @@ class _CajaPageState extends State<CajaPage> {
           children: [
       Text(
         '${_caja!['codigo_caja']} • Disciplina: ${_caja!['disciplina']} • Cajero: ${_caja!['cajero_apertura'] ?? ''}'),
+            const SizedBox(height: 6),
+            if (((_caja!['observaciones_apertura'] as String?) ?? '').isNotEmpty)
+              Text('Obs. apertura: ${_caja!['observaciones_apertura']}'),
             const SizedBox(height: 8),
       Text(
         'Fondo inicial: ${formatCurrency(_caja!['fondo_inicial'] as num)}'),
@@ -133,6 +138,11 @@ class _CajaPageState extends State<CajaPage> {
             TextField(
                 controller: _obs,
                 decoration: const InputDecoration(labelText: 'Observación')),
+            const SizedBox(height: 6),
+            TextField(
+                controller: _entradas,
+                decoration: const InputDecoration(labelText: 'Entradas vendidas (opcional)'),
+                keyboardType: TextInputType.number),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () async {
@@ -140,6 +150,7 @@ class _CajaPageState extends State<CajaPage> {
                 final nav = Navigator.of(context);
                 final eff = parseLooseDouble(_efectivo.text);
                 final tr = parseLooseDouble(_transfer.text);
+                final entradas = int.tryParse(_entradas.text.trim());
                 if ((_usuario.text.trim()).isEmpty) {
                   messenger.showSnackBar(
                       const SnackBar(content: Text('Usuario cierre requerido')));
@@ -192,6 +203,7 @@ class _CajaPageState extends State<CajaPage> {
                   usuarioCierre: _usuario.text.trim(),
                   observacion:
                       _obs.text.trim().isEmpty ? null : _obs.text.trim(),
+                  entradas: entradas,
                 );
                 // Intentar imprimir el cierre/resumen (USB por defecto, mostrar mensaje si no se pudo)
                 try {

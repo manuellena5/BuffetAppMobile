@@ -184,7 +184,7 @@ class _PosMainPageState extends State<PosMainPage> {
     return Scaffold(
       appBar: AppBar(
         title: Row(children: [
-          const Text('Ticket'),
+          const Icon(Icons.receipt_long),
           const SizedBox(width: 6),
           InkWell(
             onTap: () async {
@@ -206,20 +206,6 @@ class _PosMainPageState extends State<PosMainPage> {
           ),
         ]),
         actions: [
-          // Estado USB + acceso rápido a Config. impresora
-          IconButton(
-            tooltip: _usbConnected ? 'Impresora conectada' : 'Impresora desconectada',
-            icon: Icon(Icons.usb, color: _usbConnected ? Colors.green : Colors.red),
-            onPressed: () async {
-              if (!mounted) return;
-              // ignore: use_build_context_synchronously
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PrinterTestPage()),
-              );
-              if (!mounted) return;
-            },
-          ),
           // Limpiar carrito
           Builder(builder: (ctx) {
             final cart = context.watch<CartModel>();
@@ -420,10 +406,22 @@ class _PosMainPageState extends State<PosMainPage> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '${_cajaCodigo ?? ''} • Total: ${formatCurrency((_cajaTotal ?? 0))}',
+                      '${_cajaCodigo ?? ''} • Total: ${formatCurrencyNoDecimals((_cajaTotal ?? 0))}',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Estado USB + atajo a Config. impresora (sin ocupar acciones del AppBar)
+                  InkWell(
+                    onTap: () async {
+                      if (!mounted) return;
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const PrinterTestPage()),
+                      );
+                    },
+                    child: Icon(Icons.print, size: 18, color: _usbConnected ? Colors.green : Colors.red),
                   ),
                 ],
               ),
@@ -583,7 +581,7 @@ class _PosMainPageState extends State<PosMainPage> {
               ),
               child: Text(
                 formatCurrencyNoDecimals(price),
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
               ),
             ),
           ),

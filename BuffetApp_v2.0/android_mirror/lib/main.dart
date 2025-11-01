@@ -7,10 +7,13 @@ import 'ui/state/cart_model.dart';
 import 'services/caja_service.dart';
 import 'ui/state/app_settings.dart';
 import 'services/usb_printer_service.dart';
+import 'services/supabase_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_AR', null);
+  // Supabase init (sin auth, anon)
+  await SupaSyncService.init();
   // Autoconectar impresora térmica USB si hay una guardada
   try {
     await UsbPrinterService().autoConnectSaved();
@@ -57,6 +60,7 @@ class _SeedGate extends StatelessWidget {
   const _SeedGate();
   @override
   Widget build(BuildContext context) {
+    // Sync automático desactivado por defecto (manual-on-demand desde UI)
     return FutureBuilder(
       future: CajaService().getCajaAbierta(),
       builder: (ctx, snap) {

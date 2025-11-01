@@ -1,5 +1,5 @@
 class AppBuildInfo {
   // Fuente única en código para mostrar/exportar versión
-  static const String version = '1.0.4';
-  static const int buildNumber = 5;
+  static const String version = '1.0.7';
+  static const int buildNumber = 8;
 }

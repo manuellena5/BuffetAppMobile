@@ -3,6 +3,7 @@ import '../../data/dao/db.dart';
 import '../format.dart';
 import '../../services/print_service.dart';
 import '../../services/usb_printer_service.dart';
+import '../../services/supabase_sync_service.dart';
 
 class SaleDetailPage extends StatefulWidget {
   final int ticketId;
@@ -214,6 +215,36 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                             'UPDATE products SET stock_actual = CASE WHEN stock_actual = 999 THEN 999 ELSE stock_actual + 1 END WHERE id = ?',
                             [pid]);
                       }
+                      // Encolar anulación para Supabase (upsert del item con status)
+                      final venta = await db.query('ventas', columns: ['caja_id'], where: 'id=(SELECT venta_id FROM tickets WHERE id=?)', whereArgs: [t['id']], limit: 1);
+                      String? codigoCaja;
+                      if (venta.isNotEmpty) {
+                        final cajaId = venta.first['caja_id'] as int?;
+                        if (cajaId != null) {
+                          final caja = await db.query('caja_diaria', columns: ['codigo_caja'], where: 'id=?', whereArgs: [cajaId], limit: 1);
+                          if (caja.isNotEmpty) codigoCaja = caja.first['codigo_caja'] as String?;
+                        }
+                      }
+                      // obtener categoría para el payload
+                      String? categoriaDesc;
+                      final catId = t['categoria_id'] as int?;
+                      if (catId != null) {
+                        final cat = await db.query('Categoria_Producto', columns: ['descripcion'], where: 'id=?', whereArgs: [catId], limit: 1);
+                        if (cat.isNotEmpty) categoriaDesc = cat.first['descripcion'] as String?;
+                      }
+                      await SupaSyncService.I.enqueueItem({
+                        'codigo_caja': codigoCaja,
+                        'ticket_id': t['id'],
+                        'fecha': t['fecha_hora'],
+                        'producto_id': t['producto_id'],
+                        'producto_nombre': await _loadItemNombre(productoId: t['producto_id'] as int?, categoriaId: t['categoria_id'] as int?),
+                        'categoria': categoriaDesc,
+                        'cantidad': 1,
+                        'precio_unitario': t['total_ticket'],
+                        'total': t['total_ticket'],
+                        'metodo_pago': null,
+                        'status': 'Anulado',
+                      });
                       if (context.mounted) {
                         Navigator.pop(context, true);
                         ScaffoldMessenger.of(context).showSnackBar(

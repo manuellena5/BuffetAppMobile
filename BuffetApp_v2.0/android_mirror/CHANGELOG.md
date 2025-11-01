@@ -1,6 +1,26 @@
 # Changelog
 
+## 1.0.7+8 — 2025-10-31
+- Sincronización: barra de progreso en vivo durante el envío (procesados/total y etapa), y bloqueo del botón hasta finalizar.
+- Envío por lotes: la sync recorre la cola en bloques hasta vaciarla, actualizando el progreso después de cada lote (cajas, items, errores).
+- Resumen de caja: muestra una barra determinística mientras se sincroniza y conserva el diálogo de resultados al finalizar.
+- Versionado: bump a 1.0.7+8.
+
 Todas las notas de cambios para BuffetApp (Android espejo).
+
+## 1.0.6+7 — 2025-10-31
+- Sincronización manual: ahora el resumen post-sync detalla cantidades OK/Fail y muestra el último error si lo hubo.
+- caja_items: se completan campos de ticket (fecha, fecha_hora, producto_nombre, categoria, cantidad, precio_unitario, total, total_ticket, metodo_pago, metodo_pago_id) y se incluye status (también para anulados). Se resuelve caja_uuid automáticamente por codigo_caja.
+- Manejo de esquemas: si el servidor no reconoce alguna columna (PGRST204), se reintenta sin columnas de conveniencia y se loguea el detalle del error.
+- Errores: se registran en tabla local y se encolan para subirse a sync_error_log en el backend.
+- Cierre/Resumen: se muestra “Entradas vendidas” (0 si no hay valor) en la pantalla y en el ticket (PDF y ESC/POS).
+- Versionado: bump a 1.0.6+7.
+
+## 1.0.5+6 — 2025-10-28
+- Tickets de venta: se quita el logo/escudo y se restaura el formato compacto. Encabezado ahora muestra “Buffet - C.D.M”. Descripción e importe vuelven a tamaños grandes.
+- Cierre de caja: se mantiene el logo en encabezado (PDF y ESC/POS).
+- Indicador de impresora en POS: ícono de impresora verde/rojo en el encabezado bajo el AppBar.
+- Versionado: bump a 1.0.5+6.
 
 ## 1.0.4+5 — 2025-10-28
 - Home: se removió el menú lateral y el ícono de impresora del AppBar. Ahora requiere doble pulsación de “Atrás” para salir (muestra Snackbar la primera vez). Estado de impresora USB en pie de página.

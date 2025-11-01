@@ -250,11 +250,6 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                       columns: ['id'], orderBy: 'id DESC', limit: 1);
                   cajaId = last.isNotEmpty ? last.first['id'] as int : null;
                 }
-                if (cajaId == null) {
-                  messenger.showSnackBar(
-                      const SnackBar(content: Text('No hay cajas para imprimir.')));
-                  return;
-                }
                 try {
                   final connected = await _usb.isConnected();
                   if (!connected) {
@@ -262,7 +257,13 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                     messenger.showSnackBar(const SnackBar(content: Text('No hay impresora USB conectada.')));
                     return;
                   }
-                  final ok = await PrintService().printCajaResumenUsbOnly(cajaId);
+                  bool ok;
+                  if (cajaId == null) {
+                    // Imprimir ejemplo de cierre aunque no haya datos guardados
+                    ok = await PrintService().printCajaResumenSampleUsbOnly();
+                  } else {
+                    ok = await PrintService().printCajaResumenUsbOnly(cajaId);
+                  }
                   if (!context.mounted) return;
                   messenger.showSnackBar(SnackBar(content: Text(ok ? 'Cierre impreso por USB' : 'No se pudo imprimir por USB')));
                 } catch (e) {

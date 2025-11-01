@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import '../data/dao/db.dart';
 import 'caja_service.dart';
+// Nota: sincronización con la nube se hace fuera del flujo de venta.
 
 class VentaService {
   final _uuid = const Uuid();
@@ -10,8 +11,8 @@ class VentaService {
       {required int metodoPagoId,
       required List<Map<String, dynamic>> items,
       bool marcarImpreso = true}) async {
-    final db = await AppDatabase.instance();
-    final caja = await CajaService().getCajaAbierta();
+  final db = await AppDatabase.instance();
+  final caja = await CajaService().getCajaAbierta();
     return await db.transaction((txn) async {
       double total = 0;
       for (final it in items) {
@@ -43,17 +44,18 @@ class VentaService {
               .toDouble(),
         });
 
-        // Crear tickets por ÍTEM (uno por unidad)
+  // Crear tickets por ÍTEM (uno por unidad)
         final pid = it['producto_id'] as int;
         final qty = it['cantidad'] as int;
         // Obtener datos del producto (codigo y categoria)
-        final prod = (await txn.query('products',
-                columns: ['codigo_producto', 'categoria_id', 'precio_venta'],
+  final prod = (await txn.query('products',
+    columns: ['codigo_producto', 'categoria_id', 'precio_venta'],
                 where: 'id=?',
                 whereArgs: [pid]))
             .first;
         final codigo = (prod['codigo_producto'] as String?) ?? 'PRD$pid';
-        final categoriaId = prod['categoria_id'];
+  final categoriaId = prod['categoria_id'];
+        // la categoría se usa solo para impresión/export y no en este flujo
         final unit = (it['precio_unitario'] as num).toDouble();
         final ddmmyyyy =
             '${now.day.toString().padLeft(2, '0')}${now.month.toString().padLeft(2, '0')}${now.year.toString()}';

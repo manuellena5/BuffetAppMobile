@@ -19,6 +19,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
   final _ventaService = VentaService();
   bool _imprimir = true; // por defecto seleccionado
   final _usb = UsbPrinterService();
+  bool _processing = false;
 
   @override
   void initState() {
@@ -49,6 +50,8 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_processing)
+              const LinearProgressIndicator(minHeight: 3),
             Text(formatCurrency(cart.total),
                 style:
                     const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
@@ -88,9 +91,10 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16)),
-          onPressed: cart.isEmpty
+          onPressed: cart.isEmpty || _processing
                       ? null
                       : () async {
+                          setState(() => _processing = true);
                           final nav = Navigator.of(context);
                           final cartModel = context.read<CartModel>();
                           final items = cart.items
@@ -102,38 +106,57 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                                   })
                               .toList();
                           // Validar USB conectada
-                          final usbConnected = await _usb.isConnected();
-                          final marcarImpreso = _imprimir && usbConnected;
-                          if (!usbConnected && _imprimir && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No hay impresora USB conectada. Los tickets se guardarán como No Impreso.')),
-                            );
-                          }
-                          final result = await _ventaService.crearVenta(
-                            metodoPagoId: m['id'] as int,
-                            items: items,
-                            marcarImpreso: marcarImpreso,
-                          );
-                          if (marcarImpreso) {
+                          try {
+                            bool usbConnected = false;
                             try {
-                              final ventaId = result['ventaId'] as int;
-                              final ok = await PrintService().printVentaTicketsForVentaUsbOnly(ventaId);
-                              if (!ok && context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Fallo la impresión por USB.')),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error al imprimir: $e')),
-                                );
+                              usbConnected = await _usb
+                                  .isConnected()
+                                  .timeout(const Duration(seconds: 2), onTimeout: () => false);
+                            } catch (_) {
+                              usbConnected = false; // en emulador o sin plugin, continuar sin impresión
+                            }
+                            final marcarImpreso = _imprimir && usbConnected;
+                            if (!usbConnected && _imprimir && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('No hay impresora USB conectada. Los tickets se guardarán como No Impreso.')),
+                              );
+                            }
+                            final result = await _ventaService.crearVenta(
+                              metodoPagoId: m['id'] as int,
+                              items: items,
+                              marcarImpreso: marcarImpreso,
+                            );
+                            if (marcarImpreso) {
+                              try {
+                                final ventaId = result['ventaId'] as int;
+                                final ok = await PrintService()
+                                    .printVentaTicketsForVentaUsbOnly(ventaId)
+                                    .timeout(const Duration(seconds: 10), onTimeout: () => false);
+                                if (!ok && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Fallo la impresión por USB.')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Error al imprimir: $e')),
+                                  );
+                                }
                               }
                             }
-                          }
-                          if (context.mounted) {
-                            cartModel.clear();
-                            nav.pop(true);
+                            if (context.mounted) {
+                              cartModel.clear();
+                              nav.pop(true);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('No se pudo registrar la venta: $e')),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _processing = false);
                           }
                         },
                   child: Text((m['descripcion'] as String).toUpperCase()),
