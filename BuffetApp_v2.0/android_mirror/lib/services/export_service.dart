@@ -72,6 +72,9 @@ class ExportService {
       'fecha_export': nowIso,
     };
 
+    // Movimientos para incluir en export
+    final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'creado_ts ASC');
+
     return {
       'metadata': metadata,
       'caja': caja.first,
@@ -79,6 +82,7 @@ class ExportService {
       'totales_por_mp': resumen['por_mp'],
       'tickets': tickets,
       'ventas_por_producto': ventasPorProducto,
+      'movimientos': movimientos,
       'catalogo': catalogo,
     };
   }

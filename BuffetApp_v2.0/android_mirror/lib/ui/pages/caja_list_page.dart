@@ -10,6 +10,7 @@ import '../../services/usb_printer_service.dart';
 import 'printer_test_page.dart';
 import '../../services/supabase_sync_service.dart';
 import 'caja_tickets_page.dart';
+import '../../services/movimiento_service.dart';
 
 class CajaListPage extends StatefulWidget {
   const CajaListPage({super.key});
@@ -119,6 +120,8 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
   Map<String, dynamic>? _resumen;
   bool _loading = true;
   bool _syncing = false;
+  double _movIngresos = 0.0;
+  double _movRetiros = 0.0;
   // Progreso de sincronización
   int? _progTotal;
   int _progDone = 0;
@@ -136,6 +139,11 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
     Map<String, dynamic>? r;
     if (c != null) {
       r = await _svc.resumenCaja(c['id'] as int);
+      try {
+        final mt = await MovimientoService().totalesPorCaja(c['id'] as int);
+        _movIngresos = (mt['ingresos'] as num?)?.toDouble() ?? 0.0;
+        _movRetiros = (mt['retiros'] as num?)?.toDouble() ?? 0.0;
+      } catch (_) {}
     }
     setState(() {
       _caja = c;
@@ -499,6 +507,9 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
               Text('Diferencia: ${formatCurrency(((_caja!['diferencia'] as num?) ?? 0))}'),
             // Entradas vendidas (mostrar 0 si no hay valor)
             Text('Entradas vendidas: ${((_caja!['entradas'] as num?) ?? 0).toInt()}'),
+            const SizedBox(height: 8),
+            Text('Ingresos registrados: ${formatCurrency(_movIngresos)}'),
+            Text('Retiros registrados: ${formatCurrency(_movRetiros)}'),
             const Divider(height: 24),
       Text('Totales', style: Theme.of(context).textTheme.titleMedium),
       Text('Total ventas: ${formatCurrency(resumen['total'] as num)}',

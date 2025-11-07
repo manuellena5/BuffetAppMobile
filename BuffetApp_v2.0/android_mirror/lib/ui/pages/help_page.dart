@@ -83,7 +83,7 @@ class HelpPage extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text('• Total Ventas (sistema): suma de tickets no anulados en la caja.'),
-          const Text('• Cierre de caja: Diferencia = (Efectivo declarado - Fondo Inicial) + Transferencias - Total Ventas (sistema).'),
+          const Text('• Cierre de caja: Diferencia = ((Efectivo declarado - Fondo Inicial - Ingresos + Retiros) + Transferencias) - Total Ventas (sistema).'),
           const Text('• Ventas por producto: ordenadas de mayor a menor por cantidad. Formato: "Item x Cantidad = \$Monto".'),
         ],
       ),

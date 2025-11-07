@@ -16,6 +16,7 @@ import 'home_page.dart';
 import 'settings_page.dart';
 import '../../app_version.dart';
 import 'help_page.dart';
+import 'movimientos_page.dart';
 import 'dart:io';
 import 'dart:async';
 import '../../services/usb_printer_service.dart';
@@ -326,6 +327,25 @@ class _PosMainPageState extends State<PosMainPage> {
                 nav.pop();
                 await nav.push(
                     MaterialPageRoute(builder: (_) => const CajaListPage()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.swap_vert),
+              title: const Text('Movimientos caja'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                final caja = await CajaService().getCajaAbierta();
+                if (caja == null) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Abrí una caja para ver movimientos')),
+                  );
+                  return;
+                }
+                await nav.push(
+                  MaterialPageRoute(builder: (_) => MovimientosPage(cajaId: caja['id'] as int)),
+                );
               },
             ),
             ListTile(

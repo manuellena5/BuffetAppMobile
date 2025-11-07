@@ -88,6 +88,7 @@ class CajaService {
       'descripcion_evento': descripcionEvento,
       'observaciones_apertura': (observacion ?? ''),
       'diferencia': 0,
+  // Nota: columnas esperadas en Supabase -> 'ingresos' y 'retiros'
       'ingresos': 0,
       'retiros': 0,
       'total_tickets': 0,
@@ -103,6 +104,8 @@ class CajaService {
       'usuario_apertura': 'admin',
       'cajero_apertura': usuario,
       'fondo_inicial': fondoInicial,
+      'ingresos': 0,
+      'retiros': 0,
       'total_efectivo_teorico': fondoInicial, // ventas en efectivo = 0 al abrir
       'estado': 'ABIERTA',
       'descripcion_evento': descripcionEvento,
@@ -149,11 +152,21 @@ class CajaService {
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
     ''', [cajaId]);
     final totalTicketsEmitidos = (tk.first['c'] as num?)?.toInt() ?? 0;
-    // Fórmula pedida: Total Ventas = (Efectivo - Fondo Inicial) + Transferencias
-    // => Diferencia = ((Efectivo - Fondo) + Transferencias) - TotalVentas
+  // Fórmula ajustada (incluye ingresos/retiros):
+  // Diferencia = ((Efectivo - Fondo - Ingresos + Retiros) + Transferencias) - TotalVentas
   final cajaRow = await db.query('caja_diaria', columns: ['fondo_inicial','codigo_caja','fecha','apertura_dt','disciplina','descripcion_evento','observaciones_apertura'], where: 'id=?', whereArgs: [cajaId], limit: 1);
     final fondo = ((cajaRow.first['fondo_inicial'] as num?) ?? 0).toDouble();
-    final totalPorFormula = (efectivoEnCaja - fondo) + transferencias;
+    // Obtener totales de movimientos para aplicar fórmula ajustada
+    final movTotals = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ingresos,
+        COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto END),0) as retiros
+      FROM caja_movimiento
+      WHERE caja_id = ?
+    ''', [cajaId]);
+    final ingresos = (movTotals.first['ingresos'] as num?)?.toDouble() ?? 0.0;
+    final retiros = (movTotals.first['retiros'] as num?)?.toDouble() ?? 0.0;
+    final totalPorFormula = (efectivoEnCaja - fondo - ingresos + retiros) + transferencias;
     final diferencia = totalPorFormula - totalVentas;
     await db.update(
         'caja_diaria',
@@ -186,6 +199,8 @@ class CajaService {
       'descripcion_evento': cajaRow.first['descripcion_evento'],
       'fondo_inicial': fondo,
       'fecha_apertura': (cajaRow.first['apertura_dt'] ?? cajaRow.first['fecha'])?.toString(),
+      'usuario_apertura': 'admin',
+      'cajero_apertura': cajaRow.first['cajero_apertura'],
       'observaciones_apertura': cajaRow.first['observaciones_apertura'],
       'fecha_cierre': '${now.year.toString().padLeft(4,'0')}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')} ${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}:${now.second.toString().padLeft(2,'0')}',
       'usuario_cierre': 'admin',
@@ -194,6 +209,9 @@ class CajaService {
       'transferencias_final': transferencias,
       'total_ventas': totalVentas,
       'total_efectivo_teorico': fondo + totalEfectivoVentas,
+  // En Supabase los totales de movimientos se guardan en 'ingresos' y 'retiros'
+      'ingresos': ingresos,
+      'retiros': retiros,
       'tickets': totalTicketsEmitidos,
       'tickets_anulados': (await db.rawQuery('''
         SELECT COALESCE(COUNT(1),0) as c

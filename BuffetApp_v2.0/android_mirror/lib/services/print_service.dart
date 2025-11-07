@@ -109,6 +109,7 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
+  final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'creado_ts ASC');
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
   final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
   final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
@@ -201,6 +202,25 @@ class PrintService {
               pw.Text(
                   'Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}',
                   style: s()),
+              // Sumarización de movimientos (ingresos/retiros)
+              if (movimientos.isNotEmpty) ...[
+                pw.SizedBox(height: 6),
+                () {
+                  double ing = 0, ret = 0;
+                  for (final m in movimientos) {
+                    final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+                    final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                    if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+                  }
+                  return pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Ingresos registrados: ${_formatCurrency(ing)}', style: s()),
+                      pw.Text('Retiros registrados: ${_formatCurrency(ret)}', style: s()),
+                    ],
+                  );
+                }(),
+              ],
               pw.SizedBox(height: 6),
               pw.Text('ITEMS VENDIDOS:', style: s(true)),
               pw.SizedBox(height: 2),
@@ -208,6 +228,18 @@ class PrintService {
                     '(${(p['nombre'] ?? '')} x ${(p['cantidad'] ?? 0)}) = ${_formatCurrency(((p['total'] as num?) ?? 0).toDouble())}',
                     style: s(),
                   )),
+              pw.SizedBox(height: 8),
+        if (movimientos.isNotEmpty) pw.SizedBox(height: 8),
+        if (movimientos.isNotEmpty) pw.Text('MOVIMIENTOS:', style: s(true)),
+        if (movimientos.isNotEmpty) pw.SizedBox(height: 2),
+        ...movimientos.map((m) => pw.Text(
+          '${m['creado_ts'] ?? ''} ${(m['tipo'] ?? '')}: ' +
+            _formatCurrency(((m['monto'] as num?) ?? 0).toDouble()) +
+            (m['observacion'] != null && (m['observacion'] as String).trim().isNotEmpty
+              ? ' - ${(m['observacion'] as String).trim()}'
+              : ''),
+          style: s(),
+          )),
             ],
           );
         },
@@ -377,6 +409,7 @@ class PrintService {
     final db = await AppDatabase.instance();
     final caja = await db.query('caja_diaria', where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
+    final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'creado_ts ASC');
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
@@ -477,6 +510,19 @@ class PrintService {
       final cant = (p['cantidad'] ?? 0).toString();
       final tot = ((p['total'] as num?) ?? 0).toDouble();
   text('($name x $cant) = ${_formatCurrency(tot)}');
+    }
+    if (movimientos.isNotEmpty) {
+      // Solo sumarización en ESC/POS
+      double ing = 0, ret = 0;
+      for (final m in movimientos) {
+        final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+        final monto = ((m['monto'] as num?) ?? 0).toDouble();
+        if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+      }
+      feed();
+      boldOn(); text('MOVIMIENTOS:'); boldOff();
+      text('Ingresos registrados: ${_formatCurrency(ing)}');
+      text('Retiros registrados: ${_formatCurrency(ret)}');
     }
     feed(2);
     b.add([0x1D, 0x56, 0x42, 0x00]); // corte parcial

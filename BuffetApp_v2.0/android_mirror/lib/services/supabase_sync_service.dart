@@ -316,7 +316,12 @@ class SupaSyncService {
           _lastErrors.add('item: $e2');
         }
       } else if (tipo == 'caja' && (msg.contains('PGRST204') || msg.contains('schema cache'))) {
-        final optionalColsCaja = <String>['caja_local_id','tickets','tickets_anulados','entradas','updated_at','source_device','dispositivo','enviado_en'];
+        // Columnas opcionales/removibles si el esquema de Supabase no las tiene aún
+        // (incluye claves de versiones previas como mov_ingresos_total/mov_retiros_total)
+        final optionalColsCaja = <String>[
+          'caja_local_id','tickets','tickets_anulados','entradas','updated_at','source_device','dispositivo','enviado_en',
+          'ingresos','retiros'
+        ];
         final stripped = enrichedForSend
             .map((m) => Map<String, dynamic>.from(m)..removeWhere((k, v) => optionalColsCaja.contains(k)))
             .toList(growable: false);

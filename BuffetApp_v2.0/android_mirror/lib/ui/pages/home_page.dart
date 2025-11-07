@@ -11,6 +11,7 @@ import 'sales_list_page.dart';
 import 'products_page.dart';
 import 'settings_page.dart';
 import 'help_page.dart';
+import 'movimientos_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
@@ -166,6 +167,27 @@ class _HomePageState extends State<HomePage> {
                   nav.pop();
                   await nav.push(
                     MaterialPageRoute(builder: (_) => const CajaListPage()),
+                  );
+                  if (!mounted) return;
+                  await _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.swap_vert),
+                title: const Text('Movimientos caja'),
+                enabled: _caja != null,
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  if (_caja == null) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Abrí una caja para ver movimientos')),
+                    );
+                    return;
+                  }
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => MovimientosPage(cajaId: _caja!['id'] as int)),
                   );
                   if (!mounted) return;
                   await _load();
