@@ -17,6 +17,31 @@ import 'usb_printer_service.dart';
 class PrintService {
   final _usb = UsbPrinterService();
 
+  // Preferencias de ancho de papel
+  Future<int> _preferredPaperWidthMm() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final mm = sp.getInt('paper_width_mm');
+      if (mm == 58 || mm == 75 || mm == 80) return mm!;
+    } catch (_) {}
+    return 80; // por defecto 80mm
+  }
+
+  Future<int> _preferredLineWidth() async {
+    final mm = await _preferredPaperWidthMm();
+    // Línea estimada en caracteres: 58→32, 75→42, 80→48
+    if (mm <= 58) return 32;
+    if (mm < 80) return 42; // 75mm
+    return 48; // 80mm
+  }
+
+  Future<PdfPageFormat> _preferredPdfFormat() async {
+    final mm = await _preferredPaperWidthMm();
+    if (mm == 80) return PdfPageFormat.roll80;
+    final width = mm * PdfPageFormat.mm;
+    return PdfPageFormat(width, double.infinity);
+  }
+
   /// Construye el PDF de un ticket por ÍTEM
   Future<Uint8List> buildTicketPdf(int ticketId) async {
     final db = await AppDatabase.instance();
@@ -53,7 +78,7 @@ class PrintService {
 
     doc.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: await _preferredPdfFormat(),
         margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         build: (context) {
           return pw.Column(
@@ -115,7 +140,7 @@ class PrintService {
 
     doc.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: await _preferredPdfFormat(),
         margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         build: (context) {
           return pw.Column(
@@ -215,7 +240,7 @@ class PrintService {
     final producto = (t['producto'] as String?) ?? 'Producto';
     final total = ((t['total_ticket'] as num?) ?? 0).toDouble();
 
-    final b = BytesBuilder();
+  final b = BytesBuilder();
     void init() {
       b.add([0x1B, 0x40]); // init
       // Alineación por defecto izquierda
@@ -242,12 +267,12 @@ class PrintService {
       return s.split('').map((c) => map[c] ?? c).join();
     }
 
-    void text(String s) { b.add(utf8.encode(clean(s))); feed(); }
+  void text(String s) { b.add(utf8.encode(clean(s))); feed(); }
 
     init();
     alignCenter();
     boldOn(); sizeDoubleH();
-    text('Buffet - C.D.M');
+  text('Buffet - C.D.M');
     sizeNormal(); boldOff();
     fontB(); // fechas y códigos más chicos
     text(identificador);
@@ -256,7 +281,7 @@ class PrintService {
     fontA();
     feed();
     boldOn();
-    // tamaño grande como antes para descripción e importe
+  // tamaño grande como antes para descripción e importe
     b.add([0x1D, 0x21, 0x11]); // sizeDoubleWH
     text(producto.toUpperCase());
     text(_formatCurrency(total));
@@ -272,6 +297,7 @@ class PrintService {
   /// Construye bytes ESC/POS de un cierre de caja de ejemplo (sin datos reales)
   Future<Uint8List> buildCajaResumenEscPosSample({int lineWidth = 48}) async {
     final b = BytesBuilder();
+    final lw = await _preferredLineWidth();
     void init() { b.add([0x1B, 0x40]); }
     void alignCenter() => b.add([0x1B, 0x61, 0x01]);
     void alignLeft() => b.add([0x1B, 0x61, 0x00]);
@@ -280,21 +306,28 @@ class PrintService {
     void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
     void sizeDouble() => b.add([0x1D, 0x21, 0x11]);
     void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
-    String sep() => ''.padLeft(lineWidth, '=');
+  String sep() => ''.padLeft(lw, '=');
     void text(String s) { b.add(utf8.encode(s)); feed(); }
 
     init();
-    // Logo si está disponible
+    // Logo si está disponible y preferido
+    bool withLogo = true;
     try {
-      final data = await rootBundle.load('assets/icons/app_icon_foreground.png');
-      final decoded = img.decodeImage(Uint8List.view(data.buffer));
-      if (decoded != null) {
-        final targetW = lineWidth >= 48 ? 576 : 384;
-        final scaled = img.copyResize(decoded, width: targetW, interpolation: img.Interpolation.average);
-        _appendRasterImage(b, scaled);
-        feed();
-      }
+      final sp = await SharedPreferences.getInstance();
+      withLogo = sp.getBool('print_logo_escpos') ?? true;
     } catch (_) {}
+    if (withLogo) {
+      try {
+        final data = await rootBundle.load('assets/icons/app_icon_foreground.png');
+        final decoded = img.decodeImage(Uint8List.view(data.buffer));
+        if (decoded != null) {
+          final targetW = lw >= 48 ? 576 : (lw >= 42 ? 512 : 384);
+          final scaled = img.copyResize(decoded, width: targetW, interpolation: img.Interpolation.average);
+          _appendRasterImage(b, scaled);
+          feed();
+        }
+      } catch (_) {}
+    }
 
     alignCenter(); boldOn();
     text(sep());
@@ -356,6 +389,7 @@ class PrintService {
     final porProd = (resumen['por_producto'] as List).cast<Map<String, Object?>>();
 
   final b = BytesBuilder();
+  final lw = await _preferredLineWidth();
   void init() { b.add([0x1B, 0x40]); }
     void alignCenter() => b.add([0x1B, 0x61, 0x01]);
     void alignLeft() => b.add([0x1B, 0x61, 0x00]);
@@ -376,13 +410,13 @@ class PrintService {
     void writeWrapped(String prefix, String value) {
       final full = clean('$prefix$value');
       final runes = full.runes.toList();
-      for (var i = 0; i < runes.length; i += lineWidth) {
-        final end = (i + lineWidth < runes.length) ? i + lineWidth : runes.length;
+      for (var i = 0; i < runes.length; i += lw) {
+        final end = (i + lw < runes.length) ? i + lw : runes.length;
         final chunk = String.fromCharCodes(runes.sublist(i, end));
         text(chunk);
       }
     }
-    String sep() => ''.padLeft(lineWidth, '=');
+    String sep() => ''.padLeft(lw, '=');
 
     init();
     // Preferencia: imprimir logo en cierre (ESC/POS)
@@ -397,8 +431,8 @@ class PrintService {
         final data = await rootBundle.load('assets/icons/app_icon_foreground.png');
         final decoded = img.decodeImage(Uint8List.view(data.buffer));
         if (decoded != null) {
-          // Elegir ancho objetivo según lineWidth (80mm ~ 576px, 58mm ~ 384px)
-          final targetW = lineWidth >= 48 ? 576 : 384;
+          // Elegir ancho objetivo según ancho preferido
+          final targetW = lw >= 48 ? 576 : (lw >= 42 ? 512 : 384);
           final scaled = img.copyResize(decoded, width: targetW, interpolation: img.Interpolation.average);
           _appendRasterImage(b, scaled);
           feed();

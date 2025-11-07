@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import '../../services/usb_printer_service.dart';
 import 'printer_test_page.dart';
 import '../../services/supabase_sync_service.dart';
+import 'caja_tickets_page.dart';
 
 class CajaListPage extends StatefulWidget {
   const CajaListPage({super.key});
@@ -162,6 +163,22 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
       appBar: AppBar(
           title: const Text('Caja'),
         actions: [
+          // Ver tickets de la caja (solo lectura)
+          IconButton(
+            tooltip: 'Ver tickets de la caja',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CajaTicketsPage(
+                    cajaId: _caja!['id'] as int,
+                    codigoCaja: _caja!['codigo_caja'] as String,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.receipt_long),
+          ),
           // Forzar sincronización manual (on-demand)
           IconButton(
             tooltip: 'Forzar sincronización',
@@ -359,65 +376,89 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
             const SizedBox(height: 8),
             Text('Fecha: ${_caja!['fecha']} • Estado: ${_caja!['estado']}'),
             const SizedBox(height: 8),
-            FutureBuilder<(int,int)>(
-              future: SupaSyncService.I
-                  .cajaOutboxCounts(_caja!['codigo_caja'] as String),
+            FutureBuilder<Map<String,int>>(
+              future: SupaSyncService.I.cajaSyncPlan(
+                cajaId: _caja!['id'] as int,
+                codigoCaja: _caja!['codigo_caja'] as String,
+              ),
               builder: (ctx, snap) {
-                final has = snap.hasData;
-                final pend = has ? snap.data!.$1 : null;
-                final errs = has ? snap.data!.$2 : null;
-                final synced = has && (pend == 0 && errs == 0);
                 final last = SupaSyncService.I.lastSyncAt;
+                final expectedCaja = snap.data?['expectedCaja'] ?? 1;
+                final expectedItems = snap.data?['expectedItems'] ?? 0;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(synced ? Icons.cloud_done : Icons.cloud_upload,
-                            color: synced ? Colors.green : Colors.orange,
-                            size: 18),
+                        FutureBuilder<Map<String,int>>(
+                          future: SupaSyncService.I.cajaSyncPlan(
+                            cajaId: _caja!['id'] as int,
+                            codigoCaja: _caja!['codigo_caja'] as String,
+                          ),
+                          builder: (ctx2, snap2) {
+                            final p = snap2.data ?? const {};
+                            final pendingTotal = (p['pendingCaja'] ?? 0) + (p['pendingItems'] ?? 0);
+                            final errorsTotal  = (p['errorCaja'] ?? 0) + (p['errorItems'] ?? 0);
+                            Color color;
+                            IconData icon;
+                            if (errorsTotal > 0) {
+                              color = Colors.redAccent;
+                              icon = Icons.cloud_off;
+                            } else if (pendingTotal > 0) {
+                              color = Colors.orange;
+                              icon = Icons.cloud_upload;
+                            } else {
+                              color = Colors.green;
+                              icon = Icons.cloud_done;
+                            }
+                            return Icon(icon, color: color, size: 18);
+                          },
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                synced
-                                    ? 'Sincronizado'
-                                    : 'Pendientes: ${pend ?? '-'} • Errores: ${errs ?? '-'}',
-                                style: const TextStyle(fontSize: 12),
+                              Text('Caja: $expectedCaja • Tickets: $expectedItems', style: const TextStyle(fontSize: 12)),
+                              FutureBuilder<Map<String,int>>(
+                                future: SupaSyncService.I.cajaSyncPlan(
+                                  cajaId: _caja!['id'] as int,
+                                  codigoCaja: _caja!['codigo_caja'] as String,
+                                ),
+                                builder: (ctx3, snap3) {
+                                  if (!snap3.hasData) return const SizedBox.shrink();
+                                  final p = snap3.data!;
+                                  final doneCaja = p['doneCaja'] ?? 0;
+                                  final doneItems = p['doneItems'] ?? 0;
+                                  final expCaja = p['expectedCaja'] ?? 1;
+                                  final expItems = p['expectedItems'] ?? 0;
+                                  return Text(
+                                    'Sincronizados: Caja $doneCaja/$expCaja · Tickets $doneItems/$expItems',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                  );
+                                },
                               ),
                               if (last != null)
                                 Text(
                                   'Últ. sync: ${last.hour.toString().padLeft(2,'0')}:${last.minute.toString().padLeft(2,'0')}:${last.second.toString().padLeft(2,'0')}',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600),
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                                 ),
                             ],
                           ),
                         ),
                       ],
                     ),
-                    if (!synced)
-                      FutureBuilder<String?>(
-                        future: SupaSyncService.I.cajaLastError(
-                            _caja!['codigo_caja'] as String),
-                        builder: (ctx, snapErr) {
-                          final m = snapErr.data;
-                          if (m == null || m.isEmpty) {
-                            return const SizedBox.shrink();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              'Último error: $m',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.redAccent),
-                            ),
-                          );
-                        },
-                      ),
+                    FutureBuilder<String?>(
+                      future: SupaSyncService.I.cajaLastError(_caja!['codigo_caja'] as String),
+                      builder: (ctx, snapErr) {
+                        final m = snapErr.data;
+                        if (m == null || m.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text('Último error: $m', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                        );
+                      },
+                    ),
                   ],
                 );
               },

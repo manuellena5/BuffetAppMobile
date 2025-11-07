@@ -251,7 +251,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                             const SnackBar(content: Text('Ticket anulado')));
                       }
                     },
-                    child: const Text('ANULAR'),
+                    child: const Text('Anular', style: TextStyle(fontSize: 12)),
                   ),
                 ),
             ]),
@@ -261,10 +261,10 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
               child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Total',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('Total',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     Text(formatCurrency(total),
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ]),
             )
           ],

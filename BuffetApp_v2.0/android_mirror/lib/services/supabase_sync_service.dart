@@ -34,6 +34,16 @@ class SupaSyncService {
     _initialized = true;
   }
 
+  // Determina si un error es transitorio de red (DNS, socket, timeout, client)
+  bool _isTransientNetworkError(Object e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('socketexception') ||
+        msg.contains('failed host lookup') ||
+        msg.contains('clientexception') ||
+        msg.contains('network is unreachable') ||
+        msg.contains('timed out');
+  }
+
   Future<void> start({Duration every = const Duration(seconds: 45)}) async {
     // Evitar timers en tests automatizados
     final isTest = Platform.environment.containsKey('FLUTTER_TEST');
@@ -114,18 +124,21 @@ class SupaSyncService {
       while (true) {
         int batch = 0;
         batch += await _pushTipo(db, 'caja', (rows) => _sb.from('cajas').upsert(rows, onConflict: 'codigo_caja'));
+        if (batch == -1) { _lastErrors.add('sync abort: sin conectividad (cajas)'); break; }
         if (batch > 0) {
           procesados += batch;
           _progressCtrl.add(SyncProgress(processed: procesados, total: totalPend, stage: 'cajas'));
         }
         batch = 0;
         batch += await _pushTipo(db, 'item', (rows) => _sb.from('caja_items').upsert(rows, onConflict: 'codigo_caja,ticket_id,producto_id'));
+        if (batch == -1) { _lastErrors.add('sync abort: sin conectividad (items)'); break; }
         if (batch > 0) {
           procesados += batch;
           _progressCtrl.add(SyncProgress(processed: procesados, total: totalPend, stage: 'items'));
         }
         batch = 0;
         batch += await _pushTipo(db, 'error', (rows) => _sb.from('sync_error_log').insert(rows));
+        if (batch == -1) { _lastErrors.add('sync abort: sin conectividad (errores)'); break; }
         if (batch > 0) {
           procesados += batch;
           _progressCtrl.add(SyncProgress(processed: procesados, total: totalPend, stage: 'errores'));
@@ -215,8 +228,15 @@ class SupaSyncService {
             r['caja_uuid'] = uuid;
           }
         } catch (e) {
+          final msg = e.toString();
+          final isNetwork = msg.contains('SocketException') || msg.contains('Failed host lookup') || msg.contains('ClientException');
+          if (isNetwork) {
+            // Sin conectividad o DNS: no marcamos error ni tocamos la cola. Reintentará en la próxima sync.
+            _lastErrors.add('item: uuid mapping pospuesto (sin red)');
+            return -1; // abortar ciclo actual de sync
+          }
+          // Error real (p.ej., datos inexistentes en servidor): loguear y marcar error
           await _logError(db, scope: 'push:item:uuid', message: 'No se pudo mapear caja_uuid: $e', payload: jsonEncode(rows));
-          // No continuar: evitar error 23502 por NOT NULL
           for (final id in idsAll) {
             await db.update('sync_outbox', {
               'estado': 'error',
@@ -249,6 +269,11 @@ class SupaSyncService {
       _lastSyncAt = DateTime.now();
       return ids.length;
     } catch (e) {
+      // Si es error transitorio de red, no marcamos error ni modificamos estado; aborta sync actual.
+      if (_isTransientNetworkError(e)) {
+        _lastErrors.add('$tipo: sin conectividad (pospuesto)');
+        return -1; // señal para abortar ciclo
+      }
       // Fallback para columnas faltantes en caja_items/cajas (PGRST204): reintentar removiendo columnas opcionales detectadas
       final msg = e.toString();
       bool retried = false;
@@ -418,14 +443,18 @@ class SupaSyncService {
       WHERE v.caja_id = ?
     ''', [cajaId])) ?? 0;
 
-    final pendCaja = Sqflite.firstIntValue(await db.rawQuery(
-      "SELECT COUNT(1) FROM sync_outbox WHERE tipo='caja' AND ref=? AND estado='pending'",
+    // Estado del outbox
+    final doneCaja = Sqflite.firstIntValue(await db.rawQuery(
+      "SELECT COUNT(1) FROM sync_outbox WHERE tipo='caja' AND ref=? AND estado='done'",
       [codigoCaja],
     )) ?? 0;
-    final pendItems = Sqflite.firstIntValue(await db.rawQuery(
-      "SELECT COUNT(1) FROM sync_outbox WHERE tipo='item' AND ref LIKE ? AND estado='pending'",
+    final doneItems = Sqflite.firstIntValue(await db.rawQuery(
+      "SELECT COUNT(1) FROM sync_outbox WHERE tipo='item' AND ref LIKE ? AND estado='done'",
       ["$codigoCaja#%"],
     )) ?? 0;
+    // Nota: si quisieras ver pendientes del outbox estrictamente, podés usar estas consultas
+    // finales (no utilizadas en el cálculo actual):
+    // final pendCajaOb = ...; final pendItemsOb = ...;
     final errCaja = Sqflite.firstIntValue(await db.rawQuery(
       "SELECT COUNT(1) FROM sync_outbox WHERE tipo='caja' AND ref=? AND estado='error'",
       [codigoCaja],
@@ -434,13 +463,20 @@ class SupaSyncService {
       "SELECT COUNT(1) FROM sync_outbox WHERE tipo='item' AND ref LIKE ? AND estado='error'",
       ["$codigoCaja#%"],
     )) ?? 0;
+
+    // Pendientes mostrados = esperados - hechos; si aún no encolamos, se verá todo pendiente.
+    final pendingCaja = (1 - doneCaja).clamp(0, 1);
+    final pendingItems = (expItems - doneItems);
+
     return {
       'expectedCaja': 1,
       'expectedItems': expItems,
-      'pendingCaja': pendCaja,
-      'pendingItems': pendItems,
+      'pendingCaja': pendingCaja,
+      'pendingItems': pendingItems,
       'errorCaja': errCaja,
       'errorItems': errItems,
+      'doneCaja': doneCaja,
+      'doneItems': doneItems,
     };
   }
 

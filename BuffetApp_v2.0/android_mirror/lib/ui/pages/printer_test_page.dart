@@ -22,6 +22,7 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
   Map<String, dynamic>? _usbSel;
   bool _connected = false;
   bool _printLogoEscpos = true;
+  int _paperWidthMm = 80; // 58, 75, 80
 
   Future<void> _refreshPrinters() async {
     try {
@@ -47,6 +48,8 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
       final sp = await SharedPreferences.getInstance();
       final v = sp.getBool('print_logo_escpos');
       setState(() => _printLogoEscpos = v ?? true);
+      final mm = sp.getInt('paper_width_mm');
+      setState(() => _paperWidthMm = (mm == 58 || mm == 75 || mm == 80) ? mm! : 80);
     } catch (_) {}
   }
 
@@ -96,6 +99,28 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                 } catch (_) {}
               },
             ),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<int>(
+                  initialValue: _paperWidthMm,
+                  decoration: const InputDecoration(
+                    labelText: 'Ancho de papel',
+                    helperText: 'Afecta USB y PDF (58/75/80 mm)',
+                  ),
+                  items: const [58, 75, 80]
+                      .map((mm) => DropdownMenuItem(value: mm, child: Text('$mm mm')))
+                      .toList(),
+                  onChanged: (mm) async {
+                    if (mm == null) return;
+                    setState(() => _paperWidthMm = mm);
+                    try {
+                      final sp = await SharedPreferences.getInstance();
+                      await sp.setInt('paper_width_mm', mm);
+                    } catch (_) {}
+                  },
+                ),
+              ),
+            ]),
             const Divider(height: 24),
             Text('USB directa', style: Theme.of(context).textTheme.titleMedium),
             Row(children: [

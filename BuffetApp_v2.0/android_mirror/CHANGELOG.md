@@ -6,6 +6,20 @@
 - Resumen de caja: muestra una barra determinística mientras se sincroniza y conserva el diálogo de resultados al finalizar.
 - Versionado: bump a 1.0.7+8.
 
+## 1.0.9+10 — 2025-11-07
+- Sincronización: indicador refinado basado en pendientes reales (caja + tickets) y nueva línea "Sincronizados: Caja n/m · Tickets n/m".
+- Lógica de red: manejo de errores transitorios (DNS, SocketException) sin marcar filas como errores permanentes; reintento diferido.
+- Items: pospone envío si la caja aún no está confirmada en servidor; fallback de upsert mínimo si falta la caja pero está marcada como done local.
+- UI Tickets: encabezado compactado ("Tk") para evitar truncamiento y reducción de tamaños tipográficos en detalle para mejorar ajuste.
+- Ayuda: pendiente de actualizar sección sincronización con nuevo indicador (ver siguiente versión si se agrega más texto).
+- Versionado: bump a 1.0.9+10.
+
+## 1.0.8+9 — 2025-11-01
+- Impresora: nueva preferencia de “Ancho de papel” (58/75/80 mm).
+- Tickets (USB/PDF): se adaptan automáticamente al ancho 75 mm (y 58/80 mm). En ESC/POS se ajustan caracteres por línea e imágenes (58→384px, 75→512px, 80→576px). En PDF se ajusta el formato de página por mm.
+- Ayuda: se documenta la preferencia y recomendaciones si el texto se corta.
+- APK de release actualizado.
+
 Todas las notas de cambios para BuffetApp (Android espejo).
 
 ## 1.0.6+7 — 2025-10-31
