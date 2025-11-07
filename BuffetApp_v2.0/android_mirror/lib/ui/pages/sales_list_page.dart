@@ -53,7 +53,7 @@ class _SalesListPageState extends State<SalesListPage> {
     }
     String? currentDateHeader;
     return Scaffold(
-      appBar: AppBar(title: const Text('Recibos')),
+      appBar: AppBar(title: const Text('Tickets')),
       body: Column(
         children: [
           Padding(

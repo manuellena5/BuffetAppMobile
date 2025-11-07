@@ -7,6 +7,10 @@ import 'caja_list_page.dart';
 import 'caja_page.dart';
 import 'pos_main_page.dart';
 import 'printer_test_page.dart';
+import 'sales_list_page.dart';
+import 'products_page.dart';
+import 'settings_page.dart';
+import 'help_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
@@ -87,6 +91,135 @@ class _HomePageState extends State<HomePage> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('BuffetApp'),
+        ),
+        drawer: Drawer(
+          child: ListView(
+            children: [
+              const DrawerHeader(child: Text('BuffetApp')),
+              ListTile(
+                leading: const Icon(Icons.home),
+                title: const Text('Inicio'),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.point_of_sale),
+                title: const Text('Ventas'),
+                enabled: _caja != null,
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  if (_caja == null) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Abrí una caja para vender')),
+                    );
+                    return;
+                  }
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const PosMainPage()),
+                  );
+                  if (!mounted) return;
+                  await _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.history),
+                title: const Text('Tickets'),
+                enabled: _caja != null,
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  if (_caja == null) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Abrí una caja para ver los tickets')),
+                    );
+                    return;
+                  }
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const SalesListPage()),
+                  );
+                  if (!mounted) return;
+                  await _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.store),
+                title: const Text('Caja'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const CajaPage()),
+                  );
+                  if (!mounted) return;
+                  await _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.inventory),
+                title: const Text('Historial de cajas'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const CajaListPage()),
+                  );
+                  if (!mounted) return;
+                  await _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.inventory_2),
+                title: const Text('Productos (ABM)'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const ProductsPage()),
+                  );
+                  if (!mounted) return;
+                  await _load();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Configuraciones'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.print),
+                title: const Text('Config. impresora'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const PrinterTestPage()),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Ayuda'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const HelpPage()),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
         body: _loading
           ? const Center(child: CircularProgressIndicator())

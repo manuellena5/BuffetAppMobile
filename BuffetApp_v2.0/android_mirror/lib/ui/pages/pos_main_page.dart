@@ -288,17 +288,8 @@ class _PosMainPageState extends State<PosMainPage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.receipt_long),
-              title: const Text('Ticket actual'),
-              onTap: () {
-                final nav = Navigator.of(context);
-                nav.pop();
-                nav.push(MaterialPageRoute(builder: (_) => const CartPage()));
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.history),
-              title: const Text('Recibos'),
+              title: const Text('Tickets'),
               onTap: () async {
                 final nav = Navigator.of(context);
                 final messenger = ScaffoldMessenger.of(context);
