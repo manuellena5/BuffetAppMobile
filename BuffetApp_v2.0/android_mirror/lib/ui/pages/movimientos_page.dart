@@ -106,7 +106,7 @@ class _MovimientosPageState extends State<MovimientosPage> {
                       final tipo = (m['tipo'] ?? '').toString();
                       final monto = (m['monto'] as num?)?.toDouble() ?? 0;
                       final obs = (m['observacion'] as String?) ?? '';
-                      final fecha = (m['creado_ts'] as String?) ?? '';
+                      final fecha = (m['created_ts']?.toString()) ?? '';
                       final color = tipo == 'INGRESO' ? Colors.green.shade100 : Colors.red.shade100;
                       return Card(
                         color: color,
@@ -207,7 +207,7 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            value: _tipo,
+            initialValue: _tipo,
             items: const [
               DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
               DropdownMenuItem(value: 'RETIRO', child: Text('Retiro')),

@@ -171,9 +171,24 @@ class _CajaPageState extends State<CajaPage> {
                 decoration: const InputDecoration(labelText: 'Observación')),
             const SizedBox(height: 6),
             TextField(
-                controller: _entradas,
-                decoration: const InputDecoration(labelText: 'Entradas vendidas (opcional)'),
-                keyboardType: TextInputType.number),
+              controller: _entradas,
+              decoration: const InputDecoration(labelText: 'Entradas vendidas (opcional)'),
+              keyboardType: TextInputType.number,
+              onChanged: (v) {
+                if (v.isEmpty) return; // permitir vacío (opcional)
+                final parsed = int.tryParse(v);
+                if (parsed == null || parsed < 0) {
+                  // revertir a positivo previo o limpiar
+                  final limpio = v.replaceAll(RegExp(r'[^0-9]'), '');
+                  final safe = limpio.isEmpty ? '' : int.parse(limpio).toString();
+                  if (_entradas.text != safe) {
+                    _entradas.text = safe;
+                    _entradas.selection = TextSelection.fromPosition(TextPosition(offset: _entradas.text.length));
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sólo números enteros ≥ 0')));
+                }
+              },
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () async {
@@ -181,7 +196,16 @@ class _CajaPageState extends State<CajaPage> {
                 final nav = Navigator.of(context);
                 final eff = parseLooseDouble(_efectivo.text);
                 final tr = parseLooseDouble(_transfer.text);
-                final entradas = int.tryParse(_entradas.text.trim());
+                final entradasRaw = _entradas.text.trim();
+                final entradas = entradasRaw.isEmpty ? null : int.tryParse(entradasRaw);
+                if (entradasRaw.isNotEmpty && entradas == null) {
+                  messenger.showSnackBar(const SnackBar(content: Text('Entradas debe ser un entero ≥ 0')));
+                  return;
+                }
+                if (entradas != null && entradas < 0) {
+                  messenger.showSnackBar(const SnackBar(content: Text('Entradas no puede ser negativo')));
+                  return;
+                }
                 if ((_usuario.text.trim()).isEmpty) {
                   messenger.showSnackBar(
                       const SnackBar(content: Text('Usuario cierre requerido')));

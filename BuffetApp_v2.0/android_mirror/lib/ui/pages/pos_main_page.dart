@@ -17,6 +17,7 @@ import 'settings_page.dart';
 import '../../app_version.dart';
 import 'help_page.dart';
 import 'movimientos_page.dart';
+import 'error_logs_page.dart';
 import 'dart:io';
 import 'dart:async';
 import '../../services/usb_printer_service.dart';
@@ -334,11 +335,11 @@ class _PosMainPageState extends State<PosMainPage> {
               title: const Text('Movimientos caja'),
               onTap: () async {
                 final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
                 nav.pop();
                 final caja = await CajaService().getCajaAbierta();
                 if (caja == null) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(content: Text('Abrí una caja para ver movimientos')),
                   );
                   return;
@@ -392,6 +393,17 @@ class _PosMainPageState extends State<PosMainPage> {
                 nav.pop();
                 await nav.push(
                     MaterialPageRoute(builder: (_) => const HelpPage()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bug_report),
+              title: const Text('Logs de errores'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                await nav.push(
+                  MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
+                );
               },
             ),
             const SizedBox(height: 8),

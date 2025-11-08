@@ -109,9 +109,10 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-  final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'creado_ts ASC');
+  final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
   final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+  final efectivoDeclarado = ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
   final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
   final obsCierre = (c['obs_cierre'] as String?) ?? '';
   final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
@@ -195,6 +196,7 @@ class PrintService {
           style: s(true).copyWith(fontSize: 12)),
               pw.SizedBox(height: 6),
               pw.Text('Fondo inicial: ${_formatCurrency(fondo)}', style: s()),
+              pw.Text('Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}', style: s()),
               pw.Text(
           'Diferencia: ${_formatCurrency(diferencia)}',
                   style: s(true)),
@@ -210,7 +212,11 @@ class PrintService {
                   for (final m in movimientos) {
                     final tipo = (m['tipo'] ?? '').toString().toUpperCase();
                     final monto = ((m['monto'] as num?) ?? 0).toDouble();
-                    if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+                    if (tipo == 'INGRESO') {
+                      ing += monto;
+                    } else if (tipo == 'RETIRO') {
+                      ret += monto;
+                    }
                   }
                   return pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -232,14 +238,26 @@ class PrintService {
         if (movimientos.isNotEmpty) pw.SizedBox(height: 8),
         if (movimientos.isNotEmpty) pw.Text('MOVIMIENTOS:', style: s(true)),
         if (movimientos.isNotEmpty) pw.SizedBox(height: 2),
-        ...movimientos.map((m) => pw.Text(
-          '${m['creado_ts'] ?? ''} ${(m['tipo'] ?? '')}: ' +
-            _formatCurrency(((m['monto'] as num?) ?? 0).toDouble()) +
-            (m['observacion'] != null && (m['observacion'] as String).trim().isNotEmpty
-              ? ' - ${(m['observacion'] as String).trim()}'
-              : ''),
-          style: s(),
-          )),
+        ...movimientos.map((m) {
+          final ts = (m['created_ts'] as num?)?.toInt();
+          String tsStr = '';
+          if (ts != null) {
+            final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+            final dd = dt.day.toString().padLeft(2, '0');
+            final mm = dt.month.toString().padLeft(2, '0');
+            final hh = dt.hour.toString().padLeft(2, '0');
+            final mi = dt.minute.toString().padLeft(2, '0');
+            tsStr = '$dd/$mm $hh:$mi';
+          }
+          final tipo = (m['tipo'] ?? '').toString();
+          final monto = ((m['monto'] as num?) ?? 0).toDouble();
+          final obs = (m['observacion'] as String?)?.trim();
+          final obsPart = (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
+          return pw.Text(
+            '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart',
+            style: s(),
+          );
+        }),
             ],
           );
         },
@@ -380,7 +398,8 @@ class PrintService {
     text('Transferencia: ${_formatCurrency(18750)}');
     sizeDouble(); boldOn(); text('TOTAL: ${_formatCurrency(51200)}'); boldOff(); sizeNormal();
     feed();
-    text('Fondo inicial: ${_formatCurrency(5000)}');
+  text('Fondo inicial: ${_formatCurrency(5000)}');
+  text('Efectivo declarado en caja: ${_formatCurrency(4800)}');
     boldOn(); text('Diferencia: ${_formatCurrency(0)}'); boldOff();
     text('Tickets anulados: 0');
     feed();
@@ -409,9 +428,10 @@ class PrintService {
     final db = await AppDatabase.instance();
     final caja = await db.query('caja_diaria', where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-    final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'creado_ts ASC');
-    final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
-    final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+  final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+  final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
+  final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+  final efectivoDeclarado = ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
     final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
     final obsCierre = (c['obs_cierre'] as String?) ?? '';
     final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
@@ -499,7 +519,8 @@ class PrintService {
   // TOTAL más grande
   sizeDouble(); boldOn(); text('TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}'); boldOff(); sizeNormal();
     feed();
-    text('Fondo inicial: ${_formatCurrency(fondo)}');
+  text('Fondo inicial: ${_formatCurrency(fondo)}');
+  text('Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}');
     boldOn(); text('Diferencia: ${_formatCurrency(diferencia)}'); boldOff();
   text('Entradas vendidas: $entradasVendidas');
     text('Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}');
@@ -517,7 +538,11 @@ class PrintService {
       for (final m in movimientos) {
         final tipo = (m['tipo'] ?? '').toString().toUpperCase();
         final monto = ((m['monto'] as num?) ?? 0).toDouble();
-        if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+        if (tipo == 'INGRESO') {
+          ing += monto;
+        } else if (tipo == 'RETIRO') {
+          ret += monto;
+        }
       }
       feed();
       boldOn(); text('MOVIMIENTOS:'); boldOff();

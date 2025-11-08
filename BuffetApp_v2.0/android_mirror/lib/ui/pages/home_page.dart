@@ -12,6 +12,7 @@ import 'products_page.dart';
 import 'settings_page.dart';
 import 'help_page.dart';
 import 'movimientos_page.dart';
+import 'error_logs_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
@@ -237,6 +238,17 @@ class _HomePageState extends State<HomePage> {
                   nav.pop();
                   await nav.push(
                     MaterialPageRoute(builder: (_) => const HelpPage()),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: const Text('Logs de errores'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
                   );
                 },
               ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -13,46 +15,85 @@ class AppDatabase {
 
     _db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
+      onConfigure: (db) async {
+        // PRAGMAs: en Android usar rawQuery porque devuelven filas
+        await db.rawQuery('PRAGMA foreign_keys=ON');
+        await db.rawQuery('PRAGMA journal_mode=WAL');
+        await db.rawQuery('PRAGMA synchronous=NORMAL');
+      },
       onCreate: (db, v) async {
-        // Activar FK y crear esquema base
-        await db.execute('PRAGMA foreign_keys=ON');
+        final batch = db.batch();
 
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS metodos_pago (id INTEGER PRIMARY KEY, descripcion TEXT NOT NULL)');
-
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS Categoria_Producto (id INTEGER PRIMARY KEY, descripcion TEXT NOT NULL)');
-
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS products ('
+        // Tablas base de catálogos
+        batch.execute('CREATE TABLE metodos_pago ('
             'id INTEGER PRIMARY KEY, '
-            'codigo_producto TEXT, '
+            'descripcion TEXT NOT NULL, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+            ')');
+
+        batch.execute('CREATE TABLE Categoria_Producto ('
+            'id INTEGER PRIMARY KEY, '
+            'descripcion TEXT NOT NULL, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+            ')');
+
+        // Productos
+        batch.execute('CREATE TABLE products ('
+            'id INTEGER PRIMARY KEY, '
+            'codigo_producto TEXT UNIQUE, '
             'nombre TEXT NOT NULL, '
             'precio_compra INTEGER, '
             'precio_venta INTEGER NOT NULL, '
             'stock_actual INTEGER DEFAULT 0, '
             'stock_minimo INTEGER DEFAULT 3, '
-      'orden_visual INTEGER, '
+            'orden_visual INTEGER, '
             'categoria_id INTEGER, '
             'visible INTEGER DEFAULT 1, '
             'color TEXT, '
             'imagen TEXT, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
             'FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id)'
             ')');
+        batch.execute('CREATE INDEX idx_products_visible_cat_order '
+            'ON products(visible, categoria_id, orden_visual)');
 
-    await db.execute(
-    'CREATE TABLE IF NOT EXISTS caja_diaria ('
-    'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-    'codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, '
-    'usuario_apertura TEXT, cajero_apertura TEXT, hora_apertura TEXT, apertura_dt TEXT, '
-    'fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, '
-    'retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, tickets_anulados INTEGER, entradas INTEGER, '
-  'hora_cierre TEXT, cierre_dt TEXT, usuario_cierre TEXT, cajero_cierre TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT'
-    ')');
+        // Caja diaria
+        batch.execute('CREATE TABLE caja_diaria ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'codigo_caja TEXT UNIQUE, '
+            'disciplina TEXT, '
+            'fecha TEXT, '
+            'usuario_apertura TEXT, '
+            'cajero_apertura TEXT, '
+            'hora_apertura TEXT, '
+            'apertura_dt TEXT, '
+            'fondo_inicial REAL, '
+      'conteo_efectivo_final REAL, '
+            'estado TEXT, '
+            'ingresos REAL DEFAULT 0, '
+            'retiros REAL DEFAULT 0, '
+            'diferencia REAL, '
+            'total_tickets INTEGER, '
+            'tickets_anulados INTEGER, '
+            'entradas INTEGER, '
+            'hora_cierre TEXT, '
+            'cierre_dt TEXT, '
+            'usuario_cierre TEXT, '
+            'cajero_cierre TEXT, '
+            'descripcion_evento TEXT, '
+            'observaciones_apertura TEXT, '
+            'obs_cierre TEXT, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+            ')');
+        batch.execute('CREATE INDEX idx_caja_estado ON caja_diaria(estado)');
 
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS ventas ('
+        // Ventas + items
+        batch.execute('CREATE TABLE ventas ('
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'uuid TEXT UNIQUE, '
             'fecha_hora TEXT NOT NULL, '
@@ -61,30 +102,32 @@ class AppDatabase {
             'activo INTEGER DEFAULT 1, '
             'metodo_pago_id INTEGER, '
             'caja_id INTEGER, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
             'FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id), '
             'FOREIGN KEY (caja_id) REFERENCES caja_diaria(id)'
             ')');
+        batch.execute('CREATE INDEX idx_ventas_fecha_hora ON ventas(fecha_hora)');
+        batch.execute('CREATE INDEX idx_ventas_caja ON ventas(caja_id)');
+        batch.execute('CREATE INDEX idx_ventas_mp ON ventas(metodo_pago_id)');
+        batch.execute('CREATE INDEX idx_ventas_activo ON ventas(activo)');
 
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_ventas_fecha_hora ON ventas(fecha_hora)');
-
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS venta_items ('
+        batch.execute('CREATE TABLE venta_items ('
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'venta_id INTEGER NOT NULL, '
             'producto_id INTEGER NOT NULL, '
             'cantidad INTEGER NOT NULL, '
             'precio_unitario REAL NOT NULL, '
             'subtotal REAL NOT NULL, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
             'FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE, '
             'FOREIGN KEY (producto_id) REFERENCES products(id)'
             ')');
+        batch.execute('CREATE INDEX idx_items_venta_id ON venta_items(venta_id)');
 
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_items_venta_id ON venta_items(venta_id)');
-
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS tickets ('
+        // Tickets
+        batch.execute('CREATE TABLE tickets ('
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'venta_id INTEGER, '
             'categoria_id INTEGER, '
@@ -93,376 +136,381 @@ class AppDatabase {
             "status TEXT DEFAULT 'No impreso', "
             'total_ticket REAL NOT NULL, '
             'identificador_ticket TEXT, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
             'FOREIGN KEY (venta_id) REFERENCES ventas(id), '
             'FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id), '
             'FOREIGN KEY (producto_id) REFERENCES products(id)'
             ')');
+        batch.execute('CREATE INDEX idx_tickets_venta_id ON tickets(venta_id)');
+        batch.execute('CREATE INDEX idx_tickets_categoria_id ON tickets(categoria_id)');
+        batch.execute('CREATE INDEX idx_tickets_status ON tickets(status)');
 
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_tickets_venta_id ON tickets(venta_id)');
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_tickets_categoria_id ON tickets(categoria_id)');
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)');
-
-        await db.execute(
-            'CREATE TABLE IF NOT EXISTS caja_movimiento ('
+        // Movimientos de caja
+        batch.execute('CREATE TABLE caja_movimiento ('
             'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             'caja_id INTEGER NOT NULL, '
             "tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','RETIRO')), "
             'monto REAL NOT NULL CHECK (monto > 0), '
             'observacion TEXT, '
-            'creado_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
             'FOREIGN KEY (caja_id) REFERENCES caja_diaria(id)'
             ')');
-        await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_mov_caja_id ON caja_movimiento(caja_id)');
+        batch.execute('CREATE INDEX idx_mov_caja_id ON caja_movimiento(caja_id)');
+        batch.execute('CREATE INDEX idx_mov_caja_tipo ON caja_movimiento(caja_id, tipo)');
 
-    // Outbox de sincronización con Supabase
-    await db.execute(
-      "CREATE TABLE IF NOT EXISTS sync_outbox ("
-      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-      "tipo TEXT NOT NULL, "
-      "ref TEXT NOT NULL, "
-      "payload TEXT NOT NULL, "
-      "estado TEXT NOT NULL DEFAULT 'pending', "
-      "reintentos INTEGER NOT NULL DEFAULT 0, "
-      "last_error TEXT, "
-      "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
-      ")");
-    // Índice único para idempotencia por clave natural
-    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
+        // Catálogo: Punto de venta / Disciplinas
+        batch.execute('CREATE TABLE punto_venta ('
+            'codigo TEXT PRIMARY KEY, '
+            'nombre TEXT NOT NULL, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+            ')');
+        batch.execute('CREATE TABLE disciplinas ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'nombre TEXT UNIQUE NOT NULL, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+            "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+            ')');
 
-    // Log local de errores de sincronización/auditoría
-    await db.execute(
-      'CREATE TABLE IF NOT EXISTS sync_error_log ('
-      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-      'scope TEXT, '
-      'message TEXT, '
-      'payload TEXT, '
-      'created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
-      ')');
+        // Outbox de sincronización con Supabase
+        batch.execute('CREATE TABLE sync_outbox ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'tipo TEXT NOT NULL, '
+            'ref TEXT NOT NULL, '
+            'payload TEXT NOT NULL, '
+            "estado TEXT NOT NULL DEFAULT 'pending', "
+            'reintentos INTEGER NOT NULL DEFAULT 0, '
+            'last_error TEXT, '
+            "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+            ')');
+        batch.execute('CREATE UNIQUE INDEX ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
 
-        // Semillas iniciales en creación (única vez)
-        await db.insert('metodos_pago',
-            {'id': 1, 'descripcion': 'Efectivo'},
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-        await db.insert('metodos_pago',
-            {'id': 2, 'descripcion': 'Transferencia'},
-            conflictAlgorithm: ConflictAlgorithm.ignore);
+        // Log de errores de sync (existente) y log de errores de app (nuevo)
+        batch.execute('CREATE TABLE sync_error_log ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'scope TEXT, '
+            'message TEXT, '
+            'payload TEXT, '
+            'created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
+            ')');
+        batch.execute('CREATE TABLE app_error_log ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'scope TEXT, '
+            'message TEXT, '
+            'stacktrace TEXT, '
+            'payload TEXT, '
+            'created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
+            ')');
 
-    await db.insert('Categoria_Producto',
-      {'id': 1, 'descripcion': 'Comida'},
-      conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('Categoria_Producto',
-      {'id': 2, 'descripcion': 'Bebidas'},
-      conflictAlgorithm: ConflictAlgorithm.ignore);
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'HIEL',
-            'nombre': 'Hielo',
-            'precio_venta': 1000,
-            'stock_actual': 999,
-            'stock_minimo': 3,
-            'orden_visual': 10,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'PAPF',
-            'nombre': 'Papas fritas',
-            'precio_venta': 2000,
-            'stock_actual': 999,
-            'stock_minimo': 3,
-            'orden_visual': 12,
-            'categoria_id': 1,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        await batch.commit(noResult: true);
 
-        // Productos precargados adicionales (como se tenía antes)
-        // Comida
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'HAMB',
-            'nombre': 'Hamburguesa',
-            'precio_venta': 3000,
-            'stock_actual': 50,
-            'stock_minimo': 3,
-            'orden_visual': 1,
-            'categoria_id': 1,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'CHOR',
-            'nombre': 'Choripan',
-            'precio_venta': 3000,
-            'stock_actual': 50,
-            'stock_minimo': 3,
-            'orden_visual': 2,
-            'categoria_id': 1,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        // Bebidas
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'VINO',
-            'nombre': 'Vino',
-            'precio_venta': 2000,
-            'stock_actual': 999,
-            'stock_minimo': 3,
-            'orden_visual': 9,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'GATO',
-            'nombre': 'Gatorade',
-            'precio_venta': 2500,
-            'stock_actual': 50,
-            'stock_minimo': 3,
-            'orden_visual': 11,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'AGMT',
-            'nombre': 'Agua Mate',
-            'precio_venta': 1000,
-            'stock_actual': 50,
-            'stock_minimo': 3,
-            'orden_visual': 7,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'FERN',
-            'nombre': 'Fernet',
-            'precio_venta': 5000,
-            'stock_actual': 999,
-            'stock_minimo': 3,
-            'orden_visual': 6,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'CERV',
-            'nombre': 'Cerveza',
-            'precio_venta': 2000,
-            'stock_actual': 999,
-            'stock_minimo': 3,
-            'orden_visual': 5,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'AGUA',
-            'nombre': 'Agua',
-            'precio_venta': 1000,
-            'stock_actual': 50,
-            'stock_minimo': 3,
-            'orden_visual': 8,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'JARR',
-            'nombre': 'Jarra gaseosa',
-            'precio_venta': 2000,
-            'stock_actual': 999,
-            'stock_minimo': 5,
-            'orden_visual': 3,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        await db.insert(
-          'products',
-          {
-            'codigo_producto': 'VASO',
-            'nombre': 'Vaso gaseosa',
-            'precio_venta': 1500,
-            'stock_actual': 999,
-            'stock_minimo': 5,
-            'orden_visual': 4,
-            'categoria_id': 2,
-            'visible': 1,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-        // Catálogos de referencia (puntos de venta, disciplinas)
-        await _ensureCatalogos(db);
+        // Semillas iniciales (única vez)
+        await _seedData(db);
       },
-      onOpen: (db) async {
-        await db.execute('PRAGMA foreign_keys=ON');
-    // Asegurar categorías base (evita errores FK en tickets para categoria_id=2)
-    await db.insert('Categoria_Producto',
-      {'id': 1, 'descripcion': 'Comida'},
-      conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('Categoria_Producto',
-      {'id': 2, 'descripcion': 'Bebidas'},
-      conflictAlgorithm: ConflictAlgorithm.ignore);
+      // Migraciones para instalaciones previas (v1 -> v2)
+      onUpgrade: (db, from, to) async {
+        // Asegurar FKs (usar rawQuery en Android)
+        await db.rawQuery('PRAGMA foreign_keys=ON');
+        // Crear tablas ausentes (idempotente)
+        await db.execute('CREATE TABLE IF NOT EXISTS metodos_pago (id INTEGER PRIMARY KEY, descripcion TEXT NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
+        await db.execute('CREATE TABLE IF NOT EXISTS Categoria_Producto (id INTEGER PRIMARY KEY, descripcion TEXT NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
+        await db.execute('CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, codigo_producto TEXT UNIQUE, nombre TEXT NOT NULL, precio_compra INTEGER, precio_venta INTEGER NOT NULL, stock_actual INTEGER DEFAULT 0, stock_minimo INTEGER DEFAULT 3, orden_visual INTEGER, categoria_id INTEGER, visible INTEGER DEFAULT 1, color TEXT, imagen TEXT, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id))');
+        await db.execute('CREATE TABLE IF NOT EXISTS caja_diaria (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, usuario_apertura TEXT, cajero_apertura TEXT, hora_apertura TEXT, apertura_dt TEXT, fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, tickets_anulados INTEGER, entradas INTEGER, hora_cierre TEXT, cierre_dt TEXT, usuario_cierre TEXT, cajero_cierre TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT, created_ts INTEGER, updated_ts INTEGER)');
+        await db.execute('CREATE TABLE IF NOT EXISTS ventas (id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT UNIQUE, fecha_hora TEXT NOT NULL, total_venta REAL NOT NULL, status TEXT DEFAULT "No impreso", activo INTEGER DEFAULT 1, metodo_pago_id INTEGER, caja_id INTEGER, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id), FOREIGN KEY (caja_id) REFERENCES caja_diaria(id))');
+        await db.execute('CREATE TABLE IF NOT EXISTS venta_items (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER NOT NULL, producto_id INTEGER NOT NULL, cantidad INTEGER NOT NULL, precio_unitario REAL NOT NULL, subtotal REAL NOT NULL, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE, FOREIGN KEY (producto_id) REFERENCES products(id))');
+        await db.execute('CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER, categoria_id INTEGER, producto_id INTEGER, fecha_hora TEXT NOT NULL, status TEXT DEFAULT "No impreso", total_ticket REAL NOT NULL, identificador_ticket TEXT, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (venta_id) REFERENCES ventas(id), FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id), FOREIGN KEY (producto_id) REFERENCES products(id))');
+        await db.execute('CREATE TABLE IF NOT EXISTS caja_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, caja_id INTEGER NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN (\'INGRESO\',\'RETIRO\')), monto REAL NOT NULL CHECK (monto > 0), observacion TEXT, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (caja_id) REFERENCES caja_diaria(id))');
+        await db.execute('CREATE TABLE IF NOT EXISTS punto_venta (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
+        await db.execute('CREATE TABLE IF NOT EXISTS disciplinas (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT UNIQUE NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
+        await db.execute('CREATE TABLE IF NOT EXISTS sync_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, ref TEXT NOT NULL, payload TEXT NOT NULL, estado TEXT NOT NULL DEFAULT \"pending\", reintentos INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_ts INTEGER NOT NULL DEFAULT (strftime(\'%s\',\'now\')*1000))');
+        await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
+        await db.execute('CREATE TABLE IF NOT EXISTS sync_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, message TEXT, payload TEXT, created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+        await db.execute('CREATE TABLE IF NOT EXISTS app_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, message TEXT, stacktrace TEXT, payload TEXT, created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
 
-        // Migración: agregar columna descripcion_evento si falta
-        final infoCaja = await db.rawQuery("PRAGMA table_info(caja_diaria)");
-        final hasDescEvento = infoCaja.any((c) => (c['name'] as String?) == 'descripcion_evento');
-        if (!hasDescEvento) {
-          await db.execute('ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT');
+        // Asegurar columnas nuevas en caja_diaria
+        final cajaInfo = await db.rawQuery('PRAGMA table_info(caja_diaria)');
+        Future<void> _ensureCol(String name, String ddl) async {
+          final exists = cajaInfo.any((c) => (c['name'] as String?) == name);
+          if (!exists) await db.execute('ALTER TABLE caja_diaria ADD COLUMN ' + ddl);
         }
-        // Migración: agregar tickets_anulados si falta
-        final hasTicketsAnulados = infoCaja.any((c) => (c['name'] as String?) == 'tickets_anulados');
-        if (!hasTicketsAnulados) {
-          await db.execute('ALTER TABLE caja_diaria ADD COLUMN tickets_anulados INTEGER');
-        }
-        // Migración: agregar entradas si falta
-        final hasEntradas = infoCaja.any((c) => (c['name'] as String?) == 'entradas');
-        if (!hasEntradas) {
-          await db.execute('ALTER TABLE caja_diaria ADD COLUMN entradas INTEGER');
-        }
-        // Migración: agregar cajero_apertura/cajero_cierre si faltan
-        final hasCajeroA = infoCaja.any((c) => (c['name'] as String?) == 'cajero_apertura');
+        await _ensureCol('descripcion_evento', 'descripcion_evento TEXT');
+        await _ensureCol('tickets_anulados', 'tickets_anulados INTEGER');
+        await _ensureCol('entradas', 'entradas INTEGER');
+        await _ensureCol('cajero_apertura', 'cajero_apertura TEXT');
+        await _ensureCol('cajero_cierre', 'cajero_cierre TEXT');
+        await _ensureCol('usuario_cierre', 'usuario_cierre TEXT');
+        await _ensureCol('conteo_efectivo_final', 'conteo_efectivo_final REAL');
+
+        // Inicializar cajero_apertura si se agregó
+        final hasCajeroA = cajaInfo.any((c) => (c['name'] as String?) == 'cajero_apertura');
         if (!hasCajeroA) {
-          await db.execute('ALTER TABLE caja_diaria ADD COLUMN cajero_apertura TEXT');
-          // Inicializar con usuario_apertura si existe; sino 'admin'
           await db.rawUpdate("UPDATE caja_diaria SET cajero_apertura = COALESCE(usuario_apertura, 'admin')");
         }
-        final hasCajeroC = infoCaja.any((c) => (c['name'] as String?) == 'cajero_cierre');
-        if (!hasCajeroC) {
-          await db.execute('ALTER TABLE caja_diaria ADD COLUMN cajero_cierre TEXT');
-        }
-        // Migración: agregar usuario_cierre si falta
-        final hasUsuarioCierre = infoCaja.any((c) => (c['name'] as String?) == 'usuario_cierre');
-        if (!hasUsuarioCierre) {
-          await db.execute('ALTER TABLE caja_diaria ADD COLUMN usuario_cierre TEXT');
-          // Inicializar en NULL; se completará al cerrar cajas a partir de ahora
-        }
 
-        // Migración: agregar columna orden_visual si falta y setear orden inicial
-        final prodInfo = await db.rawQuery("PRAGMA table_info(products)");
+        // Asegurar columna orden_visual en products
+        final prodInfo = await db.rawQuery('PRAGMA table_info(products)');
         final hasOrden = prodInfo.any((c) => (c['name'] as String?) == 'orden_visual');
         if (!hasOrden) {
           await db.execute('ALTER TABLE products ADD COLUMN orden_visual INTEGER');
+          await db.rawUpdate('UPDATE products SET orden_visual = 1000 + id WHERE orden_visual IS NULL');
         }
-        // Renombrar Vino blanco -> Vino si existe
-        await db.update('products', {'nombre': 'Vino'}, where: 'codigo_producto = ?', whereArgs: ['VINO']);
-        // Seteo de orden inicial para códigos conocidos
-        const orderMap = {
-          'HAMB': 1,
-          'CHOR': 2,
-          'JARR': 3,
-          'VASO': 4,
-          'CERV': 5,
-          'FERN': 6,
-          'AGMT': 7,
-          'AGUA': 8,
-          'VINO': 9,
-          'HIEL': 10,
-          'GATO': 11,
-          'PAPF': 12,
-          'DONA': 13,
-        };
-        for (final e in orderMap.entries) {
-          await db.update('products', {'orden_visual': e.value}, where: 'codigo_producto = ?', whereArgs: [e.key]);
+        // Índices útiles
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_products_visible_cat_order ON products(visible, categoria_id, orden_visual)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_fecha_hora ON ventas(fecha_hora)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_caja ON ventas(caja_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_mp ON ventas(metodo_pago_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_ventas_activo ON ventas(activo)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_items_venta_id ON venta_items(venta_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_tickets_venta_id ON tickets(venta_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_tickets_categoria_id ON tickets(categoria_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_mov_caja_id ON caja_movimiento(caja_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_mov_caja_tipo ON caja_movimiento(caja_id, tipo)');
+
+        // Categorías base (evita errores FK)
+        await db.insert('Categoria_Producto', {'id': 1, 'descripcion': 'Comida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        await db.insert('Categoria_Producto', {'id': 2, 'descripcion': 'Bebidas'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        // Métodos de pago base
+        await db.insert('metodos_pago', {'id': 1, 'descripcion': 'Efectivo'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        await db.insert('metodos_pago', {'id': 2, 'descripcion': 'Transferencia'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+        // Punto de venta y disciplinas mínimos
+        final pvCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(1) FROM punto_venta')) ?? 0;
+        if (pvCount == 0) {
+          await db.insert('punto_venta', {'codigo': 'Caj01', 'nombre': 'Caja1'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+          await db.insert('punto_venta', {'codigo': 'Caj02', 'nombre': 'Caja2'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+          await db.insert('punto_venta', {'codigo': 'Caj03', 'nombre': 'Caja3'}, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
-        // Para los que queden nulos, mandarlos al final: 1000 + id
-        await db.rawUpdate('UPDATE products SET orden_visual = 1000 + id WHERE orden_visual IS NULL');
+        final disCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(1) FROM disciplinas')) ?? 0;
+        if (disCount == 0) {
+          await db.insert('disciplinas', {'nombre': 'Futbol Infantil'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+          await db.insert('disciplinas', {'nombre': 'Futbol Mayor'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+          await db.insert('disciplinas', {'nombre': 'Evento'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+          await db.insert('disciplinas', {'nombre': 'Otros'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
 
-        // Asegurar catálogos también en onOpen para instalaciones previas
-        await _ensureCatalogos(db);
-
-        // Asegurar tabla outbox en instalaciones previas
-    await db.execute(
-      "CREATE TABLE IF NOT EXISTS sync_outbox ("
-      "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-      "tipo TEXT NOT NULL, "
-      "ref TEXT NOT NULL, "
-      "payload TEXT NOT NULL, "
-      "estado TEXT NOT NULL DEFAULT 'pending', "
-      "reintentos INTEGER NOT NULL DEFAULT 0, "
-      "last_error TEXT, "
-      "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
-      ")");
-    // Deduplicar (mantener última fila por tipo/ref) antes de aplicar índice único
-    await db.rawDelete(
-      'DELETE FROM sync_outbox WHERE id NOT IN (SELECT MAX(id) FROM sync_outbox GROUP BY tipo, ref)'
-    );
-    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
-
-    await db.execute(
-      'CREATE TABLE IF NOT EXISTS sync_error_log ('
-      'id INTEGER PRIMARY KEY AUTOINCREMENT, '
-      'scope TEXT, '
-      'message TEXT, '
-      'payload TEXT, '
-      'created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP'
-      ')');
+        // Deduplicar outbox pre-índice único (por si existía)
+        await db.rawDelete('DELETE FROM sync_outbox WHERE id NOT IN (SELECT MAX(id) FROM sync_outbox GROUP BY tipo, ref)');
       },
     );
 
     return _db!;
   }
+
+  /// Loguea errores de la app en tabla local app_error_log (no falla la app)
+  static Future<void> logLocalError({
+    required String scope,
+    required Object error,
+    StackTrace? stackTrace,
+    Map<String, Object?>? payload,
+  }) async {
+    try {
+      final db = await instance();
+      await db.insert(
+        'app_error_log',
+        {
+          'scope': scope,
+          'message': error.toString(),
+          'stacktrace': stackTrace?.toString(),
+          'payload': payload == null ? null : jsonEncode(payload),
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    } catch (_) {
+      // Evitar ciclos de error; como último recurso, ignorar
+    }
+  }
+
+  /// Devuelve los últimos [limit] errores almacenados localmente.
+  static Future<List<Map<String, dynamic>>> ultimosErrores({int limit = 50}) async {
+    try {
+      final db = await instance();
+      final rows = await db.query('app_error_log', orderBy: 'id DESC', limit: limit);
+      return rows.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (e, st) {
+      // Si incluso esto falla, registramos en memoria (no persistente)
+      await logLocalError(scope: 'app_error_log.read', error: e, stackTrace: st);
+      return const [];
+    }
+  }
+
+  /// Borra todos los registros del log de errores local.
+  static Future<int> clearErrorLogs() async {
+    try {
+      final db = await instance();
+      return await db.delete('app_error_log');
+    } catch (e, st) {
+      await logLocalError(scope: 'app_error_log.clear', error: e, stackTrace: st);
+      return 0;
+    }
+  }
+
+  /// Asegura en tiempo de ejecución que la tabla caja_diaria tenga la columna indicada.
+  /// Útil cuando la app ya estaba en v2 y no volvió a ejecutar onUpgrade.
+  static Future<void> ensureCajaDiariaColumn(String name, String ddl) async {
+    try {
+      final db = await instance();
+      final info = await db.rawQuery('PRAGMA table_info(caja_diaria)');
+      final exists = info.any((c) => (c['name'] as String?) == name);
+      if (!exists) {
+        await db.execute('ALTER TABLE caja_diaria ADD COLUMN ' + ddl);
+      }
+    } catch (e, st) {
+      await logLocalError(scope: 'db.ensureCajaDiariaColumn', error: e, stackTrace: st, payload: {'name': name, 'ddl': ddl});
+      rethrow;
+    }
+  }
 }
 
-Future<void> _ensureCatalogos(Database db) async {
-  // punto_venta
-  await db.execute(
-      'CREATE TABLE IF NOT EXISTS punto_venta (codigo TEXT PRIMARY KEY, nombre TEXT NOT NULL)');
-  final pvCount = await db.rawQuery('SELECT COUNT(1) as c FROM punto_venta');
-  final pvc = (pvCount.first['c'] as int?) ?? (pvCount.first['c'] as num?)?.toInt() ?? 0;
-  if (pvc == 0) {
-    await db.insert('punto_venta', {'codigo': 'Caj01', 'nombre': 'Caja1'}, conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('punto_venta', {'codigo': 'Caj02', 'nombre': 'Caja2'}, conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('punto_venta', {'codigo': 'Caj03', 'nombre': 'Caja3'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+Future<void> _seedData(Database db) async {
+  final batch = db.batch();
+
+  // Métodos de pago
+  batch.insert('metodos_pago', {'id': 1, 'descripcion': 'Efectivo'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('metodos_pago', {'id': 2, 'descripcion': 'Transferencia'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+  // Categorías base
+  batch.insert('Categoria_Producto', {'id': 1, 'descripcion': 'Comida'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('Categoria_Producto', {'id': 2, 'descripcion': 'Bebidas'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+  // Catálogos de referencia (puntos de venta, disciplinas)
+  batch.insert('punto_venta', {'codigo': 'Caj01', 'nombre': 'Caja1'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('punto_venta', {'codigo': 'Caj02', 'nombre': 'Caja2'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('punto_venta', {'codigo': 'Caj03', 'nombre': 'Caja3'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+  batch.insert('disciplinas', {'nombre': 'Futbol Infantil'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('disciplinas', {'nombre': 'Futbol Mayor'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('disciplinas', {'nombre': 'Evento'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+  batch.insert('disciplinas', {'nombre': 'Otros'}, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+  // Productos precargados
+  const productos = [
+    {
+      'codigo_producto': 'HAMB',
+      'nombre': 'Hamburguesa',
+      'precio_venta': 3000,
+      'stock_actual': 50,
+      'stock_minimo': 3,
+      'orden_visual': 1,
+      'categoria_id': 1,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'CHOR',
+      'nombre': 'Choripan',
+      'precio_venta': 3000,
+      'stock_actual': 50,
+      'stock_minimo': 3,
+      'orden_visual': 2,
+      'categoria_id': 1,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'JARR',
+      'nombre': 'Jarra gaseosa',
+      'precio_venta': 2000,
+      'stock_actual': 999,
+      'stock_minimo': 5,
+      'orden_visual': 3,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'VASO',
+      'nombre': 'Vaso gaseosa',
+      'precio_venta': 1500,
+      'stock_actual': 999,
+      'stock_minimo': 5,
+      'orden_visual': 4,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'CERV',
+      'nombre': 'Cerveza',
+      'precio_venta': 2000,
+      'stock_actual': 999,
+      'stock_minimo': 3,
+      'orden_visual': 5,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'FERN',
+      'nombre': 'Fernet',
+      'precio_venta': 5000,
+      'stock_actual': 999,
+      'stock_minimo': 3,
+      'orden_visual': 6,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'AGMT',
+      'nombre': 'Agua Mate',
+      'precio_venta': 1000,
+      'stock_actual': 50,
+      'stock_minimo': 3,
+      'orden_visual': 7,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'AGUA',
+      'nombre': 'Agua',
+      'precio_venta': 1000,
+      'stock_actual': 50,
+      'stock_minimo': 3,
+      'orden_visual': 8,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'VINO',
+      'nombre': 'Vino',
+      'precio_venta': 2000,
+      'stock_actual': 999,
+      'stock_minimo': 3,
+      'orden_visual': 9,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'HIEL',
+      'nombre': 'Hielo',
+      'precio_venta': 1000,
+      'stock_actual': 999,
+      'stock_minimo': 3,
+      'orden_visual': 10,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'GATO',
+      'nombre': 'Gatorade',
+      'precio_venta': 2500,
+      'stock_actual': 50,
+      'stock_minimo': 3,
+      'orden_visual': 11,
+      'categoria_id': 2,
+      'visible': 1,
+    },
+    {
+      'codigo_producto': 'PAPF',
+      'nombre': 'Papas fritas',
+      'precio_venta': 2000,
+      'stock_actual': 999,
+      'stock_minimo': 3,
+      'orden_visual': 12,
+      'categoria_id': 1,
+      'visible': 1,
+    },
+  ];
+  for (final p in productos) {
+    batch.insert('products', p, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  // disciplinas
-  await db.execute(
-      'CREATE TABLE IF NOT EXISTS disciplinas (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT UNIQUE NOT NULL)');
-  final disCount = await db.rawQuery('SELECT COUNT(1) as c FROM disciplinas');
-  final disc = (disCount.first['c'] as int?) ?? (disCount.first['c'] as num?)?.toInt() ?? 0;
-  if (disc == 0) {
-    await db.insert('disciplinas', {'nombre': 'Futbol Infantil'}, conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('disciplinas', {'nombre': 'Futbol Mayor'}, conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('disciplinas', {'nombre': 'Evento'}, conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.insert('disciplinas', {'nombre': 'Otros'}, conflictAlgorithm: ConflictAlgorithm.ignore);
-  }
+  await batch.commit(noResult: true);
 }
