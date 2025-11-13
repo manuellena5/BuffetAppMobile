@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0+11 — 2025-11-13
+- Cajas: nueva columna `visible` (solo Android). Historial con toggle “Mostrar ocultas”, filas ocultas en gris y etiqueta “(Oculta)”. En detalle de caja, menú para Ocultar/Mostrar con confirmación y validación para NO permitir ocultar una caja ABIERTA.
+- POS (ventas): el botón/gesto Atrás ahora redirige siempre a Inicio.
+- Impresión de prueba: ticket de muestra sin insertar en DB (no consume IDs autoincrementales).
+- Cierre de caja: flujo USB-first. Primero intenta imprimir por USB (muestra aviso si no hay conexión o si falla). Luego guarda automáticamente el PDF y abre la previsualización. Se elimina el modal de compartir JSON.
+- UI de caja: se quitó un encabezado que recortaba contenido en el detalle/resumen.
+- Versionado: bump a 1.1.0+11.
+
 ## 1.0.7+8 — 2025-10-31
 - Sincronización: barra de progreso en vivo durante el envío (procesados/total y etapa), y bloqueo del botón hasta finalizar.
 - Envío por lotes: la sync recorre la cola en bloques hasta vaciarla, actualizando el progreso después de cada lote (cajas, items, errores).
