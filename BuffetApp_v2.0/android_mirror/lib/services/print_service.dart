@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,6 +8,8 @@ import 'package:printing/printing.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 import '../data/dao/db.dart';
 import 'caja_service.dart';
@@ -152,14 +155,14 @@ class PrintService {
                 pw.Center(child: pw.Image(logo, height: 24)),
                 pw.SizedBox(height: 6),
               ],
-              pw.Text('================================================',
+              pw.Text('==========================================',
                   style: s(true)),
-              pw.Text('                 CIERRE DE CAJA                 ',
+              pw.Text('              CIERRE DE CAJA              ',
                   style: s(true)),
-              pw.Text('================================================',
+              pw.Text('==========================================',
                   style: s(true)),
               pw.SizedBox(height: 6),
-        pw.Text(line(' caja:', c['codigo_caja']?.toString()),
+        pw.Text(line('',c['codigo_caja']?.toString()),
                   style: s()),
         if ((c['estado'] as String?) != null)
         pw.Text(line('Estado:', c['estado']?.toString()), style: s()),
@@ -268,6 +271,82 @@ class PrintService {
   }
 
   // ========================= ESC/POS (USB) =========================
+  /// Genera y guarda el PDF de cierre de caja en el directorio de documentos de la app.
+  /// Devuelve el File guardado.
+  Future<File> saveCajaResumenPdfFile(int cajaId) async {
+    final db = await AppDatabase.instance();
+    String codigo = 'caja_$cajaId';
+    try {
+      final r = await db.query('caja_diaria', columns: ['codigo_caja'], where: 'id=?', whereArgs: [cajaId], limit: 1);
+      if (r.isNotEmpty && (r.first['codigo_caja'] as String?) != null) {
+        codigo = (r.first['codigo_caja'] as String).replaceAll(RegExp(r'\s+'), '_');
+      }
+    } catch (_) {}
+    final bytes = await buildCajaResumenPdf(cajaId);
+    final dir = await getApplicationDocumentsDirectory();
+    final now = DateTime.now();
+    final ts = '${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}_${now.hour.toString().padLeft(2,'0')}${now.minute.toString().padLeft(2,'0')}';
+    final filename = 'cierre_${codigo}_$ts.pdf';
+    final file = File(p.join(dir.path, filename));
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+  /// Construye bytes ESC/POS para un ticket de ejemplo (sin tocar la DB)
+  Future<Uint8List> buildTicketEscPosSample({int? lineWidth}) async {
+    final b = BytesBuilder();
+    void init() { b.add([0x1B, 0x40]); }
+    void alignCenter() => b.add([0x1B, 0x61, 0x01]);
+    void boldOn() => b.add([0x1B, 0x45, 0x01]);
+    void boldOff() => b.add([0x1B, 0x45, 0x00]);
+    void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
+    void sizeDoubleH() => b.add([0x1D, 0x21, 0x01]);
+    void sizeDoubleWH() => b.add([0x1D, 0x21, 0x11]);
+    void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
+    String clean(String s) {
+      const map = {
+        'á': 'a','é': 'e','í': 'i','ó': 'o','ú': 'u',
+        'Á': 'A','É': 'E','Í': 'I','Ó': 'O','Ú': 'U',
+        'ñ': 'n','Ñ': 'N','ü': 'u','Ü': 'U'
+      };
+      return s.split('').map((c) => map[c] ?? c).join();
+    }
+    void text(String s) { b.add(utf8.encode(clean(s))); feed(); }
+
+    init();
+    alignCenter(); boldOn(); sizeDoubleH();
+    text('Buffet - C.D.M');
+    sizeNormal(); boldOff();
+    final now = DateTime.now();
+    final dd = now.day.toString().padLeft(2,'0');
+    final mm = now.month.toString().padLeft(2,'0');
+    final yyyy = now.year.toString();
+    final hh = now.hour.toString().padLeft(2,'0');
+    final mi = now.minute.toString().padLeft(2,'0');
+    final ss = now.second.toString().padLeft(2,'0');
+    text('DEMO-$dd$mm$yyyy-000');
+    text('$dd/$mm/$yyyy $hh:$mi:$ss');
+    text('DEMO-CAJA');
+    feed();
+    boldOn(); sizeDoubleWH();
+    text('HAMBURGUESA');
+    text(_formatCurrency(1500));
+    sizeNormal(); boldOff();
+    feed(1);
+    // Corte parcial
+    b.add([0x1D, 0x56, 0x42, 0x00]);
+    return Uint8List.fromList(b.toBytes());
+  }
+
+  /// Imprime solo por USB un ticket de ejemplo (sin generar tickets reales)
+  Future<bool> printTicketSampleUsbOnly() async {
+    try {
+      final bytes = await buildTicketEscPosSample();
+      if (bytes.isEmpty) return false;
+      return await _usb.printBytes(bytes);
+    } catch (_) {
+      return false;
+    }
+  }
   /// Construye bytes ESC/POS para ticket individual (80mm ó 58mm)
   Future<Uint8List> buildTicketEscPos(int ticketId, {int lineWidth = 48}) async {
     final db = await AppDatabase.instance();

@@ -163,7 +163,8 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                             const SnackBar(content: Text('No se pudo imprimir por USB.')),
                           );
                         }
-                      } catch (e) {
+                      } catch (e, st) {
+                        await AppDatabase.logLocalError(scope: 'sale_detail.print_ticket', error: e, stackTrace: st, payload: {'ticketId': t['id']});
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Error al imprimir: $e')),

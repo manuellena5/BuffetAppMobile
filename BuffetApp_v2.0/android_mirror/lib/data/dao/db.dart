@@ -15,7 +15,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onConfigure: (db) async {
         // PRAGMAs: en Android usar rawQuery porque devuelven filas
         await db.rawQuery('PRAGMA foreign_keys=ON');
@@ -69,6 +69,7 @@ class AppDatabase {
             'fecha TEXT, '
             'usuario_apertura TEXT, '
             'cajero_apertura TEXT, '
+          'visible INTEGER NOT NULL DEFAULT 1, '
             'hora_apertura TEXT, '
             'apertura_dt TEXT, '
             'fondo_inicial REAL, '
@@ -217,7 +218,7 @@ class AppDatabase {
         await db.execute('CREATE TABLE IF NOT EXISTS metodos_pago (id INTEGER PRIMARY KEY, descripcion TEXT NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
         await db.execute('CREATE TABLE IF NOT EXISTS Categoria_Producto (id INTEGER PRIMARY KEY, descripcion TEXT NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
         await db.execute('CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, codigo_producto TEXT UNIQUE, nombre TEXT NOT NULL, precio_compra INTEGER, precio_venta INTEGER NOT NULL, stock_actual INTEGER DEFAULT 0, stock_minimo INTEGER DEFAULT 3, orden_visual INTEGER, categoria_id INTEGER, visible INTEGER DEFAULT 1, color TEXT, imagen TEXT, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id))');
-        await db.execute('CREATE TABLE IF NOT EXISTS caja_diaria (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, usuario_apertura TEXT, cajero_apertura TEXT, hora_apertura TEXT, apertura_dt TEXT, fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, tickets_anulados INTEGER, entradas INTEGER, hora_cierre TEXT, cierre_dt TEXT, usuario_cierre TEXT, cajero_cierre TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT, created_ts INTEGER, updated_ts INTEGER)');
+        await db.execute('CREATE TABLE IF NOT EXISTS caja_diaria (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo_caja TEXT UNIQUE, disciplina TEXT, fecha TEXT, usuario_apertura TEXT, cajero_apertura TEXT, visible INTEGER NOT NULL DEFAULT 1, hora_apertura TEXT, apertura_dt TEXT, fondo_inicial REAL, estado TEXT, ingresos REAL DEFAULT 0, retiros REAL DEFAULT 0, diferencia REAL, total_tickets INTEGER, tickets_anulados INTEGER, entradas INTEGER, hora_cierre TEXT, cierre_dt TEXT, usuario_cierre TEXT, cajero_cierre TEXT, descripcion_evento TEXT, observaciones_apertura TEXT, obs_cierre TEXT, created_ts INTEGER, updated_ts INTEGER)');
         await db.execute('CREATE TABLE IF NOT EXISTS ventas (id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT UNIQUE, fecha_hora TEXT NOT NULL, total_venta REAL NOT NULL, status TEXT DEFAULT "No impreso", activo INTEGER DEFAULT 1, metodo_pago_id INTEGER, caja_id INTEGER, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (metodo_pago_id) REFERENCES metodos_pago(id), FOREIGN KEY (caja_id) REFERENCES caja_diaria(id))');
         await db.execute('CREATE TABLE IF NOT EXISTS venta_items (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER NOT NULL, producto_id INTEGER NOT NULL, cantidad INTEGER NOT NULL, precio_unitario REAL NOT NULL, subtotal REAL NOT NULL, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE, FOREIGN KEY (producto_id) REFERENCES products(id))');
         await db.execute('CREATE TABLE IF NOT EXISTS tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER, categoria_id INTEGER, producto_id INTEGER, fecha_hora TEXT NOT NULL, status TEXT DEFAULT "No impreso", total_ticket REAL NOT NULL, identificador_ticket TEXT, created_ts INTEGER, updated_ts INTEGER, FOREIGN KEY (venta_id) REFERENCES ventas(id), FOREIGN KEY (categoria_id) REFERENCES Categoria_Producto(id), FOREIGN KEY (producto_id) REFERENCES products(id))');
@@ -242,6 +243,7 @@ class AppDatabase {
         await _ensureCol('cajero_cierre', 'cajero_cierre TEXT');
         await _ensureCol('usuario_cierre', 'usuario_cierre TEXT');
         await _ensureCol('conteo_efectivo_final', 'conteo_efectivo_final REAL');
+        await _ensureCol('visible', 'visible INTEGER NOT NULL DEFAULT 1');
 
         // Inicializar cajero_apertura si se agregó
         final hasCajeroA = cajaInfo.any((c) => (c['name'] as String?) == 'cajero_apertura');

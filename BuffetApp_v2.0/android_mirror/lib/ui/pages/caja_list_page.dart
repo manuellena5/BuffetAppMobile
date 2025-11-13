@@ -11,6 +11,7 @@ import 'printer_test_page.dart';
 import '../../services/supabase_sync_service.dart';
 import 'caja_tickets_page.dart';
 import '../../services/movimiento_service.dart';
+import '../../data/dao/db.dart';
 
 class CajaListPage extends StatefulWidget {
   const CajaListPage({super.key});
@@ -22,6 +23,7 @@ class _CajaListPageState extends State<CajaListPage> {
   final _svc = CajaService();
   List<Map<String, dynamic>> _cajas = [];
   bool _loading = true;
+  bool _mostrarOcultas = false;
 
   @override
   void initState() {
@@ -30,7 +32,7 @@ class _CajaListPageState extends State<CajaListPage> {
   }
 
   Future<void> _load() async {
-    final r = await _svc.listarCajas();
+    final r = await _svc.listarCajas(incluirOcultas: _mostrarOcultas);
     setState(() {
       _cajas = r;
       _loading = false;
@@ -40,7 +42,22 @@ class _CajaListPageState extends State<CajaListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Historial de cajas')),
+      appBar: AppBar(
+        title: const Text('Historial de cajas'),
+        actions: [
+          IconButton(
+            tooltip: _mostrarOcultas ? 'Ocultar cajas ocultas' : 'Mostrar cajas ocultas',
+            icon: Icon(_mostrarOcultas ? Icons.visibility : Icons.visibility_off),
+            onPressed: () async {
+              setState(() {
+                _mostrarOcultas = !_mostrarOcultas;
+                _loading = true;
+              });
+              await _load();
+            },
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -52,15 +69,16 @@ class _CajaListPageState extends State<CajaListPage> {
                   final c = _cajas[i];
                   final subt = c['observaciones_apertura'] as String?;
                   final abierta = c['estado'] == 'ABIERTA';
+                  final visible = ((c['visible'] as num?) ?? 1) != 0;
                   return Container(
                     color: abierta
                         ? Colors.lightGreen.withValues(alpha: 0.15)
-                        : null,
+                        : (!visible ? Colors.grey.withValues(alpha: 0.12) : null),
                     child: ListTile(
                       leading: Icon(
                           abierta ? Icons.lock_open : Icons.lock_outline,
                           color: abierta ? Colors.green : null),
-                      title: Text('${c['codigo_caja']}  •  ${c['fecha']}'),
+                      title: Text('${c['codigo_caja']}  •  ${c['fecha']}${!visible ? '  •  (Oculta)' : ''}'),
                       subtitle: subt != null && subt.isNotEmpty
                           ? Text(subt,
                               maxLines: 1, overflow: TextOverflow.ellipsis)
@@ -135,15 +153,22 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
   }
 
   Future<void> _load() async {
-    final c = await _svc.getCajaById(widget.cajaId);
+    Map<String, dynamic>? c;
     Map<String, dynamic>? r;
-    if (c != null) {
-      r = await _svc.resumenCaja(c['id'] as int);
-      try {
-        final mt = await MovimientoService().totalesPorCaja(c['id'] as int);
-        _movIngresos = (mt['ingresos'] as num?)?.toDouble() ?? 0.0;
-        _movRetiros = (mt['retiros'] as num?)?.toDouble() ?? 0.0;
-      } catch (_) {}
+    try {
+      c = await _svc.getCajaById(widget.cajaId);
+      if (c != null) {
+        r = await _svc.resumenCaja(c['id'] as int);
+        try {
+          final mt = await MovimientoService().totalesPorCaja(c['id'] as int);
+          _movIngresos = (mt['ingresos'] as num?)?.toDouble() ?? 0.0;
+          _movRetiros = (mt['retiros'] as num?)?.toDouble() ?? 0.0;
+        } catch (e, st) {
+          AppDatabase.logLocalError(scope: 'caja_list.totales_mov', error: e, stackTrace: st, payload: {'cajaId': c['id']});
+        }
+      }
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'caja_list.load', error: e, stackTrace: st, payload: {'cajaId': widget.cajaId});
     }
     setState(() {
       _caja = c;
@@ -214,7 +239,9 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
                       // Antes de enviar, encolar caja_items de esta caja
                       try {
                         await SupaSyncService.I.enqueueItemsForCajaId(_caja!['id'] as int);
-                      } catch (_) {}
+                      } catch (e, st) {
+                        AppDatabase.logLocalError(scope: 'caja_list.enqueue_items', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
+                      }
                       await SupaSyncService.I.syncNow();
                       final det = SupaSyncService.I.lastSyncDetails();
                       await showDialog<void>(
@@ -278,7 +305,8 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
                           const SnackBar(content: Text('Sincronización ejecutada')),
                         );
                       }
-                    } catch (e) {
+                    } catch (e, st) {
+                      AppDatabase.logLocalError(scope: 'caja_list.sync_now', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
                       if (mounted) {
                         messenger.showSnackBar(
                           SnackBar(
@@ -321,7 +349,8 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
               final messenger = ScaffoldMessenger.of(context);
               try {
                 await ExportService().shareCajaFile(_caja!['id'] as int);
-              } catch (e) {
+              } catch (e, st) {
+                AppDatabase.logLocalError(scope: 'caja_list.export_share', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
                 if (!context.mounted) return;
                 messenger.showSnackBar(const SnackBar(
                     content: Text('No se pudo exportar la caja')));
@@ -338,12 +367,68 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
                   onLayout: (f) => PrintService().buildCajaResumenPdf(_caja!['id'] as int),
                   name: 'cierre_caja_${_caja!['id']}.pdf',
                 );
-              } catch (e) {
+              } catch (e, st) {
+                AppDatabase.logLocalError(scope: 'caja_list.export_pdf', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('No se pudo generar el PDF: $e')),
                 );
               }
+            },
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'toggle_visible') {
+                final currentVisible = (((_caja?['visible'] as num?) ?? 1) != 0);
+                final estado = (_caja?['estado'] as String?) ?? '';
+                if (estado == 'ABIERTA' && currentVisible) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No se puede ocultar una caja ABIERTA')),
+                  );
+                  return;
+                }
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(currentVisible ? 'Ocultar caja' : 'Mostrar caja'),
+                    content: Text(currentVisible
+                        ? '¿Querés ocultar esta caja del historial?'
+                        : '¿Querés volver a mostrar esta caja en el historial?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  try {
+                    await CajaService().setCajaVisible(_caja!['id'] as int, !currentVisible);
+                    await _load();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(!currentVisible ? 'Caja visible nuevamente' : 'Caja ocultada')),
+                    );
+                  } catch (e, st) {
+                    AppDatabase.logLocalError(scope: 'caja_list.toggle_visible', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('No se pudo actualizar visibilidad: $e')),
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (ctx) {
+              final currentVisible = (((_caja?['visible'] as num?) ?? 1) != 0);
+              final estado = (_caja?['estado'] as String?) ?? '';
+              return [
+                PopupMenuItem<String>(
+                  value: 'toggle_visible',
+                  enabled: !(estado == 'ABIERTA' && currentVisible),
+                  child: Text(currentVisible ? 'Ocultar caja' : 'Mostrar caja'),
+                ),
+              ];
             },
           ),
         ],
@@ -364,24 +449,7 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
               )
             else if (_syncing)
               const LinearProgressIndicator(minHeight: 3),
-            // Encabezado con código de caja, que puede ser largo: usar wrap
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                const Icon(Icons.store, size: 18),
-                Text('Caja:', style: Theme.of(context).textTheme.titleMedium),
-                Text(
-                  _caja!['codigo_caja']?.toString() ?? '',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
+            // Se quita cabecera con código de caja para evitar recortes
             Text('Fecha: ${_caja!['fecha']} • Estado: ${_caja!['estado']}'),
             const SizedBox(height: 8),
             FutureBuilder<Map<String,int>>(

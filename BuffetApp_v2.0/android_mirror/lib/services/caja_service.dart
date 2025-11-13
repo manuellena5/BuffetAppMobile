@@ -326,9 +326,11 @@ class CajaService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> listarCajas() async {
+  Future<List<Map<String, dynamic>>> listarCajas({bool incluirOcultas = false}) async {
     try {
       final db = await AppDatabase.instance();
+      // Asegurar columna visible si fuese una BD antigua
+      await AppDatabase.ensureCajaDiariaColumn('visible', 'visible INTEGER NOT NULL DEFAULT 1');
       final r = await db.query(
         'caja_diaria',
         columns: [
@@ -337,8 +339,10 @@ class CajaService {
           'fecha',
           'observaciones_apertura',
           'estado',
-          'apertura_dt'
+          'apertura_dt',
+          'visible'
         ],
+        where: incluirOcultas ? null : 'COALESCE(visible,1)=1',
         orderBy: 'apertura_dt DESC, id DESC',
       );
       return r.map((e) => Map<String, dynamic>.from(e)).toList();
@@ -351,11 +355,22 @@ class CajaService {
   Future<Map<String, dynamic>?> getCajaById(int id) async {
     try {
       final db = await AppDatabase.instance();
-      final r =
-          await db.query('caja_diaria', where: 'id=?', whereArgs: [id], limit: 1);
+      await AppDatabase.ensureCajaDiariaColumn('visible', 'visible INTEGER NOT NULL DEFAULT 1');
+      final r = await db.query('caja_diaria', where: 'id=?', whereArgs: [id], limit: 1);
       return r.isNotEmpty ? r.first : null;
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'caja.getById', error: e, stackTrace: st, payload: {'id': id});
+      rethrow;
+    }
+  }
+
+  Future<void> setCajaVisible(int id, bool visible) async {
+    try {
+      final db = await AppDatabase.instance();
+      await AppDatabase.ensureCajaDiariaColumn('visible', 'visible INTEGER NOT NULL DEFAULT 1');
+      await db.update('caja_diaria', {'visible': visible ? 1 : 0, 'updated_ts': DateTime.now().millisecondsSinceEpoch}, where: 'id=?', whereArgs: [id]);
+    } catch (e, st) {
+      await AppDatabase.logLocalError(scope: 'caja.setVisible', error: e, stackTrace: st, payload: {'id': id, 'visible': visible});
       rethrow;
     }
   }

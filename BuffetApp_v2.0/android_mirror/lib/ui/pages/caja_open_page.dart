@@ -3,6 +3,7 @@ import '../../services/caja_service.dart';
 import '../format.dart';
 import 'pos_main_page.dart';
 import 'products_page.dart';
+import '../../data/dao/db.dart';
 
 class CajaOpenPage extends StatefulWidget {
   const CajaOpenPage({super.key});
@@ -38,8 +39,14 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
   }
 
   Future<void> _cargarCatalogos() async {
-    final dis = await _svc.listarDisciplinas();
-    final pv = await _svc.listarPuntosVenta();
+    List<String> dis = const [];
+    List<Map<String, dynamic>> pv = const [];
+    try {
+      dis = await _svc.listarDisciplinas();
+      pv = await _svc.listarPuntosVenta();
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'caja_open.load_catalogs', error: e, stackTrace: st);
+    }
     if (!mounted) return;
     setState(() {
       _disciplinas = dis;
@@ -118,7 +125,8 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         Navigator.pushReplacement(
             context, MaterialPageRoute(builder: (_) => const PosMainPage()));
       }
-    } catch (e) {
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'caja_open.abrir_caja', error: e, stackTrace: st);
       if (!context.mounted) return;
       final msg = e.toString();
       String uiMsg = 'No se pudo abrir la caja.';

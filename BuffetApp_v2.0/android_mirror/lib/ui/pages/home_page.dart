@@ -15,6 +15,8 @@ import 'movimientos_page.dart';
 import 'error_logs_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../data/dao/db.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -30,6 +32,7 @@ class _HomePageState extends State<HomePage> {
   final _usb = UsbPrinterService();
   Timer? _timer;
   DateTime? _lastBackPress;
+  bool _showAdvanced = false;
 
   @override
   void initState() {
@@ -46,8 +49,14 @@ class _HomePageState extends State<HomePage> {
       try {
         final r = await svc.resumenCaja(c['id'] as int);
         total = (r['total'] as num?)?.toDouble() ?? 0.0;
-      } catch (_) {}
+      } catch (e, st) {
+        AppDatabase.logLocalError(scope: 'home_page.caja_resumen', error: e, stackTrace: st, payload: {'cajaId': c['id']});
+      }
     }
+    try {
+      final sp = await SharedPreferences.getInstance();
+      _showAdvanced = sp.getBool('show_advanced_options') ?? false;
+    } catch (_) {}
     setState(() {
       _caja = c;
       _cajaTotal = total;
@@ -214,11 +223,26 @@ class _HomePageState extends State<HomePage> {
                 onTap: () async {
                   final nav = Navigator.of(context);
                   nav.pop();
-                  await nav.push(
+                  final changed = await nav.push(
                     MaterialPageRoute(builder: (_) => const SettingsPage()),
                   );
+                  if (changed == true && mounted) {
+                    await _load();
+                  }
                 },
               ),
+              if (_showAdvanced)
+                ListTile(
+                  leading: const Icon(Icons.bug_report),
+                  title: const Text('Logs de errores'),
+                  onTap: () async {
+                    final nav = Navigator.of(context);
+                    nav.pop();
+                    await nav.push(
+                      MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
+                    );
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.print),
                 title: const Text('Config. impresora'),
@@ -241,17 +265,7 @@ class _HomePageState extends State<HomePage> {
                   );
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.bug_report),
-                title: const Text('Logs de errores'),
-                onTap: () async {
-                  final nav = Navigator.of(context);
-                  nav.pop();
-                  await nav.push(
-                    MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
-                  );
-                },
-              ),
+              // Opción 'Logs de errores' ocultada del menú lateral por ahora
             ],
           ),
         ),

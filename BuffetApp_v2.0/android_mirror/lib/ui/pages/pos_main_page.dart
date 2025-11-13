@@ -39,6 +39,7 @@ class _PosMainPageState extends State<PosMainPage> {
   bool _usbConnected = false;
   final _usb = UsbPrinterService();
   Timer? _timer;
+  bool _showAdvanced = false;
 
   @override
   void initState() {
@@ -56,7 +57,10 @@ class _PosMainPageState extends State<PosMainPage> {
       final sp = await SharedPreferences.getInstance();
       final v = sp.getString('productos_layout');
       _useList = (v == 'list');
-    } catch (_) {}
+      _showAdvanced = sp.getBool('show_advanced_options') ?? false;
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'pos_main_page.layout_pref', error: e, stackTrace: st);
+    }
     // cargar info de caja abierta y total acumulado
     double? cajaTotal;
     String? cajaCodigo;
@@ -68,8 +72,9 @@ class _PosMainPageState extends State<PosMainPage> {
         final t = resumen['total'] as num?;
         cajaTotal = t?.toDouble() ?? 0.0;
       }
-    } catch (_) {
-      // ignorar errores de caja en POS; mantener UI funcional
+    } catch (e, st) {
+      // Loguear pero no romper la UI
+      AppDatabase.logLocalError(scope: 'pos_main_page.caja_resumen', error: e, stackTrace: st);
     }
     // versión app fija desde constantes
     _appVersion = '${AppBuildInfo.version}+${AppBuildInfo.buildNumber}';
@@ -109,7 +114,9 @@ class _PosMainPageState extends State<PosMainPage> {
         final updated = <String>{...alertedSet, ...newLow.map((e) => (e['id'] as int).toString())};
         await sp.setStringList(_lowStockPrefsKey, updated.toList());
       }
-    } catch (_) {}
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'pos_main_page.low_stock_alert', error: e, stackTrace: st);
+    }
   }
 
   void _startUsbPolling() {
@@ -181,9 +188,28 @@ class _PosMainPageState extends State<PosMainPage> {
     final cart = context.watch<CartModel>();
     final width = MediaQuery.of(context).size.width;
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return WillPopScope(
+        onWillPop: () async {
+          if (!mounted) return false;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const HomePage()),
+            (route) => false,
+          );
+            return false; // prevenimos pop por defecto
+        },
+        child: const Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
     }
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: () async {
+        if (!mounted) return false;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomePage()),
+          (route) => false,
+        );
+        return false; // evitamos pop directo para redirigir siempre a Home
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Row(children: [
           const Icon(Icons.receipt_long),
@@ -231,8 +257,22 @@ class _PosMainPageState extends State<PosMainPage> {
                       );
                       if (ok == true) {
                         if (!mounted) return;
+                        // Restaurar stock por cada item (similar a lógica en CartPage)
+                        try {
+                          final db = await AppDatabase.instance();
+                          for (final it in List.of(context.read<CartModel>().items)) {
+                            await db.rawUpdate(
+                              'UPDATE products SET stock_actual = CASE WHEN stock_actual = 999 THEN 999 ELSE stock_actual + ? END WHERE id = ?',
+                              [it.cantidad, it.productoId],
+                            );
+                          }
+                        } catch (e, st) {
+                          AppDatabase.logLocalError(scope: 'pos_main_page.clear_cart_restore_stock', error: e, stackTrace: st);
+                        }
                         // ignore: use_build_context_synchronously
                         context.read<CartModel>().clear();
+                        // Refrescar listado para reflejar stock restaurado
+                        await _load();
                         // ignore: use_build_context_synchronously
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Carrito limpiado')),
@@ -395,17 +435,19 @@ class _PosMainPageState extends State<PosMainPage> {
                     MaterialPageRoute(builder: (_) => const HelpPage()));
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.bug_report),
-              title: const Text('Logs de errores'),
-              onTap: () async {
-                final nav = Navigator.of(context);
-                nav.pop();
-                await nav.push(
-                  MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
-                );
-              },
-            ),
+            // Logs de errores ocultado del menú lateral por ahora
+            if (_showAdvanced)
+              ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: const Text('Logs de errores'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
+                  );
+                },
+              ),
             const SizedBox(height: 8),
             if (_appVersion != null)
               Padding(
@@ -487,6 +529,7 @@ class _PosMainPageState extends State<PosMainPage> {
           ),
         ],
       ),
+    ),
     );
   }
 

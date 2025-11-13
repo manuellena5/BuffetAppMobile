@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../../services/caja_service.dart';
 import '../format.dart';
 import 'home_page.dart';
-import '../../services/export_service.dart';
+// import '../../services/export_service.dart';
 import '../../services/print_service.dart';
+import '../../services/usb_printer_service.dart';
 import 'movimientos_page.dart';
 import '../../services/movimiento_service.dart';
+import '../../data/dao/db.dart';
+import 'package:printing/printing.dart';
 
 class CajaPage extends StatefulWidget {
   const CajaPage({super.key});
@@ -43,7 +46,9 @@ class _CajaPageState extends State<CajaPage> {
         final mt = await MovimientoService().totalesPorCaja(caja['id'] as int);
         _movIngresos = (mt['ingresos'] as num?)?.toDouble() ?? 0.0;
         _movRetiros = (mt['retiros'] as num?)?.toDouble() ?? 0.0;
-      } catch (_) {}
+      } catch (e, st) {
+        AppDatabase.logLocalError(scope: 'caja_page.totales_movimientos', error: e, stackTrace: st, payload: {'cajaId': caja['id']});
+      }
     }
     setState(() {
       _caja = caja;
@@ -293,48 +298,51 @@ class _CajaPageState extends State<CajaPage> {
                       _obs.text.trim().isEmpty ? null : _obs.text.trim(),
                   entradas: entradas,
                 );
-                // Intentar imprimir el cierre/resumen (USB por defecto, mostrar mensaje si no se pudo)
+                // 1) Intentar imprimir por USB; si no hay impresora, mostrar mensaje
                 try {
-                  final ok = await PrintService().printCajaResumenUsbOrPdf(_caja!['id'] as int);
-                  if (!ok && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('No se pudo imprimir por USB. Se abrió PDF como alternativa.')),
-                    );
+                  final connected = await UsbPrinterService().isConnected();
+                  if (!connected) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('No hay impresora USB conectada.')),
+                      );
+                    }
+                  } else {
+                    final usbOk = await PrintService().printCajaResumenUsbOnly(_caja!['id'] as int);
+                    if (!usbOk && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('No se pudo imprimir por USB.')),
+                      );
+                    }
                   }
-                } catch (e) {
+                } catch (e, st) {
+                  AppDatabase.logLocalError(scope: 'caja_page.usb_print', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Error al imprimir: $e')),
                     );
                   }
                 }
-                // Export automático y opción de compartir
+
+                // 2) Guardar automáticamente el PDF y abrir previsualización
                 try {
-                  final file = await ExportService()
-                      .exportCajaToJson(_caja!['id'] as int);
-                  if (!context.mounted) return;
-                  // ignore: use_build_context_synchronously
-                  final share = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Caja exportada'),
-                      content: Text(
-                          'Se generó el archivo:\n${file.path}\n\n¿Compartir ahora?'),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cerrar')),
-                        ElevatedButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Compartir')),
-                      ],
-                    ),
-                  );
-                  if (share == true) {
-                    await ExportService().shareCajaFile(_caja!['id'] as int);
+                  final file = await PrintService().saveCajaResumenPdfFile(_caja!['id'] as int);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('PDF guardado: ${file.path}')),
+                    );
                   }
-                } catch (_) {
-                  // Si falla export/compartir no bloqueamos el cierre
+                  await Printing.layoutPdf(
+                    onLayout: (format) => PrintService().buildCajaResumenPdf(_caja!['id'] as int),
+                    name: 'cierre_caja_${_caja!['id']}.pdf',
+                  );
+                } catch (e, st) {
+                  AppDatabase.logLocalError(scope: 'caja_page.save_preview_pdf', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('No se pudo generar/abrir el PDF: $e')),
+                    );
+                  }
                 }
                 if (!context.mounted) return;
                 nav.pushAndRemoveUntil(

@@ -15,6 +15,7 @@ class _SettingsPageState extends State<SettingsPage> {
   ProductosLayout _layout = ProductosLayout.grid;
   bool _loading = true;
   AppThemeMode _theme = AppThemeMode.system;
+  bool _advanced = false;
 
   @override
   void initState() {
@@ -27,8 +28,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = context.read<AppSettings?>();
     final prefs = await SharedPreferences.getInstance();
     final v = prefs.getString('productos_layout') ?? 'grid';
+    final adv = prefs.getBool('show_advanced_options') ?? false;
     setState(() {
       _layout = v == 'list' ? ProductosLayout.list : ProductosLayout.grid;
+      _advanced = adv;
       _loading = false;
     });
     // cargar tema actual desde provider (ya capturado antes del await)
@@ -42,6 +45,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         'productos_layout', _layout == ProductosLayout.list ? 'list' : 'grid');
+    await prefs.setBool('show_advanced_options', _advanced);
     // persistir tema
     if (settings != null) {
       await settings.setTheme(_theme);
@@ -144,6 +148,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: const Text('Modo oscuro'),
                   subtitle: Text(_themeLabel(_theme)),
                   onTap: _pickTheme,
+                ),
+                const Divider(),
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  title: const Text('Mostrar opciones avanzadas'),
+                  subtitle: const Text('Incluye acceso a logs de errores'),
+                  value: _advanced,
+                  onChanged: (v) => setState(() => _advanced = v),
                 ),
               ],
             ),

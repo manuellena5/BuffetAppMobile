@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS caja_diaria (
   disciplina TEXT,
   fecha TEXT,
   usuario_apertura TEXT,
+  -- Visibilidad en listados (1=Visible por defecto, 0=Oculta)
+  visible INTEGER NOT NULL DEFAULT 1,
   hora_apertura TEXT,
   apertura_dt TEXT,
   fondo_inicial REAL,

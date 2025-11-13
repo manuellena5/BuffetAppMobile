@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../services/movimiento_service.dart';
 import '../../services/caja_service.dart';
 import '../format.dart';
+import 'package:intl/intl.dart';
+import '../../data/dao/db.dart';
 
 class MovimientosPage extends StatefulWidget {
   final int cajaId;
@@ -18,6 +20,39 @@ class _MovimientosPageState extends State<MovimientosPage> {
   Map<String, dynamic>? _caja;
   Map<String, double> _totales = {'ingresos': 0, 'retiros': 0};
 
+  String _formatCreatedTs(dynamic v) {
+    try {
+      DateTime dt;
+      if (v == null) return '';
+      if (v is int) {
+        var ms = v;
+        if (ms < 1000000000000) ms = ms * 1000; // segundos -> ms
+        dt = DateTime.fromMillisecondsSinceEpoch(ms);
+      } else if (v is num) {
+        var ms = v.toInt();
+        if (ms < 1000000000000) ms = ms * 1000;
+        dt = DateTime.fromMillisecondsSinceEpoch(ms);
+      } else if (v is String) {
+        final s = v.trim();
+        final asInt = int.tryParse(s);
+        if (asInt != null) {
+          var ms = asInt;
+          if (ms < 1000000000000) ms = ms * 1000;
+          dt = DateTime.fromMillisecondsSinceEpoch(ms);
+        } else if (RegExp(r"\d{4}-\d{2}-\d{2}").hasMatch(s)) {
+          dt = DateTime.tryParse(s) ?? DateTime.now();
+        } else {
+          return s;
+        }
+      } else {
+        return v.toString();
+      }
+      return DateFormat('dd/MM/yyyy HH:mm', 'es_AR').format(dt);
+    } catch (_) {
+      return v?.toString() ?? '';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -25,9 +60,16 @@ class _MovimientosPageState extends State<MovimientosPage> {
   }
 
   Future<void> _load() async {
-    final caja = await _cajaSvc.getCajaById(widget.cajaId);
-    final rows = await _svc.listarPorCaja(widget.cajaId);
-    final tot = await _svc.totalesPorCaja(widget.cajaId);
+    Map<String, dynamic>? caja;
+    List<Map<String, dynamic>> rows = [];
+    Map<String, double> tot = {'ingresos': 0, 'retiros': 0};
+    try {
+      caja = await _cajaSvc.getCajaById(widget.cajaId);
+      rows = await _svc.listarPorCaja(widget.cajaId);
+      tot = await _svc.totalesPorCaja(widget.cajaId);
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'movimientos_page.load', error: e, stackTrace: st, payload: {'cajaId': widget.cajaId});
+    }
     setState(() {
       _caja = caja;
       _rows = rows;
@@ -106,7 +148,7 @@ class _MovimientosPageState extends State<MovimientosPage> {
                       final tipo = (m['tipo'] ?? '').toString();
                       final monto = (m['monto'] as num?)?.toDouble() ?? 0;
                       final obs = (m['observacion'] as String?) ?? '';
-                      final fecha = (m['created_ts']?.toString()) ?? '';
+                      final fecha = _formatCreatedTs(m['created_ts']);
                       final color = tipo == 'INGRESO' ? Colors.green.shade100 : Colors.red.shade100;
                       return Card(
                         color: color,
@@ -190,7 +232,8 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
       }
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (e) {
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'movimientos_dialog.save', error: e, stackTrace: st, payload: {'cajaId': widget.cajaId});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }

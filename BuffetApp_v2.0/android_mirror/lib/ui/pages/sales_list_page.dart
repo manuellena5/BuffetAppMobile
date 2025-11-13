@@ -31,12 +31,14 @@ class _SalesListPageState extends State<SalesListPage> {
     final joinCaja = cajaId == null ? '' : 'AND v.caja_id = ?';
     final args = cajaId == null ? argsBase : [...argsBase, cajaId];
     final v = await db.rawQuery('''
-      SELECT t.id, t.fecha_hora, t.total_ticket, t.identificador_ticket, t.status, v.metodo_pago_id,
+      SELECT t.id, t.fecha_hora, t.total_ticket, t.identificador_ticket, t.status,
+             v.metodo_pago_id, mp.descripcion AS metodo_pago_desc,
              COALESCE(p.nombre, c.descripcion) AS item_nombre
       FROM tickets t
       JOIN ventas v ON v.id = t.venta_id
       LEFT JOIN products p ON p.id = t.producto_id
       LEFT JOIN Categoria_Producto c ON c.id = t.categoria_id
+      LEFT JOIN metodos_pago mp ON mp.id = v.metodo_pago_id
       $where ${where.isEmpty ? 'WHERE' : 'AND'} 1=1 $joinCaja
       ORDER BY t.fecha_hora DESC
     ''', args);
@@ -123,6 +125,9 @@ class _SalesListPageState extends State<SalesListPage> {
                             Text(v['item_nombre'] as String)
                           else
                             const Text('Producto'),
+                          if ((v['metodo_pago_desc'] as String?)?.isNotEmpty == true)
+                            Text(v['metodo_pago_desc'] as String,
+                                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
                           Text(timeStr),
                           const SizedBox(height: 2),
                           Text(status,

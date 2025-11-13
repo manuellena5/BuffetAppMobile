@@ -50,7 +50,9 @@ class _ProductReorderPageState extends State<ProductReorderPage> {
         );
         await sp.setBool(key, true);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'product_reorder.hint', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _save() async {

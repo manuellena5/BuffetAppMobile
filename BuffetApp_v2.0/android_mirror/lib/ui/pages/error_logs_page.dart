@@ -60,7 +60,8 @@ class _ErrorLogsPageState extends State<ErrorLogsPage> {
       final file = File(p.join(dir.path, 'app_error_log.json'));
       await file.writeAsString(const JsonEncoder.withIndent('  ').convert(_rows), flush: true);
       await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'app_error_log.json'));
-    } catch (e) {
+    } catch (e, st) {
+      await AppDatabase.logLocalError(scope: 'error_logs.share', error: e, stackTrace: st);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo compartir: $e')));
     }

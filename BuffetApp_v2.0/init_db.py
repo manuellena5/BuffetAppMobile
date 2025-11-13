@@ -347,6 +347,8 @@ def init_db():
         except Exception:
             pass
 
+    # Nota: los cambios de visibilidad (visible) se gestionan solo en la app Android.
+
     # Migración: agregar columna descripcion_evento si no existe
     try:
         c.execute("ALTER TABLE caja_diaria ADD COLUMN descripcion_evento TEXT")

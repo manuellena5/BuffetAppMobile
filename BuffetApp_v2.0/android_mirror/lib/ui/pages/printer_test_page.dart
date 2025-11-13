@@ -28,7 +28,8 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
     try {
       final printers = await Printing.listPrinters();
       setState(() => _printers = printers);
-    } catch (_) {
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'printer_test.refresh_printers', error: e, stackTrace: st);
       // Algunos dispositivos no exponen lista; seguimos con pickPrinter
       setState(() => _printers = const []);
     }
@@ -50,7 +51,9 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
       setState(() => _printLogoEscpos = v ?? true);
       final mm = sp.getInt('paper_width_mm');
       setState(() => _paperWidthMm = (mm == 58 || mm == 75 || mm == 80) ? mm! : 80);
-    } catch (_) {}
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'printer_test.load_prefs', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _autoConnectIfSaved() async {
@@ -72,7 +75,8 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
     try {
       final list = await _usb.listDevices();
       setState(() => _usbDevices = list);
-    } catch (_) {
+    } catch (e, st) {
+      AppDatabase.logLocalError(scope: 'printer_test.refresh_usb', error: e, stackTrace: st);
       setState(() => _usbDevices = const []);
     }
   }
@@ -193,7 +197,8 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                     final ok = await _usb.printBytes(Uint8List.fromList(b.toBytes()));
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Impreso por USB' : 'No se pudo imprimir por USB')));
-                  } catch (e) {
+                  } catch (e, st) {
+                    AppDatabase.logLocalError(scope: 'printer_test.print_usb_bytes', error: e, stackTrace: st);
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
@@ -239,11 +244,6 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
             const SizedBox(height: 8),
             ElevatedButton(
               onPressed: () async {
-                // Buscar último ticket o generar uno de prueba en memoria
-        final db = await AppDatabase.instance();
-        final last = await db.query('tickets',
-                    columns: ['id'], orderBy: 'id DESC', limit: 1);
-                final id = last.isNotEmpty ? last.first['id'] as int : await _crearTicketDummy();
                 try {
                   final connected = await _usb.isConnected();
                   if (!connected) {
@@ -251,10 +251,20 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay impresora USB conectada.')));
                     return;
                   }
-                  final ok = await PrintService().printTicketUsbOnly(id);
+                  // Si hay algún ticket real, imprimir el último; si no, imprimir ticket DEMO sin tocar DB
+                  final db = await AppDatabase.instance();
+                  final last = await db.query('tickets', columns: ['id'], orderBy: 'id DESC', limit: 1);
+                  bool ok;
+                  if (last.isNotEmpty) {
+                    final id = last.first['id'] as int;
+                    ok = await PrintService().printTicketUsbOnly(id);
+                  } else {
+                    ok = await PrintService().printTicketSampleUsbOnly();
+                  }
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Ticket impreso por USB' : 'No se pudo imprimir por USB')));
-                } catch (e) {
+                } catch (e, st) {
+                  AppDatabase.logLocalError(scope: 'printer_test.print_ticket', error: e, stackTrace: st);
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al imprimir: $e')));
                 }
@@ -291,7 +301,8 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
                   }
                   if (!context.mounted) return;
                   messenger.showSnackBar(SnackBar(content: Text(ok ? 'Cierre impreso por USB' : 'No se pudo imprimir por USB')));
-                } catch (e) {
+                } catch (e, st) {
+                  AppDatabase.logLocalError(scope: 'printer_test.print_cierre', error: e, stackTrace: st, payload: {'cajaId': cajaId});
                   if (!context.mounted) return;
                   messenger.showSnackBar(SnackBar(content: Text('Error al imprimir: $e')));
                 }
@@ -304,56 +315,5 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
     );
   }
 
-  Future<int> _crearTicketDummy() async {
-    // Genera un ticket temporal con producto/ticket de prueba si el DB está vacío
-    final db = await AppDatabase.instance();
-    final p = await db.query('products', columns: ['id'], limit: 1);
-    int productoId;
-    if (p.isEmpty) {
-      productoId = await db.insert('products', {
-        'codigo_producto': 'DEMO',
-        'nombre': 'Hamburguesa',
-        'precio_venta': 1500,
-        'stock_actual': 999,
-        'stock_minimo': 0,
-        'categoria_id': null,
-        'visible': 1,
-        'color': null,
-      });
-    } else {
-      productoId = p.first['id'] as int;
-    }
-    final now = DateTime.now();
-    final fecha =
-        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final hora =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
-    final ventaId = await db.insert('ventas', {
-      'uuid': 'demo',
-      'fecha_hora': '$fecha $hora',
-      'total_venta': 1500,
-      'status': 'No impreso',
-      'activo': 1,
-      'metodo_pago_id': 1,
-      'caja_id': null,
-    });
-    final ticketId = await db.insert('tickets', {
-      'venta_id': ventaId,
-      'categoria_id': null,
-      'producto_id': productoId,
-      'fecha_hora': '$fecha $hora',
-      'status': 'Impreso',
-      'total_ticket': 1500,
-      'identificador_ticket': null,
-    });
-    await db.update(
-        'tickets',
-        {
-          'identificador_ticket':
-              'DEMO-${now.year}${now.month}${now.day}-$ticketId'
-        },
-        where: 'id=?',
-        whereArgs: [ticketId]);
-    return ticketId;
-  }
+  // Nota: se eliminó la creación de ticket DEMO para evitar consumir IDs.
 }

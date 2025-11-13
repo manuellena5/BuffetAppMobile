@@ -137,7 +137,8 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                                     const SnackBar(content: Text('Fallo la impresión por USB.')),
                                   );
                                 }
-                              } catch (e) {
+                              } catch (e, st) {
+                                AppDatabase.logLocalError(scope: 'payment.print_tickets', error: e, stackTrace: st);
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('Error al imprimir: $e')),
@@ -149,7 +150,8 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                               cartModel.clear();
                               nav.pop(true);
                             }
-                          } catch (e) {
+                          } catch (e, st) {
+                            AppDatabase.logLocalError(scope: 'payment.crear_venta', error: e, stackTrace: st);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('No se pudo registrar la venta: $e')),
