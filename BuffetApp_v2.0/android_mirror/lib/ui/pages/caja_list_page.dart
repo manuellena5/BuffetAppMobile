@@ -194,7 +194,7 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
     final resumen = _resumen!;
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Caja'),
+          //title: const Text('Caja'),
         actions: [
           // Ver tickets de la caja (solo lectura)
           IconButton(

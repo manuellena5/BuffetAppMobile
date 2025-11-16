@@ -576,7 +576,7 @@ class PrintService {
     sizeDouble(); text('CIERRE DE CAJA'); sizeNormal();
     text(sep());
     alignLeft(); boldOff();
-    text('Codigo caja: ${c['codigo_caja'] ?? ''}');
+    text('${c['codigo_caja'] ?? ''}');
     if ((c['estado'] as String?) != null) text('Estado: ${c['estado']}');
     text('Fecha apertura: ${(c['fecha'] ?? '')} ${(c['hora_apertura'] ?? '')}');
   text('Cajero apertura: ${c['cajero_apertura'] ?? ''}');

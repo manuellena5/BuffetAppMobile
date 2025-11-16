@@ -45,7 +45,7 @@ class _ProductsPageState extends State<ProductsPage> {
              COALESCE(c.descripcion,'') as categoria
       FROM products p
       LEFT JOIN Categoria_Producto c ON c.id = p.categoria_id
-      ORDER BY p.id DESC
+      ORDER BY p.orden_visual ASC
     ''');
     setState(() {
       _items = r;

@@ -12,9 +12,12 @@ class SalesListPage extends StatefulWidget {
 }
 
 class _SalesListPageState extends State<SalesListPage> {
-  List<Map<String, dynamic>> _tickets = [];
+  List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
-  String _filtro = 'Todos'; // Todos | No Impreso | Impreso | Anulado
+  // Filtros alineados con CajaTicketsPage
+  String _estadoFiltro = 'Todos'; // Todos | Impreso | Anulado | No impreso
+  String _productoFiltro = 'Todos';
+  List<String> _productos = const [];
 
   @override
   void initState() {
@@ -26,10 +29,8 @@ class _SalesListPageState extends State<SalesListPage> {
     final db = await AppDatabase.instance();
     final caja = await CajaService().getCajaAbierta();
     final cajaId = caja?['id'];
-    final where = (_filtro == 'Todos') ? '' : "WHERE t.status = ?";
-    final argsBase = (_filtro == 'Todos') ? <Object?>[] : <Object?>[_filtro];
-    final joinCaja = cajaId == null ? '' : 'AND v.caja_id = ?';
-    final args = cajaId == null ? argsBase : [...argsBase, cajaId];
+    final where = cajaId == null ? '' : 'WHERE v.caja_id = ?';
+    final args = cajaId == null ? <Object?>[] : <Object?>[cajaId];
     final v = await db.rawQuery('''
       SELECT t.id, t.fecha_hora, t.total_ticket, t.identificador_ticket, t.status,
              v.metodo_pago_id, mp.descripcion AS metodo_pago_desc,
@@ -39,11 +40,18 @@ class _SalesListPageState extends State<SalesListPage> {
       LEFT JOIN products p ON p.id = t.producto_id
       LEFT JOIN Categoria_Producto c ON c.id = t.categoria_id
       LEFT JOIN metodos_pago mp ON mp.id = v.metodo_pago_id
-      $where ${where.isEmpty ? 'WHERE' : 'AND'} 1=1 $joinCaja
+      $where
       ORDER BY t.fecha_hora DESC
     ''', args);
+    // Construir lista de productos únicos para filtro
+    final prods = <String>{'Todos'};
+    for (final r in v) {
+      final it = (r['item_nombre'] as String?)?.trim();
+      if (it != null && it.isNotEmpty) prods.add(it);
+    }
     setState(() {
-      _tickets = v;
+      _rows = v;
+      _productos = prods.toList()..sort();
       _loading = false;
     });
   }
@@ -59,31 +67,40 @@ class _SalesListPageState extends State<SalesListPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Wrap(spacing: 8, children: [
-              for (final s in ['Todos', 'No Impreso', 'Impreso', 'Anulado'])
-                ChoiceChip(
-                  label: Text(s),
-                  selected: _filtro == s,
-                  onSelected: (sel) {
-                    if (!sel) return;
-                    setState(() {
-                      _filtro = s;
-                      _loading = true;
-                    });
-                    _load();
-                  },
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Estado'),
+                  initialValue: _estadoFiltro,
+                  items: const ['Todos', 'Impreso', 'Anulado', 'No impreso']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _estadoFiltro = v ?? 'Todos'),
                 ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Producto'),
+                  initialValue: _productoFiltro,
+                  items: _productos
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _productoFiltro = v ?? 'Todos'),
+                ),
+              ),
             ]),
           ),
+          const SizedBox(height: 8),
           const Divider(height: 1),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _load,
               child: ListView.builder(
-                itemCount: _tickets.length,
+                itemCount: _filteredRows().length,
                 itemBuilder: (ctx, i) {
-                  final v = _tickets[i];
+                  final v = _filteredRows()[i];
                   final dt =
                       DateTime.tryParse(v['fecha_hora'] as String? ?? '') ??
                           DateTime.now();
@@ -108,9 +125,10 @@ class _SalesListPageState extends State<SalesListPage> {
                   }
                   final status = (v['status'] as String?) ?? '';
                   Color? statusColor;
-                  if (status == 'Anulado') {
+                  final norm = _normEstado(status);
+                  if (norm == 'anulado') {
                     statusColor = Colors.redAccent;
-                  } else if (status == 'Impreso') {
+                  } else if (norm == 'impreso') {
                     statusColor = Colors.blueGrey;
                   } else {
                     statusColor = Colors.orangeAccent; // No Impreso
@@ -130,7 +148,7 @@ class _SalesListPageState extends State<SalesListPage> {
                                 style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
                           Text(timeStr),
                           const SizedBox(height: 2),
-                          Text(status,
+                          Text(_labelEstado(norm),
                               style: TextStyle(
                                   color: statusColor,
                                   fontWeight: FontWeight.w600)),
@@ -159,5 +177,42 @@ class _SalesListPageState extends State<SalesListPage> {
         ],
       ),
     );
+  }
+
+  List<Map<String, dynamic>> _filteredRows() {
+    final filtroEstado = _normEstado(_estadoFiltro);
+    final filtroProd = _productoFiltro.trim().toLowerCase();
+    return _rows.where((r) {
+      final estado = _normEstado((r['status'] as String?) ?? '');
+      final item = ((r['item_nombre'] as String?) ?? '').trim().toLowerCase();
+      final okEstado = (filtroEstado == 'todos') || (estado == filtroEstado);
+      final okProducto = (_productoFiltro == 'Todos') || (item == filtroProd);
+      return okEstado && okProducto;
+    }).toList(growable: false);
+  }
+
+  String _normEstado(String s) {
+    final t = s.replaceAll('\u00A0', ' ').trim().toLowerCase();
+    if (t == 'impreso') return 'impreso';
+    if (t == 'anulado') return 'anulado';
+    if (t == 'no impreso') return 'no impreso';
+    if (t == 'todos') return 'todos';
+    return t;
+  }
+
+  String _labelEstado(String norm) {
+    switch (norm) {
+      case 'impreso':
+        return 'Impreso';
+      case 'anulado':
+        return 'Anulado';
+      case 'no impreso':
+        return 'No impreso';
+      case 'todos':
+        return 'Todos';
+      default:
+        if (norm.isEmpty) return '';
+        return norm[0].toUpperCase() + norm.substring(1);
+    }
   }
 }

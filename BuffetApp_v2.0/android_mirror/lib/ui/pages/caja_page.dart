@@ -9,6 +9,7 @@ import 'movimientos_page.dart';
 import '../../services/movimiento_service.dart';
 import '../../data/dao/db.dart';
 import 'package:printing/printing.dart';
+import 'printer_test_page.dart';
 
 class CajaPage extends StatefulWidget {
   const CajaPage({super.key});
@@ -77,14 +78,55 @@ class _CajaPageState extends State<CajaPage> {
     }
     final resumen = _resumen!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Caja')),
+      appBar: AppBar(
+        title: const Text('Caja'),
+        actions: [
+          StatefulBuilder(
+            builder: (ctx, setLocal) {
+              int tick = 0;
+              Future<(bool,String?)> loadPrinter() async {
+                final svc = UsbPrinterService();
+                final connected = await svc.isConnected();
+                final saved = await svc.getDefaultDevice();
+                final name = saved?['deviceName'] as String?;
+                return (connected, name);
+              }
+              return FutureBuilder<(bool,String?)>(
+                future: loadPrinter(),
+                key: ValueKey('printer-status-$tick'),
+                builder: (ctx, snap) {
+                  final connected = snap.data?.$1 ?? false;
+                  final devName = snap.data?.$2;
+                  final icon = connected ? Icons.print : Icons.print_disabled;
+                  final color = connected ? Colors.green : Colors.redAccent;
+                  final tooltip = connected
+                      ? 'Impresora: Conectada${devName != null && devName.isNotEmpty ? ' ($devName)' : ''}\nTocar para configurar'
+                      : 'Impresora: No conectada\nTocar para configurar';
+                  return IconButton(
+                    tooltip: tooltip,
+                    icon: Icon(icon, color: color),
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const PrinterTestPage()),
+                      );
+                      if (!context.mounted) return;
+                      setLocal(() => tick++); // refrescar estado al volver
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-                '${_caja!['codigo_caja']} • Disciplina: ${_caja!['disciplina']} • Cajero: ${_caja!['cajero_apertura'] ?? ''}'),
+                '${_caja!['codigo_caja']} • Disciplina: ${_caja!['disciplina']} • Cajero: ${_caja!['cajero_apertura'] ?? ''}'),                
             const SizedBox(height: 6),
             if (((_caja!['observaciones_apertura'] as String?) ?? '').isNotEmpty)
               Text('Obs. apertura: ${_caja!['observaciones_apertura']}'),
@@ -92,7 +134,7 @@ class _CajaPageState extends State<CajaPage> {
             Text(
                 'Fondo inicial: ${formatCurrency(_caja!['fondo_inicial'] as num)}'),
             const Divider(height: 24),
-            Text('Totales', style: Theme.of(context).textTheme.titleMedium),
+            //Text('Totales', style: Theme.of(context).textTheme.titleMedium),
             Text('Total ventas: ${formatCurrency(resumen['total'] as num)}',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
