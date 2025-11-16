@@ -41,7 +41,7 @@ class _ProductsPageState extends State<ProductsPage> {
     final db = await AppDatabase.instance();
     final r = await db.rawQuery('''
       SELECT p.id, p.codigo_producto, p.nombre, p.precio_venta, p.stock_actual, p.visible, p.categoria_id,
-             p.imagen,
+             p.imagen, p.precio_compra,
              COALESCE(c.descripcion,'') as categoria
       FROM products p
       LEFT JOIN Categoria_Producto c ON c.id = p.categoria_id
@@ -159,11 +159,14 @@ class _ProductFormState extends State<_ProductForm> {
   final _nombre = TextEditingController();
   final _codigo = TextEditingController();
   final _precio = TextEditingController();
+  final _precioCompra = TextEditingController();
+  final _porcGanancia = TextEditingController();
   final _stock = TextEditingController(text: '999');
   bool _contabilizaStock = false;
   int? _catId = 3; // Otros por defecto
   bool _visible = true;
   String? _imagenPath; // ruta local a la imagen
+  bool _updatingFields = false; // evita bucles entre listeners
 
   @override
   void initState() {
@@ -174,6 +177,8 @@ class _ProductFormState extends State<_ProductForm> {
       _codigo.text = (d['codigo_producto'] as String?) ?? '';
   final pv = d['precio_venta'] as num?;
   _precio.text = pv == null ? '' : pv.toString();
+  final pc = d['precio_compra'] as num?;
+  _precioCompra.text = pc == null ? '' : pc.toString();
   final st = d['stock_actual'] as int?;
   _stock.text = '${st ?? 999}';
   _contabilizaStock = (st != null && st != 999);
@@ -181,6 +186,24 @@ class _ProductFormState extends State<_ProductForm> {
       _visible = ((d['visible'] as int?) ?? 1) == 1;
       _imagenPath = d['imagen'] as String?;
     }
+    // Inicializar % ganancia si hay compra y venta
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _recalcFromSale();
+    });
+    // Listeners de sincronización
+    _porcGanancia.addListener(_recalcFromPercent);
+    _precio.addListener(_recalcFromSale);
+    _precioCompra.addListener(() {
+      // si hay % cargado, recalcular venta
+      if (_porcGanancia.text.trim().isNotEmpty) {
+        _recalcFromPercent();
+      } else {
+        // si no hay %, y venta está vacía, por defecto copiar compra
+        if (_precio.text.trim().isEmpty) {
+          _setTextSafely(_precio, _precioCompra.text);
+        }
+      }
+    });
   }
 
   @override
@@ -188,8 +211,38 @@ class _ProductFormState extends State<_ProductForm> {
     _nombre.dispose();
     _codigo.dispose();
     _precio.dispose();
+    _precioCompra.dispose();
+    _porcGanancia.dispose();
     _stock.dispose();
     super.dispose();
+  }
+
+  void _setTextSafely(TextEditingController c, String v) {
+    if (c.text == v) return;
+    _updatingFields = true;
+    final sel = TextSelection.collapsed(offset: v.length);
+    c.value = TextEditingValue(text: v, selection: sel);
+    _updatingFields = false;
+  }
+
+  void _recalcFromPercent() {
+    if (_updatingFields) return;
+    final pc = parseLooseDouble(_precioCompra.text.trim());
+    final per = parseLooseDouble(_porcGanancia.text.trim());
+    if (pc.isNaN || per.isNaN) return;
+    final sale = (pc * (1 + per / 100)).round();
+    _setTextSafely(_precio, sale.toString());
+  }
+
+  void _recalcFromSale() {
+    if (_updatingFields) return;
+    final pc = parseLooseDouble(_precioCompra.text.trim());
+    final pv = parseLooseDouble(_precio.text.trim());
+    if (pc.isNaN || pv.isNaN) return;
+    if (pc <= 0) return; // evita división por cero o negativos
+    final per = ((pv - pc) / pc * 100);
+    final perRounded = per.isNaN ? '' : per.toStringAsFixed(2);
+    _setTextSafely(_porcGanancia, perRounded);
   }
 
   Future<void> _save() async {
@@ -201,6 +254,22 @@ class _ProductFormState extends State<_ProductForm> {
     final nombre = _nombre.text.trim();
   final precioParsed = parseLooseDouble(_precio.text.trim());
   final precio = precioParsed.isNaN ? -1 : precioParsed.round();
+  // Precio de compra: opcional, si no está se toma = precio_venta
+  final compraText = _precioCompra.text.trim();
+  int precioCompra;
+  if (compraText.isEmpty) {
+    precioCompra = precio;
+  } else {
+    final compraParsed = parseLooseDouble(compraText);
+    if (compraParsed.isNaN) {
+      if (mounted) {
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Precio de compra inválido')));
+      }
+      return;
+    }
+    precioCompra = compraParsed.round();
+  }
     int stock;
     if (!_contabilizaStock) {
       stock = 999; // no contabiliza => ilimitado
@@ -220,6 +289,14 @@ class _ProductFormState extends State<_ProductForm> {
       if (mounted) {
         messenger.showSnackBar(
             const SnackBar(content: Text('Precio debe ser >= 0')));
+      }
+      return;
+    }
+    // Validación: compra <= venta
+    if (precioCompra > precio) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('El precio de compra no puede ser mayor al de venta')));
       }
       return;
     }
@@ -281,6 +358,7 @@ class _ProductFormState extends State<_ProductForm> {
       'codigo_producto': codigo,
       'nombre': _nombre.text.trim(),
       'precio_venta': precio,
+      'precio_compra': precioCompra,
       'stock_actual': stock,
       'stock_minimo': 3,
       'categoria_id': _catId,
@@ -408,16 +486,58 @@ class _ProductFormState extends State<_ProductForm> {
                 },
               ),
               const SizedBox(height: 8),
+              // Reordenado: compra primero
               TextFormField(
-                controller: _precio,
-                decoration: const InputDecoration(labelText: 'Precio de venta'),
+                controller: _precioCompra,
+                decoration: const InputDecoration(labelText: 'Precio de compra (opcional)'),
                 keyboardType: TextInputType.number,
                 validator: (v) {
-                  if (v == null || v.isEmpty) return 'Ingrese un número';
-                  final val = parseLooseDouble(v);
+                  final t = (v ?? '').trim();
+                  if (t.isEmpty) return null; // opcional
+                  final val = parseLooseDouble(t);
                   if (val.isNaN) return 'Ingrese un número';
+                  final pv = parseLooseDouble(_precio.text.trim());
+                  if (!pv.isNaN && val > pv) {
+                    return 'No puede ser mayor al precio de venta';
+                  }
                   return null;
                 },
+              ),
+              const SizedBox(height: 8),
+              // Venta y % ganancia lado a lado
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _precio,
+                      decoration: const InputDecoration(labelText: 'Precio de venta'),
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Ingrese un número';
+                        final val = parseLooseDouble(v);
+                        if (val.isNaN) return 'Ingrese un número';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _porcGanancia,
+                      decoration: const InputDecoration(labelText: '% Ganancia'),
+                      keyboardType: TextInputType.number,
+                      validator: (v) {
+                        final t = (v ?? '').trim();
+                        if (t.isEmpty) return null; // opcional
+                        final val = parseLooseDouble(t);
+                        if (val.isNaN) return 'Ingrese un número';
+                        if (val < 0) return 'Debe ser >= 0';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               TextFormField(

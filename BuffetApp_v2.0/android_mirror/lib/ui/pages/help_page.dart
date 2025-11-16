@@ -33,7 +33,7 @@ class HelpPage extends StatelessWidget {
           const Text('• Recibos: listado de tickets emitidos y anulados con reimpresión.'),
           const Text('• Caja: apertura, totales y cierre de caja. En Resumen y ticket se muestra “Entradas vendidas” (0 si está vacío).'),
           const Text('• Historial de cajas: listado de cajas con resumen, impresión (USB primero) y exportación.'),
-          const Text('• Productos (ABM): alta, baja y modificación del catálogo; podés agregar imagen desde galería o cámara. La imagen se muestra en lista (avatar) y en grilla (tile cuadrado con nombre y chips de precio/stock).'),
+          const Text('• Productos: alta, baja y modificación del catálogo; podés agregar imagen desde galería o cámara. La imagen se muestra en lista (avatar) y en grilla (tile cuadrado con nombre y chips de precio/stock).'),
           const Text('• Config. impresora: conectar por USB (OTG), refrescar lista, pruebas de impresión y preferencia “Imprimir logo en cierre (USB)”.'),
 
           const SizedBox(height: 16),

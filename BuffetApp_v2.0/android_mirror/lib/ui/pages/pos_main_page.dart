@@ -391,7 +391,7 @@ class _PosMainPageState extends State<PosMainPage> {
             ),
             ListTile(
               leading: const Icon(Icons.inventory_2),
-              title: const Text('Productos (ABM)'),
+              title: const Text('Productos'),
               onTap: () async {
                 final nav = Navigator.of(context);
                 nav.pop();
