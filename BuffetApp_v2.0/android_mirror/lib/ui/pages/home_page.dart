@@ -13,6 +13,7 @@ import 'settings_page.dart';
 import 'help_page.dart';
 import 'movimientos_page.dart';
 import 'error_logs_page.dart';
+import 'reportes_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -180,6 +181,17 @@ class _HomePageState extends State<HomePage> {
                   );
                   if (!mounted) return;
                   await _load();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bar_chart),
+                title: const Text('Reportes'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const ReportesPage()),
+                  );
                 },
               ),
               ListTile(

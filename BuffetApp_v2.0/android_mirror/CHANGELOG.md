@@ -1,11 +1,22 @@
 # Changelog
 
+## 1.2.0+12 — 2025-11-21
+- Reportes: nueva pantalla con KPIs (total ventas, ticket promedio, cantidad ventas, entradas, tickets emitidos/anulados) y gráfico de barras por disciplina con agregaciones Día/Mes/Año.
+- Reportes: manejo de estado vacío (sin cajas) mostrando calendario y KPIs en cero; placeholder "Sin datos disponibles".
+- Reportes: eliminación del KPI "Conversion Personas %" de la UI (se mantiene cálculo interno para posibles usos futuros).
+- Mantenimiento: botón rojo para purgar TODAS las cajas, ventas, tickets y movimientos asociados (con countdown de 5s, mensaje de cantidad a borrar y feedback éxito/fallo); preserva productos.
+- Backup: botón para crear archivo físico de la base de datos y compartirlo (.db con timestamp).
+- Seguridad: logs de error en purga/backup si ocurre alguna excepción.
+- Tests: añadido test `reportes_page_empty_test.dart` asegurando render sin datos; fallback de inicialización limitado sólo a entorno de test (no producción).
+- Versionado: bump a 1.2.0+12.
+
 ## 1.1.0+11 — 2025-11-13
 - Cajas: nueva columna `visible` (solo Android). Historial con toggle “Mostrar ocultas”, filas ocultas en gris y etiqueta “(Oculta)”. En detalle de caja, menú para Ocultar/Mostrar con confirmación y validación para NO permitir ocultar una caja ABIERTA.
 - POS (ventas): el botón/gesto Atrás ahora redirige siempre a Inicio.
 - Impresión de prueba: ticket de muestra sin insertar en DB (no consume IDs autoincrementales).
 - Cierre de caja: flujo USB-first. Primero intenta imprimir por USB (muestra aviso si no hay conexión o si falla). Luego guarda automáticamente el PDF y abre la previsualización. Se elimina el modal de compartir JSON.
 - UI de caja: se quitó un encabezado que recortaba contenido en el detalle/resumen.
+- Se agregó precio de compra en pantalla de productos y calculo de % de ganancia teniendo el cuenta el precio de compra.
 - Versionado: bump a 1.1.0+11.
 
 ## 1.0.7+8 — 2025-10-31

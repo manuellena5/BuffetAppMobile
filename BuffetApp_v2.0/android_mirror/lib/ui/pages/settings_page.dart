@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:async';
+import 'package:path/path.dart' as p;
+import '../../data/dao/db.dart';
 import '../state/app_settings.dart';
 
 enum ProductosLayout { grid, list }
@@ -157,8 +161,125 @@ class _SettingsPageState extends State<SettingsPage> {
                   value: _advanced,
                   onChanged: (v) => setState(() => _advanced = v),
                 ),
+                if (_advanced) const Divider(),
+                if (_advanced)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Mantenimiento de Datos', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade700,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.delete_forever),
+                          onPressed: _mostrarDialogoPurgar,
+                          label: const Text('Borrar TODAS las cajas y tickets (Irreversible)'),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueGrey.shade700,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.backup),
+                          onPressed: _crearBackupCompartir,
+                          label: const Text('Crear Backup y Compartir'),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
     );
+  }
+
+  Future<void> _mostrarDialogoPurgar() async {
+    final cantidadCajas = await AppDatabase.countCajas();
+    int segundos = 5;
+    bool ejecutando = false;
+    Timer? timer;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          timer ??= Timer.periodic(const Duration(seconds: 1), (t) {
+            if (segundos > 0) {
+              setLocal(() => segundos--);
+            } else {
+              t.cancel();
+            }
+          });
+          return AlertDialog(
+            title: const Text('Confirmar borrado masivo'),
+            content: Text(
+              'Se eliminarán $cantidadCajas cajas y sus ventas, items, tickets y movimientos asociados. También se limpian eventos de sincronización relacionados. Esta acción es irreversible. ¿Deseas continuar?'
+            ),
+            actions: [
+              TextButton(
+                onPressed: ejecutando ? null : () {
+                  timer?.cancel();
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: segundos == 0 ? Colors.red.shade700 : Colors.red.shade200,
+                ),
+                onPressed: (segundos == 0 && !ejecutando) ? () async {
+                  setLocal(() => ejecutando = true);
+                  try {
+                    final counts = await AppDatabase.purgeCajasYAsociados();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(
+                          counts['caja_diaria'] == 0
+                            ? 'No había cajas para borrar.'
+                            : 'Purgado OK: cajas ${counts['caja_diaria']}, ventas ${counts['ventas']}, tickets ${counts['tickets']}'
+                        )),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error al purgar: $e')),
+                      );
+                    }
+                  } finally {
+                    timer?.cancel();
+                    if (mounted) Navigator.pop(ctx);
+                  }
+                } : null,
+                child: Text(segundos == 0 ? (ejecutando ? 'Ejecutando...' : 'CONFIRMAR') : 'Esperar $segundos s'),
+              ),
+            ],
+          );
+        });
+      },
+    ).then((_) => timer?.cancel());
+  }
+
+  Future<void> _crearBackupCompartir() async {
+    try {
+      final path = await AppDatabase.crearBackupArchivo();
+      final file = XFile(path, name: p.basename(path));
+      await Share.shareXFiles([file], text: 'Backup base de datos BuffetApp');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Backup creado: ${p.basename(path)}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creando backup: $e')),
+        );
+      }
+    }
   }
 }

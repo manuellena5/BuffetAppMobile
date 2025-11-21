@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -361,6 +362,59 @@ class AppDatabase {
       }
     } catch (e, st) {
       await logLocalError(scope: 'db.ensureCajaDiariaColumn', error: e, stackTrace: st, payload: {'name': name, 'ddl': ddl});
+      rethrow;
+    }
+  }
+
+  /// Devuelve cantidad total de cajas existentes.
+  static Future<int> countCajas() async {
+    try {
+      final db = await instance();
+      final v = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(1) FROM caja_diaria')) ?? 0;
+      return v;
+    } catch (e, st) {
+      await logLocalError(scope: 'db.countCajas', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
+  /// Purga todas las cajas y datos asociados (ventas, items, tickets, movimientos) + entradas relacionadas en outbox.
+  /// Devuelve conteo de filas eliminadas por tabla. Se ejecuta en transacción.
+  static Future<Map<String, int>> purgeCajasYAsociados() async {
+    final result = <String, int>{};
+    try {
+      final db = await instance();
+      await db.transaction((txn) async {
+        // Orden respetando FKs
+        result['venta_items'] = await txn.delete('venta_items');
+        result['tickets'] = await txn.delete('tickets');
+        result['caja_movimiento'] = await txn.delete('caja_movimiento');
+        result['ventas'] = await txn.delete('ventas');
+        result['caja_diaria'] = await txn.delete('caja_diaria');
+        // Limpiar outbox de tipos relacionados para evitar referencias huérfanas
+        result['sync_outbox'] = await txn.delete('sync_outbox', where: "tipo IN (?,?,?,?,?)", whereArgs: ['venta','venta_anulada','cierre_caja','ticket_anulado','venta_item'] );
+      });
+    } catch (e, st) {
+      await logLocalError(scope: 'db.purgeCajasYAsociados', error: e, stackTrace: st);
+      rethrow;
+    }
+    return result;
+  }
+
+  /// Crea un archivo físico de backup de la base de datos SQLite actual y devuelve la ruta.
+  /// El archivo queda en el directorio de documentos de la app con nombre timestamp.
+  static Future<String> crearBackupArchivo() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final dbPath = p.join(dir.path, 'barcancha.db');
+      final ts = DateTime.now();
+      String two(int v) => v.toString().padLeft(2,'0');
+      final name = 'backup_barcancha_${ts.year}${two(ts.month)}${two(ts.day)}_${two(ts.hour)}${two(ts.minute)}${two(ts.second)}.db';
+      final backupPath = p.join(dir.path, name);
+      await File(dbPath).copy(backupPath);
+      return backupPath;
+    } catch (e, st) {
+      await logLocalError(scope: 'db.crearBackupArchivo', error: e, stackTrace: st);
       rethrow;
     }
   }

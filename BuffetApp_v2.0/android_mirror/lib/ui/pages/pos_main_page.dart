@@ -18,6 +18,7 @@ import '../../app_version.dart';
 import 'help_page.dart';
 import 'movimientos_page.dart';
 import 'error_logs_page.dart';
+import 'reportes_page.dart';
 import 'dart:io';
 import 'dart:async';
 import '../../services/usb_printer_service.dart';
@@ -368,6 +369,17 @@ class _PosMainPageState extends State<PosMainPage> {
                 nav.pop();
                 await nav.push(
                     MaterialPageRoute(builder: (_) => const CajaListPage()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart),
+              title: const Text('Reportes'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                await nav.push(
+                  MaterialPageRoute(builder: (_) => const ReportesPage()),
+                );
               },
             ),
             ListTile(
