@@ -180,15 +180,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           label: const Text('Borrar TODAS las cajas y tickets (Irreversible)'),
                         ),
                         const SizedBox(height: 12),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueGrey.shade700,
-                            foregroundColor: Colors.white,
-                          ),
-                          icon: const Icon(Icons.backup),
-                          onPressed: _crearBackupCompartir,
-                          label: const Text('Crear Backup y Compartir'),
-                        ),
+                        SizedBox.shrink(),
                       ],
                     ),
                   ),
