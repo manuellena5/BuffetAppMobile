@@ -486,6 +486,13 @@ class PrintService {
     text('(Hamburguesa x 12) = ${_formatCurrency(24000)}');
     text('(Gaseosa x 20) = ${_formatCurrency(16000)}');
     text('(Papas x 8) = ${_formatCurrency(11200)}');
+    // Demo de movimientos detallados (como en PDF)
+    feed();
+    boldOn(); text('MOVIMIENTOS:'); boldOff();
+    final dd = now.day.toString().padLeft(2,'0');
+    final mm = now.month.toString().padLeft(2,'0');
+    text('$dd/$mm 19:45 INGRESO: ${_formatCurrency(5000)} - Fondo inicial');
+    text('$dd/$mm 22:10 RETIRO: ${_formatCurrency(2000)} - Cambio caja');
     feed(2);
     b.add([0x1D, 0x56, 0x42, 0x00]);
     return Uint8List.fromList(b.toBytes());
@@ -627,6 +634,25 @@ class PrintService {
       boldOn(); text('MOVIMIENTOS:'); boldOff();
       text('Ingresos registrados: ${_formatCurrency(ing)}');
       text('Retiros registrados: ${_formatCurrency(ret)}');
+      // Detalle de movimientos (como en PDF)
+      for (final m in movimientos) {
+        final ts = (m['created_ts'] as num?)?.toInt();
+        String tsStr = '';
+        if (ts != null) {
+          final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+          final dd = dt.day.toString().padLeft(2, '0');
+          final mm = dt.month.toString().padLeft(2, '0');
+          final hh = dt.hour.toString().padLeft(2, '0');
+          final mi = dt.minute.toString().padLeft(2, '0');
+          tsStr = '$dd/$mm $hh:$mi';
+        }
+        final tipo = (m['tipo'] ?? '').toString();
+        final monto = ((m['monto'] as num?) ?? 0).toDouble();
+        final obs = (m['observacion'] as String?)?.trim();
+        final obsPart = (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
+        final line = '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart';
+        writeWrapped('', line);
+      }
     }
     feed(2);
     b.add([0x1D, 0x56, 0x42, 0x00]); // corte parcial

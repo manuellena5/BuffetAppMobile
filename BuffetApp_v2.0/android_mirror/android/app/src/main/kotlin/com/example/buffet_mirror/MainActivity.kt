@@ -1,4 +1,4 @@
-package com.example.buffet_mirror
+package com.buffetApp
 
 import android.app.PendingIntent
 import android.content.*
@@ -11,7 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 	companion object {
 		private const val CHANNEL = "usb_printer"
-		private const val ACTION_USB_PERMISSION = "com.example.buffet_mirror.USB_PERMISSION"
+		private const val ACTION_USB_PERMISSION = "com.buffetApp.USB_PERMISSION"
 	}
 
 	private lateinit var usbManager: UsbManager

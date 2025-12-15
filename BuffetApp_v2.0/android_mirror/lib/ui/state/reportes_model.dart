@@ -80,6 +80,7 @@ class ReportesModel extends ChangeNotifier {
   List<ProductoRanking> rankingProductos = [];
   List<DisciplinaDiaVenta> disciplinaDiaVentas = [];
   final Map<DateTime, List<DisciplinaDiaVenta>> diaDisciplinaMes = {};
+  int cajasEnFiltro = 0;
 
   // Calendario
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -226,7 +227,8 @@ class ReportesModel extends ChangeNotifier {
       serieHasta = DateTime(desde!.year, desde!.month + 1, 1).subtract(const Duration(milliseconds: 1));
       diaDisciplinaMes.clear();
     }
-    serie = await _service.obtenerSerieVentas(
+    // Paralelizar cargas principales para mejorar tiempo de respuesta
+    final serieF = _service.obtenerSerieVentas(
       desde: serieDesde,
       hasta: serieHasta,
       agregacion: aggSerie,
@@ -246,9 +248,17 @@ class ReportesModel extends ChangeNotifier {
       kDesde = DateTime(desde!.year, desde!.month, desde!.day, 0, 0, 0);
       kHasta = DateTime(desde!.year, desde!.month, desde!.day, 23, 59, 59, 999);
     }
-    kpis = await _service.obtenerKpis(desde: kDesde, hasta: kHasta, disciplina: disciplina);
-    ventasPorMetodo = await _service.obtenerVentasPorMetodo(desde: kDesde, hasta: kHasta, disciplina: disciplina);
-    rankingProductos = await _service.obtenerRankingProductos(desde: kDesde, hasta: kHasta, disciplina: disciplina, limit: 10);
+    final kpisF = _service.obtenerKpis(desde: kDesde, hasta: kHasta, disciplina: disciplina);
+    final vpmF = _service.obtenerVentasPorMetodo(desde: kDesde, hasta: kHasta, disciplina: disciplina);
+    final rankF = _service.obtenerRankingProductos(desde: kDesde, hasta: kHasta, disciplina: disciplina, limit: 10);
+    final cajasF = _service.contarCajas(desde: kDesde, hasta: kHasta, disciplina: disciplina);
+
+    final results = await Future.wait([serieF, kpisF, vpmF, rankF, cajasF]);
+    serie = results[0] as List<PeriodoVentas>;
+    kpis = results[1] as ReportesKpis;
+    ventasPorMetodo = results[2] as List<MetodoPagoVentas>;
+    rankingProductos = results[3] as List<ProductoRanking>;
+    cajasEnFiltro = results[4] as int;
     // Si se está en modo día, preparar barras por disciplina
     if (agregacion == AggregacionFecha.dia && desde != null) {
       final rows = await _service.obtenerVentasPorDisciplinaDia(dia: desde!);

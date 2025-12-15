@@ -558,7 +558,7 @@ class _ReportesPageState extends State<ReportesPage> {
               runSpacing: 8,
               children: [
                 _kpiTile('Total Ventas', _fmtMoney(k.totalVentas)),
-                _kpiTile('Ticket Promedio', _fmtMoney(k.ticketPromedio)),
+                _kpiTile('Venta Promedio', _fmtMoney(k.ticketPromedio)),
                 _kpiTile('Cant Ventas', k.cantidadVentas.toString()),
                 _kpiTile('Entradas', k.totalEntradas.toString()),
                 _kpiTile('Tickets Emitidos', k.ticketsEmitidos.toString()),
@@ -585,7 +585,8 @@ class _ReportesPageState extends State<ReportesPage> {
     );
   }
 
-  String _fmtMoney(double v) => '\$${v.toStringAsFixed(2)}';
+  String _fmtMoney(double v) => '\$${v.toStringAsFixed(0)}';
+  String _fmtNumber(double v, {int decimals = 1}) => v.toStringAsFixed(decimals);
 
   Widget _ventasPorMetodo() {
     if (model.ventasPorMetodo.isEmpty) return const SizedBox.shrink();
@@ -616,14 +617,17 @@ class _ReportesPageState extends State<ReportesPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Top Productos (unidades)', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Top Productos (promedio unidades por caja)', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            ...model.rankingProductos.map((p) => ListTile(
-                  dense: true,
-                  title: Text(p.nombre),
-                  subtitle: Text('Unidades: ${p.unidades}'),
-                  trailing: Text(_fmtMoney(p.importe)),
-                )),
+            ...model.rankingProductos.map((p) {
+                  final cajas = model.cajasEnFiltro;
+                  final promedio = cajas > 0 ? (p.unidades / cajas) : 0.0;
+                  return ListTile(
+                    dense: true,
+                    title: Text('${p.nombre}: ${_fmtMoney(p.importe)}'),
+                    subtitle: Text('Promedio unidades vendidas: ${_fmtNumber(promedio, decimals: 2)} (sobre ${cajas} caja/s filtradas) (Totales: ${p.unidades})'),
+                  );
+                }),
           ],
         ),
       ),

@@ -37,11 +37,13 @@ class ReportesService {
   }
 
   Future<List<PeriodoVentas>> obtenerSerieVentas({required DateTime desde, required DateTime hasta, required AggregacionFecha agregacion, String? disciplina}) async {
-    // Agrupación basada en fecha de apertura de caja (c.fecha), no en fecha_hora de venta
+    // Agrupación basada en fecha de apertura de caja (c.fecha) y
+    // montos calculados SOLO con tickets no anulados.
     final db = await _db();
     final filtros = <String>[];
     final params = <Object?>[];
     filtros.add('v.activo=1');
+    filtros.add("t.status <> 'Anulado'");
     filtros.add('c.fecha BETWEEN ? AND ?');
     params.add(_fmtDia(desde));
     params.add(_fmtDia(hasta));
@@ -62,9 +64,10 @@ class ReportesService {
       groupPeriodo = "substr(c.fecha,1,4)";
     }
     final sql = '''
-      SELECT $selectPeriodo AS periodo, SUM(v.total_venta) AS total
-      FROM ventas v
-      JOIN caja_diaria c ON c.id = v.caja_id
+      SELECT $selectPeriodo AS periodo, SUM(t.total_ticket) AS total
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id
+      JOIN caja_diaria c ON c.id = v.caja_id AND v.activo=1
       WHERE ${filtros.join(' AND ')}
       GROUP BY $groupPeriodo
       ORDER BY $groupPeriodo
@@ -90,10 +93,11 @@ class ReportesService {
       params.add(disciplina);
     }
     final sql = '''
-      SELECT c.fecha AS dia, c.disciplina AS disciplina, SUM(v.total_venta) AS total
-      FROM ventas v
-      JOIN caja_diaria c ON c.id = v.caja_id
-      WHERE ${filtros.join(' AND ')}
+      SELECT c.fecha AS dia, c.disciplina AS disciplina, SUM(t.total_ticket) AS total
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id
+      JOIN caja_diaria c ON c.id = v.caja_id AND v.activo=1
+      WHERE t.status <> 'Anulado' AND ${filtros.join(' AND ')}
       GROUP BY c.fecha, c.disciplina
       ORDER BY c.fecha, c.disciplina
     ''';
@@ -105,10 +109,11 @@ class ReportesService {
     final db = await _db();
     final dateStr = '${dia.year.toString().padLeft(4,'0')}-${dia.month.toString().padLeft(2,'0')}-${dia.day.toString().padLeft(2,'0')}';
     final sql = '''
-      SELECT c.disciplina AS disciplina, SUM(v.total_venta) AS total
-      FROM ventas v
+      SELECT c.disciplina AS disciplina, SUM(t.total_ticket) AS total
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id
       JOIN caja_diaria c ON c.id = v.caja_id
-      WHERE v.activo=1 AND c.fecha LIKE ? || '%'
+      WHERE v.activo=1 AND t.status <> 'Anulado' AND c.fecha = ?
       GROUP BY c.disciplina
       ORDER BY total DESC
     ''';
@@ -121,24 +126,20 @@ class ReportesService {
     final filtros = <String>[];
     final params = <Object?>[];
     filtros.add('v.activo=1');
-    // Rango por fecha de apertura de caja (c.fecha) según especificación
-    final esMismoDia = desde.year == hasta.year && desde.month == hasta.month && desde.day == hasta.day;
-    if (esMismoDia) {
-      filtros.add('c.fecha = ?');
-      params.add(_fmtDia(desde));
-    } else {
-      filtros.add('c.fecha BETWEEN ? AND ?');
-      params.add(_fmtDia(desde));
-      params.add(_fmtDia(hasta));
-    }
+    filtros.add("t.status <> 'Anulado'");
+    // Rango por fecha de apertura de caja (c.fecha)
+    filtros.add('c.fecha BETWEEN ? AND ?');
+    params.add(_fmtDia(desde));
+    params.add(_fmtDia(hasta));
     if (disciplina != null && disciplina.isNotEmpty) {
       filtros.add('c.disciplina = ?');
       params.add(disciplina);
     }
-    // Ventas básicas
+    // Ventas básicas (total por tickets no anulados + cantidad de ventas distintas)
     final sqlVentas = '''
-      SELECT COUNT(*) AS cant, SUM(v.total_venta) AS total
-      FROM ventas v
+      SELECT COUNT(DISTINCT v.id) AS cant, SUM(t.total_ticket) AS total
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id
       JOIN caja_diaria c ON c.id = v.caja_id
       WHERE ${filtros.join(' AND ')}
     ''';
@@ -156,9 +157,10 @@ class ReportesService {
       FROM tickets t
       JOIN ventas v ON v.id = t.venta_id AND v.activo=1
       JOIN caja_diaria c ON c.id = v.caja_id
-      WHERE ${filtros.join(' AND ')}
+      WHERE c.fecha BETWEEN ? AND ? ${disciplina != null && disciplina.isNotEmpty ? ' AND c.disciplina = ?' : ''}
     ''';
-    final ticketsRowList = await db.rawQuery(sqlTickets, params);
+    final ticketsParams = <Object?>[_fmtDia(desde), _fmtDia(hasta), if (disciplina != null && disciplina.isNotEmpty) disciplina];
+    final ticketsRowList = await db.rawQuery(sqlTickets, ticketsParams);
     final ticketsRow = ticketsRowList.isEmpty ? <String, Object?>{} : ticketsRowList.first;
     final ticketsEmitidos = (ticketsRow['emitidos'] as num?)?.toInt() ?? 0;
     final ticketsAnulados = (ticketsRow['anulados'] as num?)?.toInt() ?? 0;
@@ -166,22 +168,20 @@ class ReportesService {
     // Entradas sumadas desde caja_diaria (dato cargado al cerrar)
     final filtrosCaja = <String>[];
     final paramsCaja = <Object?>[];
-    if (esMismoDia) {
-      filtrosCaja.add('fecha = ?');
-      paramsCaja.add(_fmtDia(desde));
-    } else {
-      filtrosCaja.add('fecha BETWEEN ? AND ?');
-      paramsCaja.add(_fmtDia(desde));
-      paramsCaja.add(_fmtDia(hasta));
-    }
+    filtrosCaja.add('fecha BETWEEN ? AND ?');
+    paramsCaja.add(_fmtDia(desde));
+    paramsCaja.add(_fmtDia(hasta));
     if (disciplina != null && disciplina.isNotEmpty) {
       filtrosCaja.add('disciplina = ?');
       paramsCaja.add(disciplina);
     }
-    final sqlEntradas = 'SELECT SUM(entradas) AS entradas FROM caja_diaria WHERE ${filtrosCaja.join(' AND ')}';
+    // Promedio de entradas por caja en el período.
+    final sqlEntradas = 'SELECT AVG(entradas) AS entradas FROM caja_diaria WHERE ${filtrosCaja.join(' AND ')}';
     final entradasRowList = await db.rawQuery(sqlEntradas, paramsCaja);
     final entradasRow = entradasRowList.isEmpty ? <String, Object?>{} : entradasRowList.first;
-    final totalEntradas = (entradasRow['entradas'] as num?)?.toInt() ?? 0;
+    final totalEntradas = (entradasRow['entradas'] as num?) == null
+      ? 0
+      : ((entradasRow['entradas'] as num).toDouble()).round();
     final ventasSobrePersonasPct = (totalEntradas > 0 && cantidadVentas > 0)
         ? (cantidadVentas / totalEntradas) * 100
         : 0.0;
@@ -201,22 +201,20 @@ class ReportesService {
     final filtros = <String>[];
     final params = <Object?>[];
     filtros.add('v.activo=1');
-    final esMismoDia = desde.year == hasta.year && desde.month == hasta.month && desde.day == hasta.day;
-    if (esMismoDia) {
-      filtros.add("strftime('%Y-%m-%d', v.fecha_hora) = ?");
-      params.add(_fmtDia(desde));
-    } else {
-      filtros.add('v.fecha_hora BETWEEN ? AND ?');
-      params.add(desde.toIso8601String());
-      params.add(hasta.toIso8601String());
-    }
+    filtros.add("t.status <> 'Anulado'");
+    // Rango por fecha de caja
+    filtros.add('c.fecha BETWEEN ? AND ?');
+    params.add(_fmtDia(desde));
+    params.add(_fmtDia(hasta));
     if (disciplina != null && disciplina.isNotEmpty) {
       filtros.add('c.disciplina = ?');
       params.add(disciplina);
     }
     final sql = '''
-      SELECT mp.descripcion AS metodo, SUM(v.total_venta) AS total
-      FROM ventas v
+      SELECT mp.descripcion AS metodo,
+             SUM(t.total_ticket) AS total
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id AND v.activo=1
       JOIN caja_diaria c ON c.id = v.caja_id
       JOIN metodos_pago mp ON mp.id = v.metodo_pago_id
       WHERE ${filtros.join(' AND ')}
@@ -235,27 +233,23 @@ class ReportesService {
     final filtros = <String>[];
     final params = <Object?>[];
     filtros.add('v.activo=1');
-    final esMismoDia = desde.year == hasta.year && desde.month == hasta.month && desde.day == hasta.day;
-    if (esMismoDia) {
-      filtros.add("strftime('%Y-%m-%d', v.fecha_hora) = ?");
-      params.add(_fmtDia(desde));
-    } else {
-      filtros.add('v.fecha_hora BETWEEN ? AND ?');
-      params.add(desde.toIso8601String());
-      params.add(hasta.toIso8601String());
-    }
+    filtros.add("t.status <> 'Anulado'");
+    filtros.add('c.fecha BETWEEN ? AND ?');
+    params.add(_fmtDia(desde));
+    params.add(_fmtDia(hasta));
     if (disciplina != null && disciplina.isNotEmpty) {
       filtros.add('c.disciplina = ?');
       params.add(disciplina);
     }
+    // Ranking desde tickets (no anulados) para contar unidades correctamente.
     final sql = '''
       SELECT p.id AS producto_id, p.nombre AS nombre,
-             SUM(vi.cantidad) AS unidades,
-             SUM(vi.subtotal) AS importe
-      FROM venta_items vi
-      JOIN ventas v ON v.id = vi.venta_id AND v.activo=1
+             COUNT(*) AS unidades,
+             SUM(t.total_ticket) AS importe
+      FROM tickets t
+      JOIN ventas v ON v.id = t.venta_id AND v.activo=1
       JOIN caja_diaria c ON c.id = v.caja_id
-      JOIN products p ON p.id = vi.producto_id
+      JOIN products p ON p.id = t.producto_id
       WHERE ${filtros.join(' AND ')}
       GROUP BY p.id, p.nombre
       ORDER BY unidades DESC
@@ -268,6 +262,23 @@ class ReportesService {
       unidades: (r['unidades'] as num?)?.toInt() ?? 0,
       importe: (r['importe'] as num?)?.toDouble() ?? 0,
     )).toList();
+  }
+
+  Future<int> contarCajas({required DateTime desde, required DateTime hasta, String? disciplina}) async {
+    final db = await _db();
+    final filtros = <String>[];
+    final params = <Object?>[];
+    filtros.add('fecha BETWEEN ? AND ?');
+    params.add(_fmtDia(desde));
+    params.add(_fmtDia(hasta));
+    if (disciplina != null && disciplina.isNotEmpty) {
+      filtros.add('disciplina = ?');
+      params.add(disciplina);
+    }
+    final sql = 'SELECT COUNT(*) AS cnt FROM caja_diaria WHERE ' + filtros.join(' AND ');
+    final rows = await db.rawQuery(sql, params);
+    if (rows.isEmpty) return 0;
+    return (rows.first['cnt'] as num?)?.toInt() ?? 0;
   }
 }
 

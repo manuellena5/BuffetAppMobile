@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'dart:async';
-import 'package:path/path.dart' as p;
 import '../../data/dao/db.dart';
 import '../state/app_settings.dart';
 
@@ -254,24 +252,5 @@ class _SettingsPageState extends State<SettingsPage> {
         });
       },
     ).then((_) => timer?.cancel());
-  }
-
-  Future<void> _crearBackupCompartir() async {
-    try {
-      final path = await AppDatabase.crearBackupArchivo();
-      final file = XFile(path, name: p.basename(path));
-      await Share.shareXFiles([file], text: 'Backup base de datos BuffetApp');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Backup creado: ${p.basename(path)}')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creando backup: $e')),
-        );
-      }
-    }
   }
 }

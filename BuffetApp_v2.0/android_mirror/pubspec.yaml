@@ -16,6 +16,8 @@ dependencies:
   provider: ^6.1.2
   # share_plus v12 requiere AGP/Kotlin muy recientes. Fijamos a 11.x para compatibilidad con el proyecto actual.
   share_plus: ^11.1.0
+  open_filex: ^4.0.2
+  file_saver: ^0.2.12
   intl: ^0.20.2
   # Impresión PREVIEW (luego podemos agregar printing/pdf si lo preferís)
   printing: ^5.13.3

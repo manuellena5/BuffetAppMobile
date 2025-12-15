@@ -6,6 +6,8 @@ class HelpPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium;
+    final iconSize = (bodyStyle?.fontSize ?? 14.0);
     return Scaffold(
       appBar: AppBar(title: const Text('Ayuda')),
       body: ListView(
@@ -89,6 +91,202 @@ class HelpPage extends StatelessWidget {
           const Text('• Total Ventas (sistema): suma de tickets no anulados en la caja.'),
           const Text('• Cierre de caja: Diferencia = ((Efectivo declarado - Fondo Inicial - Ingresos + Retiros) + Transferencias) - Total Ventas (sistema).'),
           //const Text('• Ventas por producto: ordenadas de mayor a menor por cantidad. Formato: "Item x Cantidad = \$Monto".'),
+
+          
+
+          const SizedBox(height: 16),
+          const Text('Pantallas y funcionalidades',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+
+          // Inicio / Home (sin caja abierta)
+          const Text('Inicio (sin caja abierta)',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(
+              style: bodyStyle,
+              children: [
+                const TextSpan(text: '• Permite abrir caja y acceder a ajustes '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.settings, size: iconSize),
+                ),
+                const TextSpan(text: '.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // POS / Ventas
+          const Text('Ventas (POS)', style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Abrir carrito: '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.shopping_cart, size: iconSize)),
+              const TextSpan(text: ' muestra ítems seleccionados; contador indica cantidad.'),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Estado impresora: '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.print, size: iconSize)),
+              const TextSpan(text: ' indica conexión USB; tocá para ir a Config. impresora.'),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Limpiar carrito: '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.remove_shopping_cart, size: iconSize)),
+              const TextSpan(text: ' borra todos los ítems.'),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Cobrar: botón '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.payment, size: iconSize)),
+              const TextSpan(text: ' abre selección de medio de pago y confirma la venta.'),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          // Tickets / Recibos
+          const Text('Tickets / Recibos', style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Ver/filtrar tickets emitidos y anulados '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.receipt_long, size: iconSize)),
+              const TextSpan(text: '. Reimpresión disponible si corresponde.'),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          // Caja (abierta/cierre/resumen)
+          const Text('Caja (apertura, resumen y cierre)', style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Imprimir cierre/resumen: '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.print, size: iconSize)),
+              const TextSpan(text: ' (USB) o '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.picture_as_pdf, size: iconSize)),
+              const TextSpan(text: ' (PDF).'),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Exportar CSV (por caja): '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.grid_on, size: iconSize)),
+              const TextSpan(text: ' desde el detalle de la caja.'),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          // Historial de cajas (ya detallado arriba)
+          const Text('Historial de cajas', style: TextStyle(fontWeight: FontWeight.w600)),
+          //const SizedBox(height: 16),
+          // const Text('Historial de cajas',
+          //     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text('• Lista todas las cajas abiertas en el dispositivo con estado = "Visible".'),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              style: bodyStyle,
+              children: [
+                const TextSpan(text: '• El ícono de '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.visibility, size: iconSize),
+                ),
+                const TextSpan(text: ' sirve para ocultar o volver a mostrar las cajas en el listado.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              style: bodyStyle,
+              children: [
+                const TextSpan(text: '• El ícono de descargas '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.file_download, size: iconSize),
+                ),
+                const TextSpan(text: ' permite exportar el listado de cajas visibles en formato CSV.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              style: bodyStyle,
+              children: [
+                const TextSpan(text: '• El ícono de candado indica el estado: '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.lock_open, size: iconSize),
+                ),
+                const TextSpan(text: ' = abierta, '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.lock_outline, size: iconSize),
+                ),
+                const TextSpan(text: ' = cerrada.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Productos / Catálogo
+          const Text('Productos / Catálogo', style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Agregar producto: '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.add, size: iconSize)),
+              const TextSpan(text: ' editar '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.edit, size: iconSize)),
+              const TextSpan(text: ', visibilidad '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.visibility, size: iconSize)),
+              const TextSpan(text: ' y cargar imagen '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.image, size: iconSize)),
+              const TextSpan(text: '.'),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          // Movimientos (ingresos / retiros)
+          const Text('Movimientos de caja', style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Registrar '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.add_circle, size: iconSize)),
+              const TextSpan(text: ' ingresos y '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.remove_circle, size: iconSize)),
+              const TextSpan(text: ' retiros; se reflejan en el resumen de caja.'),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          // Configuración de impresora
+          const Text('Configuración de impresora', style: TextStyle(fontWeight: FontWeight.w600)),
+          RichText(
+            text: TextSpan(style: bodyStyle, children: [
+              const TextSpan(text: '• Conectar USB '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.usb, size: iconSize)),
+              const TextSpan(text: ', refrescar dispositivos '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.refresh, size: iconSize)),
+              const TextSpan(text: ' y prueba de impresión '),
+              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.print, size: iconSize)),
+              const TextSpan(text: '.'),
+            ]),
+          ),
         ],
       ),
     );

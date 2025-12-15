@@ -6,12 +6,14 @@ import '../../services/export_service.dart';
 import '../../services/print_service.dart';
 import '../format.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/usb_printer_service.dart';
 import 'printer_test_page.dart';
-import '../../services/supabase_sync_service.dart';
+// import '../../services/supabase_sync_service.dart'; // Oculto sync en listado
 import 'caja_tickets_page.dart';
 import '../../services/movimiento_service.dart';
 import '../../data/dao/db.dart';
+// url_launcher y path ya no se usan para abrir carpeta; se removieron
 
 class CajaListPage extends StatefulWidget {
   const CajaListPage({super.key});
@@ -56,6 +58,95 @@ class _CajaListPageState extends State<CajaListPage> {
               await _load();
             },
           ),
+          IconButton(
+            tooltip: 'Exportar todo (CSV)',
+            icon: const Icon(Icons.file_download),
+            onPressed: () async {
+              // Solo exporta cajas visibles. Si el toggle muestra ocultas, igual se filtra por visible=1.
+              final choice = await showDialog<String>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Exportar CSV de todas las cajas visibles'),
+                  content: const Text('¿Querés Compartir el archivo o Descargarlo?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                    TextButton(onPressed: () => Navigator.pop(ctx, 'share'), child: const Text('Compartir')),
+                    ElevatedButton(onPressed: () => Navigator.pop(ctx, 'download'), child: const Text('Descargar')),
+                  ],
+                ),
+              );
+              if (choice == 'share') {
+                try {
+                  final file = await ExportService().exportVisibleCajasToCsvInDownloads();
+                  await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Cajas historial', title: 'Cajas historial'));
+                } catch (e, st) {
+                  AppDatabase.logLocalError(scope: 'caja_list.share_all_csv', error: e, stackTrace: st);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo compartir CSV')));
+                }
+              } else if (choice == 'download') {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  final file = await ExportService().exportVisibleCajasToCsvInDownloads();
+                  await _showExportDialog(
+                    file.path,
+                    hint: 'Guardado en Descargas (/storage/emulated/0/Download):',
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('CSV guardado en Descargas')),
+                    );
+                  }
+                  final open = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Abrir archivo'),
+                      content: const Text('¿Querés abrir el CSV descargado?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+                        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+                      ],
+                    ),
+                  );
+                  if (open == true) {
+                    await ExportService().openFile(file.path);
+                  }
+                } catch (e1, st1) {
+                  AppDatabase.logLocalError(scope: 'caja_list.export_all_csv_downloads_primary_failed', error: e1, stackTrace: st1);
+                  try {
+                    final savedPath = await ExportService().saveVisibleCajasCsvToDownloadsViaMediaStore();
+                    await _showExportDialog(
+                      savedPath,
+                      hint: 'Guardado en Descargas vía MediaStore:',
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('CSV guardado vía MediaStore')),
+                      );
+                    }
+                    final open = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Abrir archivo'),
+                        content: const Text('¿Querés abrir el CSV descargado?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+                          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+                        ],
+                      ),
+                    );
+                    if (open == true) {
+                      await ExportService().openFile(savedPath);
+                    }
+                  } catch (e2, st2) {
+                    AppDatabase.logLocalError(scope: 'caja_list.export_all_csv_downloads_fallback_failed', error: e2, stackTrace: st2);
+                    if (!context.mounted) return;
+                    messenger.showSnackBar(SnackBar(content: Text('No se pudo descargar CSV: $e2')));
+                  }
+                }
+              }
+            },
+          ),
         ],
       ),
       body: _loading
@@ -83,31 +174,8 @@ class _CajaListPageState extends State<CajaListPage> {
                           ? Text(subt,
                               maxLines: 1, overflow: TextOverflow.ellipsis)
                           : null,
-                      trailing: FutureBuilder<(int,int)>(
-                        future: SupaSyncService.I
-                            .cajaOutboxCounts(c['codigo_caja'] as String),
-                        builder: (ctx, snap) {
-                          final has = snap.hasData;
-                          final pend = has ? snap.data!.$1 : null;
-                          final errs = has ? snap.data!.$2 : null;
-                          final synced = has && (pend == 0 && errs == 0);
-                          final icon = Icon(
-                            synced ? Icons.cloud_done : Icons.cloud_upload,
-                            size: 18,
-                            color: synced ? Colors.green : Colors.orange,
-                          );
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              icon,
-                              const SizedBox(width: 6),
-                              const Icon(Icons.chevron_right),
-                            ],
-                          );
-                        },
-                      ),
+                      trailing: const Icon(Icons.chevron_right),
                       onTap: () async {
-                        // Mostrar resumen (reutilizamos CajaPage si está abierta, o vista de solo-lectura inline)
                         await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -121,6 +189,36 @@ class _CajaListPageState extends State<CajaListPage> {
                 },
               ),
             ),
+    );
+  }
+
+  Future<void> _showExportDialog(String filePath, {String? hint}) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Archivo guardado'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (hint != null)
+                SelectableText('$hint\n$filePath')
+              else ...[
+                const Text('La exportación se guardó en:'),
+                const SizedBox(height: 8),
+                SelectableText(filePath),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -137,14 +235,10 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
   Map<String, dynamic>? _caja;
   Map<String, dynamic>? _resumen;
   bool _loading = true;
-  bool _syncing = false;
   double _movIngresos = 0.0;
   double _movRetiros = 0.0;
   // Progreso de sincronización
-  int? _progTotal;
-  int _progDone = 0;
-  String? _progStage;
-  StreamSubscription<SyncProgress>? _progSub;
+  
 
   @override
   void initState() {
@@ -179,7 +273,6 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
 
   @override
   void dispose() {
-    _progSub?.cancel();
     super.dispose();
   }
 
@@ -212,127 +305,7 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
             },
             icon: const Icon(Icons.receipt_long),
           ),
-          // Forzar sincronización manual (on-demand)
-          IconButton(
-            tooltip: 'Forzar sincronización',
-            onPressed: _syncing
-                ? null
-                : () async {
-                    setState(() {
-                      _syncing = true;
-                      _progTotal = null;
-                      _progDone = 0;
-                      _progStage = null;
-                    });
-                    _progSub?.cancel();
-                    _progSub = SupaSyncService.I.progress$.listen((p) {
-                      if (!mounted) return;
-                      setState(() {
-                        _progTotal = p.total;
-                        _progDone = p.processed;
-                        _progStage = p.stage;
-                      });
-                    });
-                    final messenger = ScaffoldMessenger.of(context);
-                    final nav = Navigator.of(context);
-                    try {
-                      // Antes de enviar, encolar caja_items de esta caja
-                      try {
-                        await SupaSyncService.I.enqueueItemsForCajaId(_caja!['id'] as int);
-                      } catch (e, st) {
-                        AppDatabase.logLocalError(scope: 'caja_list.enqueue_items', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
-                      }
-                      await SupaSyncService.I.syncNow();
-                      final det = SupaSyncService.I.lastSyncDetails();
-                      await showDialog<void>(
-                        context: nav.context,
-                        builder: (ctx) {
-                          return AlertDialog(
-                            title: const Text('Resultado de sincronización'),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Cajas OK: ${det.cajasOk}  •  Items OK: ${det.itemsOk}'),
-                                Text('Cajas Fallidas: ${det.cajasFail}  •  Items Fallidos: ${det.itemsFail}'),
-                                if (det.errorRowsOk > 0)
-                                  Text('Errores reportados: ${det.errorRowsOk}'),
-                                const SizedBox(height: 8),
-                                if (det.errors.isNotEmpty)
-                                  const Text('Detalles de errores (últimos):'),
-                                ...det.errors.take(3).map((e) => Text('• $e', style: const TextStyle(fontSize: 12))),
-                              ],
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx),
-                                child: const Text('Cerrar'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                      if (!nav.mounted) return;
-                      final codigo = (_caja?['codigo_caja'] as String?) ?? '';
-                      if (codigo.isNotEmpty) {
-                        final counts = await SupaSyncService.I.cajaOutboxCounts(codigo);
-                        if (counts.$2 > 0) {
-                          final err = await SupaSyncService.I.cajaLastError(codigo);
-                          if (!mounted) return;
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Error de sincronización: ${err ?? 'ver detalles en estado'}'),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
-                        } else if (counts.$1 == 0) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text('Sincronización completada'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        } else {
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Pendientes en cola: ${counts.$1}'),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                        }
-                      } else {
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Sincronización ejecutada')),
-                        );
-                      }
-                    } catch (e, st) {
-                      AppDatabase.logLocalError(scope: 'caja_list.sync_now', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text('No se pudo sincronizar: $e'),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                      }
-                    } finally {
-                      if (mounted) setState(() => _syncing = false);
-                      _progSub?.cancel();
-                      _progSub = null;
-                      if (mounted) {
-                        setState(() {
-                          _progStage = null;
-                          _progTotal = null;
-                          _progDone = 0;
-                        });
-                      }
-                    }
-                  },
-            icon: _syncing
-                ? const SizedBox(
-                    width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.sync),
-          ),
+          
           // Imprimir por USB (por defecto)
           IconButton(
             tooltip: 'Imprimir en térmica (USB)',
@@ -341,19 +314,94 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
               await _printCajaConDecision();
             },
           ),
-          // Exportar JSON (ya existente)
+          // Exportar JSON: ocultado según requerimiento
+          // Exportar CSV (modal: Compartir o Descargar)
           IconButton(
-            tooltip: 'Exportar/Compartir (JSON)',
-            icon: const Icon(Icons.ios_share),
+            tooltip: 'Exportar/Compartir (CSV)',
+            icon: const Icon(Icons.grid_on),
             onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await ExportService().shareCajaFile(_caja!['id'] as int);
-              } catch (e, st) {
-                AppDatabase.logLocalError(scope: 'caja_list.export_share', error: e, stackTrace: st, payload: {'cajaId': _caja!['id']});
-                if (!context.mounted) return;
-                messenger.showSnackBar(const SnackBar(
-                    content: Text('No se pudo exportar la caja')));
+              final choice = await showDialog<String>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Exportar CSV'),
+                  content: const Text('¿Querés Compartir el archivo o Descargarlo?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                    TextButton(onPressed: () => Navigator.pop(ctx, 'share'), child: const Text('Compartir')),
+                    ElevatedButton(onPressed: () => Navigator.pop(ctx, 'download'), child: const Text('Descargar')),
+                  ],
+                ),
+              );
+              if (choice == 'share') {
+                try {
+                  await ExportService().shareCajaCsv(_caja!['id'] as int);
+                } catch (e, st) {
+                  AppDatabase.logLocalError(scope: 'caja_list.share_csv', error: e, stackTrace: st);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo compartir CSV')));
+                }
+              } else if (choice == 'download') {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  // Prioridad: escritura directa en /storage/emulated/0/Download
+                  final file = await ExportService().exportCajaToCsvInDownloads(_caja!['id'] as int);
+                  await _showExportDialog(
+                    file.path,
+                    hint: 'Guardado en Descargas (/storage/emulated/0/Download):',
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('CSV guardado en Descargas')),
+                    );
+                  }
+                  final open = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Abrir archivo'),
+                      content: const Text('¿Querés abrir el CSV descargado?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+                        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+                      ],
+                    ),
+                  );
+                  if (open == true) {
+                    await ExportService().openFile(file.path);
+                  }
+                } catch (e1, st1) {
+                  // Fallback: MediaStore (FileSaver) en Descargas
+                  AppDatabase.logLocalError(scope: 'caja_list.export_csv_downloads_primary_failed', error: e1, stackTrace: st1, payload: {'cajaId': _caja!['id']});
+                  try {
+                    final savedPath = await ExportService().saveCsvToDownloadsViaMediaStore(_caja!['id'] as int);
+                    await _showExportDialog(
+                      savedPath,
+                      hint: 'Guardado en Descargas vía MediaStore:',
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('CSV guardado vía MediaStore')),
+                      );
+                    }
+                    final open = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Abrir archivo'),
+                        content: const Text('¿Querés abrir el CSV descargado?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+                          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí')),
+                        ],
+                      ),
+                    );
+                    if (open == true) {
+                      await ExportService().openFile(savedPath);
+                    }
+                  } catch (e2, st2) {
+                    AppDatabase.logLocalError(scope: 'caja_list.export_csv_downloads_fallback_failed', error: e2, stackTrace: st2, payload: {'cajaId': _caja!['id']});
+                    if (!context.mounted) return;
+                    messenger.showSnackBar(SnackBar(content: Text('No se pudo descargar CSV: $e2')));
+                  }
+                }
               }
             },
           ),
@@ -438,131 +486,19 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (_progTotal != null && (_progTotal ?? 0) > 0)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LinearProgressIndicator(value: _progDone / (_progTotal!.toDouble()), minHeight: 6),
-                  const SizedBox(height: 4),
-                  Text('Sincronizando: $_progDone/$_progTotal${_progStage != null ? ' · $_progStage' : ''}', style: const TextStyle(fontSize: 12)),
-                ],
-              )
-            else if (_syncing)
-              const LinearProgressIndicator(minHeight: 3),
+            
             // Se quita cabecera con código de caja para evitar recortes
             Text('Fecha: ${_caja!['fecha']} • Estado: ${_caja!['estado']}'),
             const SizedBox(height: 8),
-            FutureBuilder<Map<String,int>>(
-              future: SupaSyncService.I.cajaSyncPlan(
-                cajaId: _caja!['id'] as int,
-                codigoCaja: _caja!['codigo_caja'] as String,
-              ),
-              builder: (ctx, snap) {
-                final last = SupaSyncService.I.lastSyncAt;
-                final expectedCaja = snap.data?['expectedCaja'] ?? 1;
-                final expectedItems = snap.data?['expectedItems'] ?? 0;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        FutureBuilder<Map<String,int>>(
-                          future: SupaSyncService.I.cajaSyncPlan(
-                            cajaId: _caja!['id'] as int,
-                            codigoCaja: _caja!['codigo_caja'] as String,
-                          ),
-                          builder: (ctx2, snap2) {
-                            final p = snap2.data ?? const {};
-                            final pendingTotal = (p['pendingCaja'] ?? 0) + (p['pendingItems'] ?? 0);
-                            final errorsTotal  = (p['errorCaja'] ?? 0) + (p['errorItems'] ?? 0);
-                            Color color;
-                            IconData icon;
-                            if (errorsTotal > 0) {
-                              color = Colors.redAccent;
-                              icon = Icons.cloud_off;
-                            } else if (pendingTotal > 0) {
-                              color = Colors.orange;
-                              icon = Icons.cloud_upload;
-                            } else {
-                              color = Colors.green;
-                              icon = Icons.cloud_done;
-                            }
-                            return Icon(icon, color: color, size: 18);
-                          },
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Caja: $expectedCaja • Tickets: $expectedItems', style: const TextStyle(fontSize: 12)),
-                              FutureBuilder<Map<String,int>>(
-                                future: SupaSyncService.I.cajaSyncPlan(
-                                  cajaId: _caja!['id'] as int,
-                                  codigoCaja: _caja!['codigo_caja'] as String,
-                                ),
-                                builder: (ctx3, snap3) {
-                                  if (!snap3.hasData) return const SizedBox.shrink();
-                                  final p = snap3.data!;
-                                  final doneCaja = p['doneCaja'] ?? 0;
-                                  final doneItems = p['doneItems'] ?? 0;
-                                  final expCaja = p['expectedCaja'] ?? 1;
-                                  final expItems = p['expectedItems'] ?? 0;
-                                  return Text(
-                                    'Sincronizados: Caja $doneCaja/$expCaja · Tickets $doneItems/$expItems',
-                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                                  );
-                                },
-                              ),
-                              if (last != null)
-                                Text(
-                                  'Últ. sync: ${last.hour.toString().padLeft(2,'0')}:${last.minute.toString().padLeft(2,'0')}:${last.second.toString().padLeft(2,'0')}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    FutureBuilder<String?>(
-                      future: SupaSyncService.I.cajaLastError(_caja!['codigo_caja'] as String),
-                      builder: (ctx, snapErr) {
-                        final m = snapErr.data;
-                        if (m == null || m.isEmpty) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text('Último error: $m', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
+            
             const SizedBox(height: 6),
-            FutureBuilder<Map<String,int>>(
-              future: SupaSyncService.I.cajaSyncPlan(
-                cajaId: _caja!['id'] as int,
-                codigoCaja: _caja!['codigo_caja'] as String,
-              ),
-              builder: (ctx, snap) {
-                if (!snap.hasData) return const SizedBox.shrink();
-                final p = snap.data!;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Plan → Caja: ${p['expectedCaja']} • Items: ${p['expectedItems']}', style: const TextStyle(fontSize: 12)),
-                    Text('Pendientes → Caja: ${p['pendingCaja']} • Items: ${p['pendingItems']}', style: const TextStyle(fontSize: 12)),
-                    if ((p['errorCaja'] ?? 0) > 0 || (p['errorItems'] ?? 0) > 0)
-                      Text('Errores → Caja: ${p['errorCaja']} • Items: ${p['errorItems']}', style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
-                  ],
-                );
-              },
-            ),
             const SizedBox(height: 8),
             if ((_caja!['disciplina'] as String?)?.isNotEmpty == true)
               Text('Disciplina: ${_caja!['disciplina']}'),
-            Text('Fondo inicial: ${formatCurrency((_caja!['fondo_inicial'] as num?) ?? 0)}'),
+            if ((_caja!['cajero_apertura'] as String?)?.isNotEmpty == true)
+              Text('Cajero apertura: ${_caja!['cajero_apertura']}'),
+            if ((_caja!['cajero_cierre'] as String?)?.isNotEmpty == true)
+              Text('Cajero cierre: ${_caja!['cajero_cierre']}'),
             const SizedBox(height: 8),
             if ((_caja!['descripcion_evento'] as String?)?.isNotEmpty == true)
               Text('Descripción del evento: ${_caja!['descripcion_evento']}'),
@@ -571,6 +507,9 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
               Text('Obs. apertura: ${_caja!['observaciones_apertura']}'),
             if ((_caja!['obs_cierre'] as String?)?.isNotEmpty == true)
               Text('Obs. cierre: ${_caja!['obs_cierre']}'),
+            Text('Fondo inicial: ${formatCurrency((_caja!['fondo_inicial'] as num?) ?? 0)}'),
+            // Nuevos datos debajo de Fondo inicial
+            Text('Efectivo declarado en caja: ${formatCurrency(((_caja!['conteo_efectivo_final'] as num?) ?? 0))}'),
             if ((_caja!['diferencia'] as num?) != null)
               Text('Diferencia: ${formatCurrency(((_caja!['diferencia'] as num?) ?? 0))}'),
             // Entradas vendidas (mostrar 0 si no hay valor)
@@ -676,4 +615,40 @@ class _CajaResumenPageState extends State<CajaResumenPage> {
       ),
     );
   }
+
+  Future<void> _showExportDialog(String filePath, {String? hint}) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Archivo guardado'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Mostrar UNA sola línea con la ruta efectiva.
+              // Si hay hint, combinar hint + path en un solo SelectableText.
+              if (hint != null)
+                SelectableText('$hint\n$filePath')
+              else ...[
+                const Text('La exportación se guardó en:'),
+                const SizedBox(height: 8),
+                SelectableText(filePath),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cerrar'),
+            ),
+            // Evitar abrir carpeta con file:// para no disparar FileUriExposedException en Android.
+            // Usar el flujo previo de "Abrir archivo" que llama a ExportService.openFile(filePath).
+          ],
+        );
+      },
+    );
+  }
+
+  // Flujo anterior de selector/compartir removido según nueva especificación
 }
