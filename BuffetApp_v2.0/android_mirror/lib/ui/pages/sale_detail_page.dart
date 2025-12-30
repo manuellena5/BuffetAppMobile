@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../data/dao/db.dart';
 import '../format.dart';
 import '../../services/print_service.dart';
 import '../../services/usb_printer_service.dart';
 import '../../services/supabase_sync_service.dart';
+import 'printer_test_page.dart';
 
 class SaleDetailPage extends StatefulWidget {
   final int ticketId;
@@ -15,6 +17,27 @@ class SaleDetailPage extends StatefulWidget {
 class _SaleDetailPageState extends State<SaleDetailPage> {
   Map<String, dynamic>? _ticket;
   bool _loading = true;
+
+  String _formatFechaHora(dynamic raw) {
+    final text = raw?.toString().trim();
+    if (text == null || text.isEmpty) return '-';
+
+    DateTime? dt;
+    dt = DateTime.tryParse(text);
+    dt ??= _tryParseDate(text, 'yyyy-MM-dd HH:mm:ss');
+    dt ??= _tryParseDate(text, 'yyyy-MM-dd HH:mm');
+
+    if (dt == null) return text;
+    return DateFormat('dd/MM/yyyy HH:mm').format(dt);
+  }
+
+  DateTime? _tryParseDate(String text, String pattern) {
+    try {
+      return DateFormat(pattern).parseLoose(text);
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -49,9 +72,10 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
     final rawStatus = (t['status'] as String?) ?? 'No Impreso';
     final norm = rawStatus.toLowerCase();
     final isAnulado = norm == 'anulado';
-  final isNoImpreso = norm == 'no impreso';
+    final isNoImpreso = norm == 'no impreso';
     final displayStatus =
         isAnulado ? 'Anulado' : (isNoImpreso ? 'No Impreso' : 'Impreso');
+    final createdAt = _formatFechaHora(t['fecha_hora']);
     return Scaffold(
       appBar: AppBar(
           title: Text(t['identificador_ticket'] as String? ?? '#${t['id']}')),
@@ -71,11 +95,11 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-          color: isAnulado
-            ? Colors.redAccent.withValues(alpha: 0.15)
-            : (isNoImpreso
-              ? Colors.orangeAccent.withValues(alpha: 0.15)
-              : Colors.blueGrey.withValues(alpha: 0.15)),
+                    color: isAnulado
+                        ? Colors.redAccent.withValues(alpha: 0.15)
+                        : (isNoImpreso
+                            ? Colors.orangeAccent.withValues(alpha: 0.15)
+                            : Colors.blueGrey.withValues(alpha: 0.15)),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(displayStatus,
@@ -88,6 +112,14 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                           fontWeight: FontWeight.w600)),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Creado: $createdAt',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.black54),
             ),
             const SizedBox(height: 12),
             FutureBuilder(
@@ -125,59 +157,103 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      final ok = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Confirmar reimpresión'),
-                          content: const Text('¿Desea reimprimir este ticket?'),
-                          actions: [
-                            TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancelar')),
-                            ElevatedButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Confirmar')),
-                          ],
-                        ),
-                      );
-                      if (ok != true) return;
-                      final db = await AppDatabase.instance();
-                      if (isNoImpreso) {
-                        await db.update('tickets', {'status': 'Impreso'},
-                            where: 'id=?', whereArgs: [t['id']]);
-                      }
                       try {
-                        // Validar USB conectada y sólo imprimir por USB
-                        final connected = await UsbPrinterService().isConnected();
-                        if (!connected) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No hay impresora USB conectada.')),
+                        // Validar USB conectada antes de confirmar
+                        bool connected = false;
+                        try {
+                          connected = await UsbPrinterService()
+                              .isConnected()
+                              .timeout(const Duration(seconds: 2),
+                                  onTimeout: () => false);
+                        } catch (_) {
+                          connected = false;
+                        }
+
+                        if (!connected && context.mounted) {
+                          final action = await showDialog<String>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Impresora no conectada'),
+                              content: const Text(
+                                  'No hay una impresora USB conectada.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, 'cancel'),
+                                  child: const Text('Cancelar'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, 'config'),
+                                  child: const Text('Config impresora'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (action == 'config' && context.mounted) {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const PrinterTestPage()),
                             );
                           }
                           return;
                         }
-                        final usb = await PrintService().printTicketUsbOnly(t['id'] as int);
-                        if (context.mounted && !usb) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('No se pudo imprimir por USB.')),
-                          );
+
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Confirmar reimpresión'),
+                            content:
+                                const Text('¿Desea reimprimir este ticket?'),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancelar')),
+                              ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Confirmar')),
+                            ],
+                          ),
+                        );
+                        if (ok != true) return;
+
+                        final usb = await PrintService()
+                            .printTicketUsbOnly(t['id'] as int);
+                        if (!usb) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content:
+                                      Text('No se pudo imprimir por USB.')),
+                            );
+                          }
+                          return;
+                        }
+
+                        // Sólo marcar como Impreso si la reimpresión fue exitosa.
+                        if (isNoImpreso) {
+                          final db = await AppDatabase.instance();
+                          await db.update('tickets', {'status': 'Impreso'},
+                              where: 'id=?', whereArgs: [t['id']]);
                         }
                       } catch (e, st) {
-                        await AppDatabase.logLocalError(scope: 'sale_detail.print_ticket', error: e, stackTrace: st, payload: {'ticketId': t['id']});
+                        await AppDatabase.logLocalError(
+                            scope: 'sale_detail.print_ticket',
+                            error: e,
+                            stackTrace: st,
+                            payload: {'ticketId': t['id']});
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Error al imprimir: $e')),
                           );
                         }
+                        return;
                       }
-                      if (context.mounted) {
-                        Navigator.pop(context, true);
-                        if (isNoImpreso) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Ticket marcado como Impreso')));
-                        }
+                      if (!context.mounted) return;
+                      Navigator.pop(context, true);
+                      if (isNoImpreso) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Ticket marcado como Impreso')),
+                        );
                       }
                     },
                     child: const Text('REIMPRIMIR'),
@@ -187,18 +263,36 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
               if (!isAnulado)
                 Expanded(
                   child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.redAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                     onPressed: () async {
                       final ok = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
                           title: const Text('Confirmar anulación'),
-                          content: const Text(
-                              '¿Seguro que querés anular este ticket?'),
+                          content: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('¿Desea anularlo?'),
+                              SizedBox(height: 8),
+                              Text(
+                                  'Si usted anula el ticket no va a poder revertir esta situación'),
+                            ],
+                          ),
                           actions: [
                             TextButton(
                                 onPressed: () => Navigator.pop(ctx, false),
                                 child: const Text('Cancelar')),
                             ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent,
+                                  foregroundColor: Colors.white,
+                                ),
                                 onPressed: () => Navigator.pop(ctx, true),
                                 child: const Text('Anular')),
                           ],
@@ -217,28 +311,44 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                             [pid]);
                       }
                       // Encolar anulación para Supabase (upsert del item con status)
-                      final venta = await db.query('ventas', columns: ['caja_id'], where: 'id=(SELECT venta_id FROM tickets WHERE id=?)', whereArgs: [t['id']], limit: 1);
+                      final venta = await db.query('ventas',
+                          columns: ['caja_id'],
+                          where: 'id=(SELECT venta_id FROM tickets WHERE id=?)',
+                          whereArgs: [t['id']],
+                          limit: 1);
                       String? codigoCaja;
                       if (venta.isNotEmpty) {
                         final cajaId = venta.first['caja_id'] as int?;
                         if (cajaId != null) {
-                          final caja = await db.query('caja_diaria', columns: ['codigo_caja'], where: 'id=?', whereArgs: [cajaId], limit: 1);
-                          if (caja.isNotEmpty) codigoCaja = caja.first['codigo_caja'] as String?;
+                          final caja = await db.query('caja_diaria',
+                              columns: ['codigo_caja'],
+                              where: 'id=?',
+                              whereArgs: [cajaId],
+                              limit: 1);
+                          if (caja.isNotEmpty)
+                            codigoCaja = caja.first['codigo_caja'] as String?;
                         }
                       }
                       // obtener categoría para el payload
                       String? categoriaDesc;
                       final catId = t['categoria_id'] as int?;
                       if (catId != null) {
-                        final cat = await db.query('Categoria_Producto', columns: ['descripcion'], where: 'id=?', whereArgs: [catId], limit: 1);
-                        if (cat.isNotEmpty) categoriaDesc = cat.first['descripcion'] as String?;
+                        final cat = await db.query('Categoria_Producto',
+                            columns: ['descripcion'],
+                            where: 'id=?',
+                            whereArgs: [catId],
+                            limit: 1);
+                        if (cat.isNotEmpty)
+                          categoriaDesc = cat.first['descripcion'] as String?;
                       }
                       await SupaSyncService.I.enqueueItem({
                         'codigo_caja': codigoCaja,
                         'ticket_id': t['id'],
                         'fecha': t['fecha_hora'],
                         'producto_id': t['producto_id'],
-                        'producto_nombre': await _loadItemNombre(productoId: t['producto_id'] as int?, categoriaId: t['categoria_id'] as int?),
+                        'producto_nombre': await _loadItemNombre(
+                            productoId: t['producto_id'] as int?,
+                            categoriaId: t['categoria_id'] as int?),
                         'categoria': categoriaDesc,
                         'cantidad': 1,
                         'precio_unitario': t['total_ticket'],
@@ -262,10 +372,12 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
               child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-          const Text('Total',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    const Text('Total',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
                     Text(formatCurrency(total),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
                   ]),
             )
           ],

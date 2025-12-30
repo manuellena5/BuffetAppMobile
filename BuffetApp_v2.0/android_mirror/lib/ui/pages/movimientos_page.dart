@@ -20,6 +20,24 @@ class _MovimientosPageState extends State<MovimientosPage> {
   Map<String, dynamic>? _caja;
   Map<String, double> _totales = {'ingresos': 0, 'retiros': 0};
 
+  static const _tileTitleStyle = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w800,
+    color: Colors.black,
+  );
+
+  static const _tileObsStyle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w700,
+    color: Colors.black,
+  );
+
+  static const _tileDateStyle = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: Colors.black87,
+  );
+
   String _formatCreatedTs(dynamic v) {
     try {
       DateTime dt;
@@ -68,7 +86,11 @@ class _MovimientosPageState extends State<MovimientosPage> {
       rows = await _svc.listarPorCaja(widget.cajaId);
       tot = await _svc.totalesPorCaja(widget.cajaId);
     } catch (e, st) {
-      AppDatabase.logLocalError(scope: 'movimientos_page.load', error: e, stackTrace: st, payload: {'cajaId': widget.cajaId});
+      AppDatabase.logLocalError(
+          scope: 'movimientos_page.load',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': widget.cajaId});
     }
     setState(() {
       _caja = caja;
@@ -79,7 +101,9 @@ class _MovimientosPageState extends State<MovimientosPage> {
   }
 
   void _nuevo() async {
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => _MovimientoDialog(cajaId: widget.cajaId));
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => _MovimientoDialog(cajaId: widget.cajaId));
     if (ok == true) _load();
   }
 
@@ -101,15 +125,20 @@ class _MovimientosPageState extends State<MovimientosPage> {
         title: const Text('Eliminar movimiento'),
         content: const Text('¿Desea eliminar el movimiento seleccionado?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Eliminar')),
         ],
       ),
     );
     if (confirm == true) {
       await _svc.eliminar(id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Movimiento eliminado')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Movimiento eliminado')));
       _load();
     }
   }
@@ -133,9 +162,11 @@ class _MovimientosPageState extends State<MovimientosPage> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (caja != null) ...[
-                    Text('Caja: ${caja['codigo_caja']} • Estado: ${caja['estado']}'),
+                    Text(
+                        'Caja: ${caja['codigo_caja']} • Estado: ${caja['estado']}'),
                     const SizedBox(height: 4),
-                    Text('Ingresos: ${formatCurrency(_totales['ingresos'] ?? 0)}  •  Retiros: ${formatCurrency(_totales['retiros'] ?? 0)}'),
+                    Text(
+                        'Ingresos: ${formatCurrency(_totales['ingresos'] ?? 0)}  •  Retiros: ${formatCurrency(_totales['retiros'] ?? 0)}'),
                     const Divider(height: 20),
                   ],
                   if (_rows.isEmpty)
@@ -149,31 +180,45 @@ class _MovimientosPageState extends State<MovimientosPage> {
                       final monto = (m['monto'] as num?)?.toDouble() ?? 0;
                       final obs = (m['observacion'] as String?) ?? '';
                       final fecha = _formatCreatedTs(m['created_ts']);
-                      final color = tipo == 'INGRESO' ? Colors.green.shade100 : Colors.red.shade100;
+                      final color = tipo == 'INGRESO'
+                          ? Colors.green.shade200
+                          : Colors.red.shade200;
+                      final canEdit =
+                          (caja != null && caja['estado'] == 'ABIERTA');
                       return Card(
                         color: color,
                         child: ListTile(
-                          title: Text('$tipo: ${formatCurrency(monto)}'),
+                          title: Text(
+                            '$tipo: ${formatCurrency(monto)}',
+                            style: _tileTitleStyle,
+                          ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (obs.isNotEmpty) Text(obs),
-                              Text(fecha, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                              if (obs.isNotEmpty)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: 2, bottom: 2),
+                                  child: Text(obs, style: _tileObsStyle),
+                                ),
+                              Text(fecha, style: _tileDateStyle),
                             ],
                           ),
-                          trailing: (caja != null && caja['estado'] == 'ABIERTA')
+                          trailing: canEdit
                               ? PopupMenuButton<String>(
                                   onSelected: (v) {
                                     if (v == 'edit') _editar(m);
                                     if (v == 'del') _eliminar(m['id'] as int);
                                   },
                                   itemBuilder: (ctx) => [
-                                    const PopupMenuItem(value: 'edit', child: Text('Editar')),
-                                    const PopupMenuItem(value: 'del', child: Text('Eliminar')),
+                                    const PopupMenuItem(
+                                        value: 'edit', child: Text('Editar')),
+                                    const PopupMenuItem(
+                                        value: 'del', child: Text('Eliminar')),
                                   ],
                                 )
                               : null,
-                          onTap: () => _editar(m),
+                          onTap: canEdit ? () => _editar(m) : null,
                         ),
                       );
                     }),
@@ -205,7 +250,8 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
     final mov = widget.movimiento;
     _tipo = (mov != null ? mov['tipo'] : 'INGRESO') ?? 'INGRESO';
     if (mov != null) {
-      _monto.text = ((mov['monto'] as num?)?.toDouble() ?? 0).toStringAsFixed(2);
+      _monto.text =
+          ((mov['monto'] as num?)?.toDouble() ?? 0).toStringAsFixed(2);
       _obs.text = (mov['observacion'] as String?) ?? '';
     }
   }
@@ -220,22 +266,36 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
   Future<void> _guardar() async {
     final monto = double.tryParse(_monto.text.replaceAll(',', '.')) ?? 0;
     if (monto <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Monto debe ser > 0')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Monto debe ser > 0')));
       return;
     }
     setState(() => _saving = true);
     try {
       if (widget.movimiento == null) {
-        await _svc.crear(cajaId: widget.cajaId, tipo: _tipo, monto: monto, observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim());
+        await _svc.crear(
+            cajaId: widget.cajaId,
+            tipo: _tipo,
+            monto: monto,
+            observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim());
       } else {
-        await _svc.actualizar(id: widget.movimiento!['id'] as int, tipo: _tipo, monto: monto, observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim());
+        await _svc.actualizar(
+            id: widget.movimiento!['id'] as int,
+            tipo: _tipo,
+            monto: monto,
+            observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim());
       }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e, st) {
-      AppDatabase.logLocalError(scope: 'movimientos_dialog.save', error: e, stackTrace: st, payload: {'cajaId': widget.cajaId});
+      AppDatabase.logLocalError(
+          scope: 'movimientos_dialog.save',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': widget.cajaId});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -245,7 +305,8 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.movimiento == null ? 'Nuevo movimiento' : 'Editar movimiento'),
+      title: Text(
+          widget.movimiento == null ? 'Nuevo movimiento' : 'Editar movimiento'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -265,15 +326,23 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
           ),
           TextField(
             controller: _obs,
-            decoration: const InputDecoration(labelText: 'Observación (opcional)'),
+            decoration:
+                const InputDecoration(labelText: 'Observación (opcional)'),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar')),
         ElevatedButton(
           onPressed: _saving ? null : _guardar,
-          child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Guardar'),
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Guardar'),
         ),
       ],
     );

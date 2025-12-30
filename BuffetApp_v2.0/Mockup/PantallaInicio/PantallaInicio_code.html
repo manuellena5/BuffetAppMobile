@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BuffetApp - Inicio</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#3f51b5", // Indigo based on the shield logo color
+                        "background-light": "#f3f4f6", // Light gray background
+                        "background-dark": "#111827", // Dark gray/almost black
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1f2937",
+                        "text-light": "#1f2937",
+                        "text-dark": "#f9fafb",
+                        "subtext-light": "#6b7280",
+                        "subtext-dark": "#9ca3af",
+                        "status-red": "#ef4444",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased text-text-light dark:text-text-dark min-h-screen flex flex-col">
+<header class="bg-surface-light dark:bg-surface-dark shadow-sm px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+<div class="flex items-center gap-3">
+<button class="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+<span class="material-icons text-gray-700 dark:text-gray-200">menu</span>
+</button>
+<h1 class="text-xl font-bold tracking-tight">BuffetApp</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-status-red"></div>
+</div>
+</header>
+<main class="flex-grow flex flex-col items-center justify-center p-6 gap-8">
+<div class="flex flex-col items-center gap-4 mb-4">
+<div class="w-32 h-32 bg-white dark:bg-surface-dark rounded-2xl shadow-lg flex items-center justify-center p-4">
+<div class="relative w-full h-full flex items-center justify-center">
+<svg class="w-20 h-20 text-primary" fill="currentColor" viewBox="0 0 24 24">
+<path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"></path>
+</svg>
+<span class="absolute text-[10px] font-bold text-primary bg-white dark:bg-surface-dark px-1 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">C. D. M.</span>
+</div>
+</div>
+<h2 class="text-2xl font-semibold text-gray-800 dark:text-gray-100">Bienvenido</h2>
+<p class="text-subtext-light dark:text-subtext-dark text-center text-sm max-w-xs">
+                Gestiona tus ventas y caja de forma eficiente.
+            </p>
+</div>
+<div class="flex flex-col w-full max-w-xs gap-4">
+<button class="flex items-center justify-center gap-3 w-full bg-primary hover:bg-opacity-90 active:bg-opacity-100 text-white font-medium py-3.5 px-6 rounded-xl shadow-md transition-all transform active:scale-95 group">
+<span class="material-icons-outlined group-hover:animate-pulse">lock_open</span>
+                Abrir caja
+            </button>
+<button class="flex items-center justify-center gap-3 w-full bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 text-text-light dark:text-text-dark font-medium py-3.5 px-6 rounded-xl shadow-sm hover:shadow-md transition-all active:bg-gray-50 dark:active:bg-gray-800">
+<span class="material-icons-outlined text-primary">print</span>
+                Conexión impresora
+            </button>
+<button class="flex items-center justify-center gap-3 w-full bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-700 text-text-light dark:text-text-dark font-medium py-3.5 px-6 rounded-xl shadow-sm hover:shadow-md transition-all active:bg-gray-50 dark:active:bg-gray-800">
+<span class="material-icons-outlined text-primary">history</span>
+                Historial de cajas
+            </button>
+</div>
+<div class="mt-4 flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 rounded-full border border-red-100 dark:border-red-900/50">
+<div class="w-2.5 h-2.5 rounded-full bg-status-red animate-pulse"></div>
+<span class="text-sm font-medium text-status-red">Impresora desconectada</span>
+</div>
+</main>
+<nav class="bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-800 pb-safe pt-2 px-6">
+<div class="flex justify-between items-center max-w-md mx-auto">
+<button class="flex flex-col items-center p-2 text-primary">
+<span class="material-icons">home</span>
+<span class="text-xs mt-1 font-medium">Inicio</span>
+</button>
+<button class="flex flex-col items-center p-2 text-subtext-light dark:text-subtext-dark hover:text-primary dark:hover:text-primary transition-colors">
+<span class="material-icons-outlined">point_of_sale</span>
+<span class="text-xs mt-1 font-medium">Ventas</span>
+</button>
+<button class="flex flex-col items-center p-2 text-subtext-light dark:text-subtext-dark hover:text-primary dark:hover:text-primary transition-colors">
+<span class="material-icons-outlined">receipt_long</span>
+<span class="text-xs mt-1 font-medium">Tickets</span>
+</button>
+<button class="flex flex-col items-center p-2 text-subtext-light dark:text-subtext-dark hover:text-primary dark:hover:text-primary transition-colors">
+<span class="material-icons-outlined">settings</span>
+<span class="text-xs mt-1 font-medium">Ajustes</span>
+</button>
+</div>
+</nav>
+<div class="h-6 bg-surface-light dark:bg-surface-dark w-full"></div> 
+
+</body></html>

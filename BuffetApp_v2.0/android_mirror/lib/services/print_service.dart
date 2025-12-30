@@ -20,6 +20,33 @@ import 'usb_printer_service.dart';
 class PrintService {
   final _usb = UsbPrinterService();
 
+  Future<String?> _buildPvLabelFromCajaCodigo(String codigoCaja) async {
+    try {
+      final pvCodigo = CajaService.puntoVentaFromCodigoCaja(codigoCaja);
+      if (pvCodigo == null || pvCodigo.trim().isEmpty) return null;
+      final db = await AppDatabase.instance();
+      final r = await db.query(
+        'punto_venta',
+        columns: ['alias_caja'],
+        where: 'codigo=?',
+        whereArgs: [pvCodigo],
+        limit: 1,
+      );
+      final alias =
+          (r.isNotEmpty ? (r.first['alias_caja'] as String?) : null)?.trim() ??
+              '';
+      return alias.isNotEmpty ? '$pvCodigo - $alias' : pvCodigo;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'print.pv_label',
+        error: e,
+        stackTrace: st,
+        payload: {'codigo_caja': codigoCaja},
+      );
+      return null;
+    }
+  }
+
   // Preferencias de ancho de papel
   Future<int> _preferredPaperWidthMm() async {
     try {
@@ -87,15 +114,15 @@ class PrintService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-        pw.Center(child: pw.Text('Buffet - C.D.M', style: header)),
-        pw.SizedBox(height: 2),
+              pw.Center(child: pw.Text('Buffet - C.D.M', style: header)),
+              pw.SizedBox(height: 2),
               pw.Text(identificador),
               pw.Text(fechaHora),
               pw.Text(cajaCodigo),
               pw.SizedBox(height: 10),
               pw.Text(producto.toUpperCase(),
-          style: pw.TextStyle(
-            fontSize: 26, fontWeight: pw.FontWeight.bold)),
+                  style: pw.TextStyle(
+                      fontSize: 26, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 6),
               pw.Text(_formatCurrency(total), style: bold),
             ],
@@ -112,15 +139,21 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-  final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+    final movimientos = await db.query('caja_movimiento',
+        where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
-  final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
-  final efectivoDeclarado = ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
-  final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
-  final obsCierre = (c['obs_cierre'] as String?) ?? '';
-  final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
-  final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
-  final entradasVendidas = ((c['entradas'] as num?) ?? 0).toInt();
+    final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+    final efectivoDeclarado =
+        ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+    final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
+    final obsCierre = (c['obs_cierre'] as String?) ?? '';
+    final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
+    final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
+    final int? entradasVendidas = (c['entradas'] as num?)?.toInt();
+    final codigoCaja = (c['codigo_caja'] ?? '').toString();
+    final pvLabel = codigoCaja.trim().isNotEmpty
+        ? await _buildPvLabelFromCajaCodigo(codigoCaja)
+        : null;
 
     final doc = pw.Document();
     pw.TextStyle s([bool b = false]) => pw.TextStyle(
@@ -155,33 +188,38 @@ class PrintService {
                 pw.Center(child: pw.Image(logo, height: 24)),
                 pw.SizedBox(height: 6),
               ],
-              pw.Text('==========================================',
+              pw.Text('========================================',
                   style: s(true)),
               pw.Text('              CIERRE DE CAJA              ',
                   style: s(true)),
-              pw.Text('==========================================',
+              pw.Text('========================================',
                   style: s(true)),
               pw.SizedBox(height: 6),
-        pw.Text(line('',c['codigo_caja']?.toString()),
+              pw.Text(line('', codigoCaja), style: s()),
+              if (pvLabel != null && pvLabel.trim().isNotEmpty)
+                pw.Text(line('PV:', pvLabel.trim()), style: s()),
+              if ((c['estado'] as String?) != null)
+                pw.Text(line('Estado:', c['estado']?.toString()), style: s()),
+              pw.Text(
+                  line('Fecha apertura:',
+                      '${c['fecha'] ?? ''} ${c['hora_apertura'] ?? ''}'),
                   style: s()),
-        if ((c['estado'] as String?) != null)
-        pw.Text(line('Estado:', c['estado']?.toString()), style: s()),
-        pw.Text(
-          line('Fecha apertura:',
-            '${c['fecha'] ?? ''} ${c['hora_apertura'] ?? ''}'),
-          style: s()),
-        pw.Text(
-          line('Cajero apertura:', c['cajero_apertura']?.toString()),
-          style: s()),
+              pw.Text(
+                  line('Cajero apertura:', c['cajero_apertura']?.toString()),
+                  style: s()),
               pw.Text(line('Disciplina:', c['disciplina']?.toString()),
                   style: s()),
               if (descripcionEvento.isNotEmpty)
-                pw.Text(line('Descripción del evento:', descripcionEvento), style: s()),
+                pw.Text(line('Descripción del evento:', descripcionEvento),
+                    style: s()),
               if ((c['cierre_dt'] as String?) != null)
                 pw.Text(line('Fecha cierre:', c['cierre_dt']?.toString()),
                     style: s()),
-              if ((c['cajero_cierre'] as String?) != null && (c['cajero_cierre'] as String).isNotEmpty)
-                pw.Text(line('Cajero de cierre:', c['cajero_cierre']?.toString()), style: s()),
+              if ((c['cajero_cierre'] as String?) != null &&
+                  (c['cajero_cierre'] as String).isNotEmpty)
+                pw.Text(
+                    line('Cajero de cierre:', c['cajero_cierre']?.toString()),
+                    style: s()),
               if (obsApertura.isNotEmpty)
                 pw.Text('Obs. apertura: $obsApertura', style: s()),
               if (obsCierre.isNotEmpty)
@@ -194,42 +232,47 @@ class PrintService {
                     style: s(),
                   )),
               pw.SizedBox(height: 4),
-        pw.Text(
-          'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
-          style: s(true).copyWith(fontSize: 12)),
+              pw.Text(
+                  'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
+                  style: s(true).copyWith(fontSize: 12)),
               pw.SizedBox(height: 6),
               pw.Text('Fondo inicial: ${_formatCurrency(fondo)}', style: s()),
-              pw.Text('Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}', style: s()),
               pw.Text(
-          'Diferencia: ${_formatCurrency(diferencia)}',
+                  'Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}',
+                  style: s()),
+              () {
+                double ing = 0, ret = 0;
+                for (final m in movimientos) {
+                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                  if (tipo == 'INGRESO') {
+                    ing += monto;
+                  } else if (tipo == 'RETIRO') {
+                    ret += monto;
+                  }
+                }
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Ingresos registrados: ${_formatCurrency(ing)}',
+                        style: s()),
+                    pw.Text('Retiros registrados: ${_formatCurrency(ret)}',
+                        style: s()),
+                  ],
+                );
+              }(),
+              pw.Text('Diferencia: ${_formatCurrency(diferencia)}',
                   style: s(true)),
-        pw.Text('Entradas vendidas: $entradasVendidas', style: s()),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                  'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}',
+                  style: s()),
+              pw.Text(
+                  'Tickets vendidos: ${(resumen['tickets']['emitidos'] ?? 0)}',
+                  style: s()),
               pw.Text(
                   'Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}',
                   style: s()),
-              // Sumarización de movimientos (ingresos/retiros)
-              if (movimientos.isNotEmpty) ...[
-                pw.SizedBox(height: 6),
-                () {
-                  double ing = 0, ret = 0;
-                  for (final m in movimientos) {
-                    final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-                    final monto = ((m['monto'] as num?) ?? 0).toDouble();
-                    if (tipo == 'INGRESO') {
-                      ing += monto;
-                    } else if (tipo == 'RETIRO') {
-                      ret += monto;
-                    }
-                  }
-                  return pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Ingresos registrados: ${_formatCurrency(ing)}', style: s()),
-                      pw.Text('Retiros registrados: ${_formatCurrency(ret)}', style: s()),
-                    ],
-                  );
-                }(),
-              ],
               pw.SizedBox(height: 6),
               pw.Text('ITEMS VENDIDOS:', style: s(true)),
               pw.SizedBox(height: 2),
@@ -238,29 +281,31 @@ class PrintService {
                     style: s(),
                   )),
               pw.SizedBox(height: 8),
-        if (movimientos.isNotEmpty) pw.SizedBox(height: 8),
-        if (movimientos.isNotEmpty) pw.Text('MOVIMIENTOS:', style: s(true)),
-        if (movimientos.isNotEmpty) pw.SizedBox(height: 2),
-        ...movimientos.map((m) {
-          final ts = (m['created_ts'] as num?)?.toInt();
-          String tsStr = '';
-          if (ts != null) {
-            final dt = DateTime.fromMillisecondsSinceEpoch(ts);
-            final dd = dt.day.toString().padLeft(2, '0');
-            final mm = dt.month.toString().padLeft(2, '0');
-            final hh = dt.hour.toString().padLeft(2, '0');
-            final mi = dt.minute.toString().padLeft(2, '0');
-            tsStr = '$dd/$mm $hh:$mi';
-          }
-          final tipo = (m['tipo'] ?? '').toString();
-          final monto = ((m['monto'] as num?) ?? 0).toDouble();
-          final obs = (m['observacion'] as String?)?.trim();
-          final obsPart = (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
-          return pw.Text(
-            '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart',
-            style: s(),
-          );
-        }),
+              if (movimientos.isNotEmpty) pw.SizedBox(height: 8),
+              if (movimientos.isNotEmpty)
+                pw.Text('MOVIMIENTOS:', style: s(true)),
+              if (movimientos.isNotEmpty) pw.SizedBox(height: 2),
+              ...movimientos.map((m) {
+                final ts = (m['created_ts'] as num?)?.toInt();
+                String tsStr = '';
+                if (ts != null) {
+                  final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                  final dd = dt.day.toString().padLeft(2, '0');
+                  final mm = dt.month.toString().padLeft(2, '0');
+                  final hh = dt.hour.toString().padLeft(2, '0');
+                  final mi = dt.minute.toString().padLeft(2, '0');
+                  tsStr = '$dd/$mm $hh:$mi';
+                }
+                final tipo = (m['tipo'] ?? '').toString();
+                final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                final obs = (m['observacion'] as String?)?.trim();
+                final obsPart =
+                    (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
+                return pw.Text(
+                  '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart',
+                  style: s(),
+                );
+              }),
             ],
           );
         },
@@ -270,6 +315,634 @@ class PrintService {
     return doc.save();
   }
 
+  /// Construye el PDF de un evento (fecha + disciplina) a partir de una lista de cajas.
+  ///
+  /// - `detallePorCaja=true`: una sección por caja (similar al cierre de caja).
+  /// - `detallePorCaja=false`: un reporte global sumarizado (totales + listados agregados).
+  Future<Uint8List> buildEventoPdf({
+    required String fecha,
+    required String disciplina,
+    required List<int> cajaIds,
+    required bool detallePorCaja,
+  }) async {
+    final db = await AppDatabase.instance();
+
+    if (cajaIds.isEmpty) {
+      final doc = pw.Document();
+      doc.addPage(
+        pw.Page(
+          pageFormat: await _preferredPdfFormat(),
+          margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          build: (_) => pw.Center(
+            child: pw.Text('Sin cajas para el evento $disciplina - $fecha'),
+          ),
+        ),
+      );
+      return doc.save();
+    }
+
+    final placeholders = List.filled(cajaIds.length, '?').join(',');
+    final cajas = await db.rawQuery('''
+      SELECT id, codigo_caja, disciplina, fecha, estado,
+             fondo_inicial, conteo_efectivo_final, conteo_transferencias_final,
+             diferencia, entradas, hora_apertura, hora_cierre, cajero_apertura,
+             cajero_cierre, descripcion_evento, observaciones_apertura, obs_cierre,
+             apertura_dt, cierre_dt
+      FROM caja_diaria
+      WHERE id IN ($placeholders)
+      ORDER BY apertura_dt ASC, id ASC
+    ''', cajaIds);
+
+    final resumen = await CajaService().resumenCajas(cajaIds);
+    final movimientos = await db.rawQuery('''
+      SELECT caja_id, tipo, monto, observacion, created_ts
+      FROM caja_movimiento
+      WHERE caja_id IN ($placeholders)
+      ORDER BY created_ts ASC
+    ''', cajaIds);
+
+    final totalesMp = (resumen['por_mp'] as List).cast<Map<String, Object?>>();
+    final porProd =
+        (resumen['por_producto'] as List).cast<Map<String, Object?>>();
+
+    double sumFondo = 0;
+    double sumEfecDeclarado = 0;
+    double sumTransfDeclarado = 0;
+    double sumDiferencia = 0;
+    int sumEntradas = 0;
+    bool anyEntradas = false;
+
+    final codigosCajas = <String>[];
+    final pvs = <String>{};
+
+    for (final c in cajas) {
+      sumFondo += ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+      sumEfecDeclarado +=
+          ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+      sumTransfDeclarado +=
+          ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
+      sumDiferencia += ((c['diferencia'] as num?) ?? 0).toDouble();
+      final entradas = (c['entradas'] as num?)?.toInt();
+      if (entradas != null) {
+        anyEntradas = true;
+        sumEntradas += entradas;
+      }
+
+      final codigo = (c['codigo_caja'] ?? '').toString().trim();
+      if (codigo.isNotEmpty) {
+        codigosCajas.add(codigo);
+        final pvLabel = await _buildPvLabelFromCajaCodigo(codigo);
+        if (pvLabel != null && pvLabel.trim().isNotEmpty) {
+          pvs.add(pvLabel.trim());
+        }
+      }
+    }
+
+    double sumIng = 0;
+    double sumRet = 0;
+    for (final m in movimientos) {
+      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+      final monto = ((m['monto'] as num?) ?? 0).toDouble();
+      if (tipo == 'INGRESO') {
+        sumIng += monto;
+      } else if (tipo == 'RETIRO') {
+        sumRet += monto;
+      }
+    }
+
+    pw.ImageProvider? logo;
+    try {
+      logo = await imageFromAssetBundle('assets/icons/app_icon_foreground.png');
+    } catch (_) {
+      logo = null;
+    }
+
+    pw.TextStyle s([bool b = false]) => pw.TextStyle(
+        fontSize: 9, fontWeight: b ? pw.FontWeight.bold : pw.FontWeight.normal);
+
+    final doc = pw.Document();
+
+    if (detallePorCaja) {
+      // Precalcular por caja (MultiPage.build no puede ser async).
+      final detalles = <Map<String, dynamic>>[];
+      for (final c in cajas) {
+        final cajaId = (c['id'] as num?)?.toInt();
+        if (cajaId == null) continue;
+
+        final resumenCaja = await CajaService().resumenCaja(cajaId);
+        final movCaja = await db.query('caja_movimiento',
+            where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+
+        final codigoCaja = (c['codigo_caja'] ?? '').toString();
+        final pvLabel = codigoCaja.trim().isNotEmpty
+            ? await _buildPvLabelFromCajaCodigo(codigoCaja)
+            : null;
+
+        detalles.add({
+          'caja': c,
+          'cajaId': cajaId,
+          'resumen': resumenCaja,
+          'movimientos': movCaja,
+          'pvLabel': pvLabel,
+        });
+      }
+
+      // 1 caja por página
+      for (final d in detalles) {
+        final c = (d['caja'] as Map).cast<String, Object?>();
+        final resumenCaja = (d['resumen'] as Map<String, dynamic>);
+        final movCaja = (d['movimientos'] as List).cast<Map<String, Object?>>();
+        final pvLabel = d['pvLabel'] as String?;
+
+        final codigoCaja = (c['codigo_caja'] ?? '').toString();
+        final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+        final efectivoDeclarado =
+            ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+        final transfDeclarado =
+            ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
+        final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
+        final int? entradasVendidas = (c['entradas'] as num?)?.toInt();
+        final descEvento = (c['descripcion_evento'] as String?) ?? '';
+        final obsA = (c['observaciones_apertura'] as String?) ?? '';
+        final obsC = (c['obs_cierre'] as String?) ?? '';
+
+        final totalesMpCaja =
+            (resumenCaja['por_mp'] as List).cast<Map<String, Object?>>();
+        final porProdCaja =
+            (resumenCaja['por_producto'] as List).cast<Map<String, Object?>>();
+        final ticketsCaja = (resumenCaja['tickets'] as Map?) ?? const {};
+
+        // Paginación (aproximada por cantidad de filas).
+        // Objetivo: evitar desbordes cuando hay muchos items/movimientos.
+        const int maxItemsFirstPage = 18;
+        const int maxMovsFirstPage = 14;
+        const int maxItemsNextPage = 30;
+        const int maxMovsNextPage = 26;
+
+        List<List<Map<String, Object?>>> chunkList(
+          List<Map<String, Object?>> src,
+          int chunkSize,
+        ) {
+          if (src.isEmpty) return const [];
+          final out = <List<Map<String, Object?>>>[];
+          for (int i = 0; i < src.length; i += chunkSize) {
+            out.add(src.sublist(
+                i, i + chunkSize > src.length ? src.length : i + chunkSize));
+          }
+          return out;
+        }
+
+        final itemChunksFirst = chunkList(porProdCaja, maxItemsFirstPage);
+        final movChunksFirst = chunkList(movCaja, maxMovsFirstPage);
+
+        // Para las páginas de continuación usamos tamaños más grandes.
+        final itemRemain = porProdCaja.length > maxItemsFirstPage
+            ? porProdCaja.sublist(maxItemsFirstPage)
+            : <Map<String, Object?>>[];
+        final movRemain = movCaja.length > maxMovsFirstPage
+            ? movCaja.sublist(maxMovsFirstPage)
+            : <Map<String, Object?>>[];
+        final itemChunksNext = chunkList(itemRemain, maxItemsNextPage);
+        final movChunksNext = chunkList(movRemain, maxMovsNextPage);
+
+        final firstItems = itemChunksFirst.isNotEmpty
+            ? itemChunksFirst.first
+            : const <Map<String, Object?>>[];
+        final firstMovs = movChunksFirst.isNotEmpty
+            ? movChunksFirst.first
+            : const <Map<String, Object?>>[];
+
+        final continuationPages = (itemChunksNext.length > movChunksNext.length)
+            ? itemChunksNext.length
+            : movChunksNext.length;
+        final totalPages = 1 + continuationPages;
+
+        double ing = 0;
+        double ret = 0;
+        for (final m in movCaja) {
+          final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+          final monto = ((m['monto'] as num?) ?? 0).toDouble();
+          if (tipo == 'INGRESO') {
+            ing += monto;
+          } else if (tipo == 'RETIRO') {
+            ret += monto;
+          }
+        }
+
+        doc.addPage(
+          pw.Page(
+            pageFormat: await _preferredPdfFormat(),
+            margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            build: (_) {
+              final widgets = <pw.Widget>[];
+              if (logo != null) {
+                widgets.add(pw.Center(child: pw.Image(logo, height: 24)));
+                widgets.add(pw.SizedBox(height: 6));
+              }
+
+              widgets.add(pw.Text('========================================',
+                  style: s(true)));
+              widgets.add(pw.Text('             REPORTE DEL EVENTO          ',
+                  style: s(true)));
+              widgets.add(pw.Text('========================================',
+                  style: s(true)));
+              widgets.add(pw.SizedBox(height: 6));
+
+              widgets.add(pw.Text(
+                'Caja: ${codigoCaja.isEmpty ? '(sin código)' : codigoCaja}  —  Página 1/$totalPages',
+                style: s(true),
+              ));
+              widgets.add(pw.SizedBox(height: 4));
+
+              widgets.add(pw.Text('Disciplina: $disciplina', style: s()));
+              widgets.add(pw.Text('Fecha: $fecha', style: s()));
+              if (pvs.isNotEmpty) {
+                widgets.add(pw.Text('PV(s): ${pvs.join(' · ')}', style: s()));
+              }
+              widgets.add(pw.SizedBox(height: 6));
+
+              widgets.add(pw.Text('CIERRE DE CAJA', style: s(true)));
+              widgets.add(pw.Text(codigoCaja, style: s(true)));
+              if (pvLabel != null && pvLabel.trim().isNotEmpty) {
+                widgets.add(pw.Text('PV: ${pvLabel.trim()}', style: s()));
+              }
+              widgets.add(pw.Text(
+                  'Apertura: ${(c['fecha'] ?? '')} ${(c['hora_apertura'] ?? '')}',
+                  style: s()));
+              if ((c['cierre_dt'] as String?) != null) {
+                widgets.add(pw.Text('Cierre: ${c['cierre_dt']}', style: s()));
+              }
+              if ((c['cajero_apertura'] as String?) != null) {
+                widgets.add(pw.Text('Cajero apertura: ${c['cajero_apertura']}',
+                    style: s()));
+              }
+              if ((c['cajero_cierre'] as String?) != null &&
+                  (c['cajero_cierre'] as String).isNotEmpty) {
+                widgets.add(pw.Text('Cajero cierre: ${c['cajero_cierre']}',
+                    style: s()));
+              }
+              if (descEvento.trim().isNotEmpty) {
+                widgets.add(pw.Text('Evento: $descEvento', style: s()));
+              }
+              if (obsA.trim().isNotEmpty) {
+                widgets.add(pw.Text('Obs. apertura: $obsA', style: s()));
+              }
+              if (obsC.trim().isNotEmpty) {
+                widgets.add(pw.Text('Obs. cierre: $obsC', style: s()));
+              }
+              widgets.add(pw.SizedBox(height: 6));
+
+              widgets.add(pw.Text('TOTALES POR MEDIO DE PAGO', style: s(true)));
+              widgets.add(pw.SizedBox(height: 2));
+              widgets.addAll(totalesMpCaja.map((m) => pw.Text(
+                    '${(m['mp_desc'] as String?) ?? 'MP ${m['mp']}'}: ${_formatCurrency(((m['total'] as num?) ?? 0).toDouble())}',
+                    style: s(),
+                  )));
+              widgets.add(pw.Text(
+                  'TOTAL: ${_formatCurrency(((resumenCaja['total'] as num?) ?? 0).toDouble())}',
+                  style: s(true).copyWith(fontSize: 12)));
+
+              widgets.add(pw.SizedBox(height: 6));
+              widgets.add(pw.Text('Fondo inicial: ${_formatCurrency(fondo)}',
+                  style: s()));
+              widgets.add(pw.Text(
+                  'Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}',
+                  style: s()));
+              widgets.add(pw.Text(
+                  'Ingresos registrados: ${_formatCurrency(ing)}',
+                  style: s()));
+              widgets.add(pw.Text(
+                  'Retiros registrados: ${_formatCurrency(ret)}',
+                  style: s()));
+              widgets.add(pw.Text('Diferencia: ${_formatCurrency(diferencia)}',
+                  style: s(true)));
+              widgets.add(pw.Text(
+                  'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}',
+                  style: s()));
+              widgets.add(pw.Text(
+                  'Tickets vendidos: ${ticketsCaja['emitidos'] ?? 0}',
+                  style: s()));
+              widgets.add(pw.Text(
+                  'Tickets anulados: ${ticketsCaja['anulados'] ?? 0}',
+                  style: s()));
+
+              widgets.add(pw.SizedBox(height: 6));
+              widgets.add(pw.Text('ITEMS VENDIDOS:', style: s(true)));
+              widgets.add(pw.SizedBox(height: 2));
+              widgets.addAll(firstItems.map((p) => pw.Text(
+                    '(${(p['nombre'] ?? '')} x ${(p['cantidad'] ?? 0)}) = ${_formatCurrency(((p['total'] as num?) ?? 0).toDouble())}',
+                    style: s(),
+                  )));
+
+              final itemsLeft = porProdCaja.length - firstItems.length;
+              if (itemsLeft > 0) {
+                widgets.add(pw.SizedBox(height: 2));
+                widgets.add(pw.Text(
+                    '(+${itemsLeft} ítem(s) en páginas siguientes)',
+                    style: s()));
+              }
+
+              if (firstMovs.isNotEmpty) {
+                widgets.add(pw.SizedBox(height: 6));
+                widgets.add(pw.Text('MOVIMIENTOS:', style: s(true)));
+                widgets.add(pw.SizedBox(height: 2));
+                for (final m in firstMovs) {
+                  final ts = (m['created_ts'] as num?)?.toInt();
+                  String tsStr = '';
+                  if (ts != null) {
+                    final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                    final dd = dt.day.toString().padLeft(2, '0');
+                    final mm = dt.month.toString().padLeft(2, '0');
+                    final hh = dt.hour.toString().padLeft(2, '0');
+                    final mi = dt.minute.toString().padLeft(2, '0');
+                    tsStr = '$dd/$mm $hh:$mi';
+                  }
+                  final tipo = (m['tipo'] ?? '').toString();
+                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                  final obs = (m['observacion'] as String?)?.trim();
+                  final obsPart =
+                      (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
+                  widgets.add(pw.Text(
+                    '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart',
+                    style: s(),
+                  ));
+                }
+
+                final movLeft = movCaja.length - firstMovs.length;
+                if (movLeft > 0) {
+                  widgets.add(pw.SizedBox(height: 2));
+                  widgets.add(pw.Text(
+                      '(+${movLeft} movimiento(s) en páginas siguientes)',
+                      style: s()));
+                }
+              }
+
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: widgets,
+              );
+            },
+          ),
+        );
+
+        // Páginas de continuación (si hay remanentes)
+        for (int page = 0; page < continuationPages; page++) {
+          final itemsChunk = page < itemChunksNext.length
+              ? itemChunksNext[page]
+              : const <Map<String, Object?>>[];
+          final movChunk = page < movChunksNext.length
+              ? movChunksNext[page]
+              : const <Map<String, Object?>>[];
+          if (itemsChunk.isEmpty && movChunk.isEmpty) continue;
+
+          final pageNo = page + 2;
+          doc.addPage(
+            pw.Page(
+              pageFormat: await _preferredPdfFormat(),
+              margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              build: (_) {
+                final widgets = <pw.Widget>[];
+
+                if (logo != null) {
+                  widgets.add(pw.Center(child: pw.Image(logo, height: 24)));
+                  widgets.add(pw.SizedBox(height: 6));
+                }
+                widgets.add(pw.Text('========================================',
+                    style: s(true)));
+                widgets.add(pw.Text('             REPORTE DEL EVENTO          ',
+                    style: s(true)));
+                widgets.add(pw.Text('========================================',
+                    style: s(true)));
+                widgets.add(pw.SizedBox(height: 6));
+
+                widgets.add(pw.Text('Disciplina: $disciplina', style: s()));
+                widgets.add(pw.Text('Fecha: $fecha', style: s()));
+                widgets.add(pw.SizedBox(height: 6));
+
+                widgets.add(pw.Text(
+                  'Caja: ${codigoCaja.isEmpty ? '(sin código)' : codigoCaja}  —  Página $pageNo/$totalPages',
+                  style: s(true),
+                ));
+                widgets.add(pw.Text('Continuación', style: s()));
+                widgets.add(pw.SizedBox(height: 6));
+
+                if (itemsChunk.isNotEmpty) {
+                  widgets
+                      .add(pw.Text('ITEMS VENDIDOS (CONT.):', style: s(true)));
+                  widgets.add(pw.SizedBox(height: 2));
+                  widgets.addAll(itemsChunk.map((p) => pw.Text(
+                        '(${(p['nombre'] ?? '')} x ${(p['cantidad'] ?? 0)}) = ${_formatCurrency(((p['total'] as num?) ?? 0).toDouble())}',
+                        style: s(),
+                      )));
+                  widgets.add(pw.SizedBox(height: 8));
+                }
+
+                if (movChunk.isNotEmpty) {
+                  widgets.add(pw.Text('MOVIMIENTOS (CONT.):', style: s(true)));
+                  widgets.add(pw.SizedBox(height: 2));
+                  for (final m in movChunk) {
+                    final ts = (m['created_ts'] as num?)?.toInt();
+                    String tsStr = '';
+                    if (ts != null) {
+                      final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                      final dd = dt.day.toString().padLeft(2, '0');
+                      final mm = dt.month.toString().padLeft(2, '0');
+                      final hh = dt.hour.toString().padLeft(2, '0');
+                      final mi = dt.minute.toString().padLeft(2, '0');
+                      tsStr = '$dd/$mm $hh:$mi';
+                    }
+                    final tipo = (m['tipo'] ?? '').toString();
+                    final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                    final obs = (m['observacion'] as String?)?.trim();
+                    final obsPart =
+                        (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
+                    widgets.add(pw.Text(
+                      '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart',
+                      style: s(),
+                    ));
+                  }
+                }
+
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: widgets,
+                );
+              },
+            ),
+          );
+        }
+      }
+
+      return doc.save();
+    }
+
+    // === Sumarizado ===
+    doc.addPage(
+      pw.Page(
+        pageFormat: await _preferredPdfFormat(),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        build: (_) {
+          final widgets = <pw.Widget>[];
+          if (logo != null) {
+            widgets.add(pw.Center(child: pw.Image(logo, height: 24)));
+            widgets.add(pw.SizedBox(height: 6));
+          }
+          widgets.add(pw.Text('========================================',
+              style: s(true)));
+          widgets.add(pw.Text('             REPORTE DEL EVENTO          ',
+              style: s(true)));
+          widgets.add(pw.Text('========================================',
+              style: s(true)));
+          widgets.add(pw.SizedBox(height: 6));
+
+          widgets.add(pw.Text('Disciplina: $disciplina', style: s()));
+          widgets.add(pw.Text('Fecha: $fecha', style: s()));
+          if (pvs.isNotEmpty) {
+            widgets.add(pw.Text('PV(s): ${pvs.join(' · ')}', style: s()));
+          }
+          if (codigosCajas.isNotEmpty) {
+            widgets
+                .add(pw.Text('Cajas: ${codigosCajas.join(' · ')}', style: s()));
+          }
+
+          widgets.add(pw.SizedBox(height: 8));
+          widgets.add(pw.Text('TOTALES POR MEDIO DE PAGO', style: s(true)));
+          widgets.add(pw.SizedBox(height: 2));
+          widgets.addAll(totalesMp.map((m) => pw.Text(
+                '${(m['mp_desc'] as String?) ?? 'MP ${m['mp']}'}: ${_formatCurrency(((m['total'] as num?) ?? 0).toDouble())}',
+                style: s(),
+              )));
+
+          widgets.add(pw.SizedBox(height: 4));
+          widgets.add(pw.Text(
+              'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
+              style: s(true).copyWith(fontSize: 12)));
+
+          widgets.add(pw.SizedBox(height: 6));
+          widgets.add(pw.Text(
+              'Fondo inicial (suma): ${_formatCurrency(sumFondo)}',
+              style: s()));
+          widgets.add(pw.Text(
+              'Efectivo declarado (suma): ${_formatCurrency(sumEfecDeclarado)}',
+              style: s()));
+          widgets.add(pw.Text(
+              'Ingresos registrados: ${_formatCurrency(sumIng)}',
+              style: s()));
+          widgets.add(pw.Text('Retiros registrados: ${_formatCurrency(sumRet)}',
+              style: s()));
+          widgets.add(pw.Text(
+              'Diferencia (suma): ${_formatCurrency(sumDiferencia)}',
+              style: s(true)));
+          widgets.add(pw.Text(
+              'Entradas vendidas (suma): ${anyEntradas ? sumEntradas : '-'}',
+              style: s()));
+
+          final tickets = (resumen['tickets'] as Map?) ?? const {};
+          widgets.add(pw.Text('Tickets vendidos: ${tickets['emitidos'] ?? 0}',
+              style: s()));
+          widgets.add(pw.Text('Tickets anulados: ${tickets['anulados'] ?? 0}',
+              style: s()));
+
+          if (movimientos.isNotEmpty) {
+            widgets.add(pw.SizedBox(height: 6));
+            widgets.add(pw.Text('MOVIMIENTOS (GLOBAL):', style: s(true)));
+            widgets.add(pw.SizedBox(height: 2));
+            for (final m in movimientos) {
+              final cajaId = (m['caja_id'] as num?)?.toInt();
+              String codigoCaja = '';
+              if (cajaId != null) {
+                final found = cajas
+                    .where((c) => (c['id'] as num?)?.toInt() == cajaId)
+                    .toList();
+                if (found.isNotEmpty) {
+                  codigoCaja = (found.first['codigo_caja'] ?? '').toString();
+                }
+              }
+
+              final pvCodigo = CajaService.puntoVentaFromCodigoCaja(codigoCaja);
+
+              final ts = (m['created_ts'] as num?)?.toInt();
+              String tsStr = '';
+              if (ts != null) {
+                final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                final dd = dt.day.toString().padLeft(2, '0');
+                final mm = dt.month.toString().padLeft(2, '0');
+                final hh = dt.hour.toString().padLeft(2, '0');
+                final mi = dt.minute.toString().padLeft(2, '0');
+                tsStr = '$dd/$mm $hh:$mi';
+              }
+              final tipo = (m['tipo'] ?? '').toString();
+              final monto = ((m['monto'] as num?) ?? 0).toDouble();
+              final obs = (m['observacion'] as String?)?.trim();
+              final obsPart = (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
+              final cajaPart = (pvCodigo != null && pvCodigo.trim().isNotEmpty)
+                  ? '[${pvCodigo.trim()}] '
+                  : '';
+              widgets.add(pw.Text(
+                '$tsStr $cajaPart$tipo: ${_formatCurrency(monto)}$obsPart',
+                style: s(),
+              ));
+            }
+          }
+
+          widgets.add(pw.SizedBox(height: 8));
+          widgets.add(pw.Text('ITEMS VENDIDOS (GLOBAL):', style: s(true)));
+          widgets.add(pw.SizedBox(height: 2));
+          widgets.addAll(porProd.map((p) => pw.Text(
+                '(${(p['nombre'] ?? '')} x ${(p['cantidad'] ?? 0)}) = ${_formatCurrency(((p['total'] as num?) ?? 0).toDouble())}',
+                style: s(),
+              )));
+
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: widgets,
+          );
+        },
+      ),
+    );
+
+    return doc.save();
+  }
+
+  Future<void> printEventoPdf({
+    required String fecha,
+    required String disciplina,
+    required List<int> cajaIds,
+    required bool detallePorCaja,
+  }) async {
+    await Printing.layoutPdf(
+      onLayout: (format) async => buildEventoPdf(
+        fecha: fecha,
+        disciplina: disciplina,
+        cajaIds: cajaIds,
+        detallePorCaja: detallePorCaja,
+      ),
+      name: detallePorCaja
+          ? 'evento_${fecha}_detalle.pdf'
+          : 'evento_${fecha}_sumarizado.pdf',
+    );
+  }
+
+  Future<void> shareEventoPdf({
+    required String fecha,
+    required String disciplina,
+    required List<int> cajaIds,
+    required bool detallePorCaja,
+  }) async {
+    final bytes = await buildEventoPdf(
+      fecha: fecha,
+      disciplina: disciplina,
+      cajaIds: cajaIds,
+      detallePorCaja: detallePorCaja,
+    );
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: detallePorCaja
+          ? 'evento_${fecha}_detalle.pdf'
+          : 'evento_${fecha}_sumarizado.pdf',
+    );
+  }
+
   // ========================= ESC/POS (USB) =========================
   /// Genera y guarda el PDF de cierre de caja en el directorio de documentos de la app.
   /// Devuelve el File guardado.
@@ -277,24 +950,34 @@ class PrintService {
     final db = await AppDatabase.instance();
     String codigo = 'caja_$cajaId';
     try {
-      final r = await db.query('caja_diaria', columns: ['codigo_caja'], where: 'id=?', whereArgs: [cajaId], limit: 1);
+      final r = await db.query('caja_diaria',
+          columns: ['codigo_caja'],
+          where: 'id=?',
+          whereArgs: [cajaId],
+          limit: 1);
       if (r.isNotEmpty && (r.first['codigo_caja'] as String?) != null) {
-        codigo = (r.first['codigo_caja'] as String).replaceAll(RegExp(r'\s+'), '_');
+        codigo =
+            (r.first['codigo_caja'] as String).replaceAll(RegExp(r'\s+'), '_');
       }
     } catch (_) {}
     final bytes = await buildCajaResumenPdf(cajaId);
     final dir = await getApplicationDocumentsDirectory();
     final now = DateTime.now();
-    final ts = '${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}_${now.hour.toString().padLeft(2,'0')}${now.minute.toString().padLeft(2,'0')}';
+    final ts =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
     final filename = 'cierre_${codigo}_$ts.pdf';
     final file = File(p.join(dir.path, filename));
     await file.writeAsBytes(bytes, flush: true);
     return file;
   }
+
   /// Construye bytes ESC/POS para un ticket de ejemplo (sin tocar la DB)
   Future<Uint8List> buildTicketEscPosSample({int? lineWidth}) async {
     final b = BytesBuilder();
-    void init() { b.add([0x1B, 0x40]); }
+    void init() {
+      b.add([0x1B, 0x40]);
+    }
+
     void alignCenter() => b.add([0x1B, 0x61, 0x01]);
     void boldOn() => b.add([0x1B, 0x45, 0x01]);
     void boldOff() => b.add([0x1B, 0x45, 0x00]);
@@ -304,33 +987,53 @@ class PrintService {
     void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
     String clean(String s) {
       const map = {
-        'á': 'a','é': 'e','í': 'i','ó': 'o','ú': 'u',
-        'Á': 'A','É': 'E','Í': 'I','Ó': 'O','Ú': 'U',
-        'ñ': 'n','Ñ': 'N','ü': 'u','Ü': 'U'
+        'á': 'a',
+        'é': 'e',
+        'í': 'i',
+        'ó': 'o',
+        'ú': 'u',
+        'Á': 'A',
+        'É': 'E',
+        'Í': 'I',
+        'Ó': 'O',
+        'Ú': 'U',
+        'ñ': 'n',
+        'Ñ': 'N',
+        'ü': 'u',
+        'Ü': 'U'
       };
       return s.split('').map((c) => map[c] ?? c).join();
     }
-    void text(String s) { b.add(utf8.encode(clean(s))); feed(); }
+
+    void text(String s) {
+      b.add(utf8.encode(clean(s)));
+      feed();
+    }
 
     init();
-    alignCenter(); boldOn(); sizeDoubleH();
+    alignCenter();
+    boldOn();
+    sizeDoubleH();
     text('Buffet - C.D.M');
-    sizeNormal(); boldOff();
+    sizeNormal();
+    boldOff();
     final now = DateTime.now();
-    final dd = now.day.toString().padLeft(2,'0');
-    final mm = now.month.toString().padLeft(2,'0');
+    final dd = now.day.toString().padLeft(2, '0');
+    final mm = now.month.toString().padLeft(2, '0');
     final yyyy = now.year.toString();
-    final hh = now.hour.toString().padLeft(2,'0');
-    final mi = now.minute.toString().padLeft(2,'0');
-    final ss = now.second.toString().padLeft(2,'0');
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mi = now.minute.toString().padLeft(2, '0');
+    final ss = now.second.toString().padLeft(2, '0');
     text('DEMO-$dd$mm$yyyy-000');
     text('$dd/$mm/$yyyy $hh:$mi:$ss');
     text('DEMO-CAJA');
     feed();
-    boldOn(); sizeDoubleWH();
+    boldOn();
+    sizeDoubleWH();
     text('HAMBURGUESA');
     text(_formatCurrency(1500));
-    sizeNormal(); boldOff();
+    sizeNormal();
+    boldOff();
     feed(1);
     // Corte parcial
     b.add([0x1D, 0x56, 0x42, 0x00]);
@@ -347,8 +1050,10 @@ class PrintService {
       return false;
     }
   }
+
   /// Construye bytes ESC/POS para ticket individual (80mm ó 58mm)
-  Future<Uint8List> buildTicketEscPos(int ticketId, {int lineWidth = 48}) async {
+  Future<Uint8List> buildTicketEscPos(int ticketId,
+      {int lineWidth = 48}) async {
     final db = await AppDatabase.instance();
     final rows = await db.rawQuery('''
       SELECT t.id, t.identificador_ticket, t.fecha_hora, t.total_ticket,
@@ -363,46 +1068,63 @@ class PrintService {
       return Uint8List(0);
     }
     final t = rows.first;
-    final identificador = (t['identificador_ticket'] as String?) ?? '#${t['id']}';
+    final identificador =
+        (t['identificador_ticket'] as String?) ?? '#${t['id']}';
     final fechaHora = (t['fecha_hora'] as String?) ?? '';
     final cajaCodigo = (t['codigo_caja'] as String?) ?? '-';
     final producto = (t['producto'] as String?) ?? 'Producto';
     final total = ((t['total_ticket'] as num?) ?? 0).toDouble();
 
-  final b = BytesBuilder();
+    final b = BytesBuilder();
     void init() {
       b.add([0x1B, 0x40]); // init
       // Alineación por defecto izquierda
       b.add([0x1B, 0x61, 0x00]);
     }
 
-  void alignCenter() => b.add([0x1B, 0x61, 0x01]);
+    void alignCenter() => b.add([0x1B, 0x61, 0x01]);
     void boldOn() => b.add([0x1B, 0x45, 0x01]);
     void boldOff() => b.add([0x1B, 0x45, 0x00]);
     void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
-  // sizeDoubleWH() ya no se usa para reducir el alto del ticket
-  void sizeDoubleH() => b.add([0x1D, 0x21, 0x01]);
-  void fontA() => b.add([0x1B, 0x4D, 0x00]); // normal
-  void fontB() => b.add([0x1B, 0x4D, 0x01]); // un punto más chico
+    // sizeDoubleWH() ya no se usa para reducir el alto del ticket
+    void sizeDoubleH() => b.add([0x1D, 0x21, 0x01]);
+    void fontA() => b.add([0x1B, 0x4D, 0x00]); // normal
+    void fontB() => b.add([0x1B, 0x4D, 0x01]); // un punto más chico
     void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
 
     String clean(String s) {
       // Reemplazo simple para evitar problemas de codepage
       const map = {
-        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U'
+        'á': 'a',
+        'é': 'e',
+        'í': 'i',
+        'ó': 'o',
+        'ú': 'u',
+        'Á': 'A',
+        'É': 'E',
+        'Í': 'I',
+        'Ó': 'O',
+        'Ú': 'U',
+        'ñ': 'n',
+        'Ñ': 'N',
+        'ü': 'u',
+        'Ü': 'U'
       };
       return s.split('').map((c) => map[c] ?? c).join();
     }
 
-  void text(String s) { b.add(utf8.encode(clean(s))); feed(); }
+    void text(String s) {
+      b.add(utf8.encode(clean(s)));
+      feed();
+    }
 
     init();
     alignCenter();
-    boldOn(); sizeDoubleH();
-  text('Buffet - C.D.M');
-    sizeNormal(); boldOff();
+    boldOn();
+    sizeDoubleH();
+    text('Buffet - C.D.M');
+    sizeNormal();
+    boldOff();
     fontB(); // fechas y códigos más chicos
     text(identificador);
     text(fechaHora);
@@ -410,7 +1132,7 @@ class PrintService {
     fontA();
     feed();
     boldOn();
-  // tamaño grande como antes para descripción e importe
+    // tamaño grande como antes para descripción e importe
     b.add([0x1D, 0x21, 0x11]); // sizeDoubleWH
     text(producto.toUpperCase());
     text(_formatCurrency(total));
@@ -427,7 +1149,10 @@ class PrintService {
   Future<Uint8List> buildCajaResumenEscPosSample({int lineWidth = 48}) async {
     final b = BytesBuilder();
     final lw = await _preferredLineWidth();
-    void init() { b.add([0x1B, 0x40]); }
+    void init() {
+      b.add([0x1B, 0x40]);
+    }
+
     void alignCenter() => b.add([0x1B, 0x61, 0x01]);
     void alignLeft() => b.add([0x1B, 0x61, 0x00]);
     void boldOn() => b.add([0x1B, 0x45, 0x01]);
@@ -435,8 +1160,11 @@ class PrintService {
     void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
     void sizeDouble() => b.add([0x1D, 0x21, 0x11]);
     void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
-  String sep() => ''.padLeft(lw, '=');
-    void text(String s) { b.add(utf8.encode(s)); feed(); }
+    String sep() => ''.padLeft(lw, '=');
+    void text(String s) {
+      b.add(utf8.encode(s));
+      feed();
+    }
 
     init();
     // Logo si está disponible y preferido
@@ -447,50 +1175,70 @@ class PrintService {
     } catch (_) {}
     if (withLogo) {
       try {
-        final data = await rootBundle.load('assets/icons/app_icon_foreground.png');
+        final data =
+            await rootBundle.load('assets/icons/app_icon_foreground.png');
         final decoded = img.decodeImage(Uint8List.view(data.buffer));
         if (decoded != null) {
           final targetW = lw >= 48 ? 576 : (lw >= 42 ? 512 : 384);
-          final scaled = img.copyResize(decoded, width: targetW, interpolation: img.Interpolation.average);
+          final scaled = img.copyResize(decoded,
+              width: targetW, interpolation: img.Interpolation.average);
           _appendRasterImage(b, scaled);
           feed();
         }
       } catch (_) {}
     }
 
-    alignCenter(); boldOn();
+    alignCenter();
+    boldOn();
     text(sep());
-    sizeDouble(); text('CIERRE DE CAJA'); sizeNormal();
+    sizeDouble();
+    text('CIERRE DE CAJA');
+    sizeNormal();
     text(sep());
-    alignLeft(); boldOff();
+    alignLeft();
+    boldOff();
     final now = DateTime.now();
-    final fecha = '${now.day.toString().padLeft(2,'0')}/${now.month.toString().padLeft(2,'0')}/${now.year}';
-    final hora = '${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}';
+    final fecha =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    final hora =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     text('Codigo caja: DEMO-001');
     text('Estado: Cerrada');
     text('Fecha apertura: $fecha $hora');
     text('Cajero apertura: Demo User');
     text('Disciplina: General');
     feed();
-    boldOn(); text('TOTALES POR MEDIO DE PAGO'); boldOff();
+    boldOn();
+    text('TOTALES POR MEDIO DE PAGO');
+    boldOff();
     text('Efectivo: ${_formatCurrency(32450)}');
     text('Transferencia: ${_formatCurrency(18750)}');
-    sizeDouble(); boldOn(); text('TOTAL: ${_formatCurrency(51200)}'); boldOff(); sizeNormal();
+    sizeDouble();
+    boldOn();
+    text('TOTAL: ${_formatCurrency(51200)}');
+    boldOff();
+    sizeNormal();
     feed();
-  text('Fondo inicial: ${_formatCurrency(5000)}');
-  text('Efectivo declarado en caja: ${_formatCurrency(4800)}');
-    boldOn(); text('Diferencia: ${_formatCurrency(0)}'); boldOff();
+    text('Fondo inicial: ${_formatCurrency(5000)}');
+    text('Efectivo declarado en caja: ${_formatCurrency(4800)}');
+    boldOn();
+    text('Diferencia: ${_formatCurrency(0)}');
+    boldOff();
     text('Tickets anulados: 0');
     feed();
-    boldOn(); text('ITEMS VENDIDOS:'); boldOff();
+    boldOn();
+    text('ITEMS VENDIDOS:');
+    boldOff();
     text('(Hamburguesa x 12) = ${_formatCurrency(24000)}');
     text('(Gaseosa x 20) = ${_formatCurrency(16000)}');
     text('(Papas x 8) = ${_formatCurrency(11200)}');
     // Demo de movimientos detallados (como en PDF)
     feed();
-    boldOn(); text('MOVIMIENTOS:'); boldOff();
-    final dd = now.day.toString().padLeft(2,'0');
-    final mm = now.month.toString().padLeft(2,'0');
+    boldOn();
+    text('MOVIMIENTOS:');
+    boldOff();
+    final dd = now.day.toString().padLeft(2, '0');
+    final mm = now.month.toString().padLeft(2, '0');
     text('$dd/$mm 19:45 INGRESO: ${_formatCurrency(5000)} - Fondo inicial');
     text('$dd/$mm 22:10 RETIRO: ${_formatCurrency(2000)} - Cambio caja');
     feed(2);
@@ -510,26 +1258,38 @@ class PrintService {
   }
 
   /// Construye bytes ESC/POS para cierre/resumen de caja
-  Future<Uint8List> buildCajaResumenEscPos(int cajaId, {int lineWidth = 48}) async {
+  Future<Uint8List> buildCajaResumenEscPos(int cajaId,
+      {int lineWidth = 48}) async {
     final db = await AppDatabase.instance();
-    final caja = await db.query('caja_diaria', where: 'id=?', whereArgs: [cajaId], limit: 1);
+    final caja = await db.query('caja_diaria',
+        where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-  final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
-  final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
-  final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
-  final efectivoDeclarado = ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+    final movimientos = await db.query('caja_movimiento',
+        where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+    final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
+    final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
+    final efectivoDeclarado =
+        ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
     final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
     final obsCierre = (c['obs_cierre'] as String?) ?? '';
     final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
     final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
-  final entradasVendidas = ((c['entradas'] as num?) ?? 0).toInt();
+    final int? entradasVendidas = (c['entradas'] as num?)?.toInt();
+    final codigoCaja = (c['codigo_caja'] ?? '').toString();
+    final pvLabel = codigoCaja.trim().isNotEmpty
+        ? await _buildPvLabelFromCajaCodigo(codigoCaja)
+        : null;
 
     final totalesMp = (resumen['por_mp'] as List).cast<Map<String, Object?>>();
-    final porProd = (resumen['por_producto'] as List).cast<Map<String, Object?>>();
+    final porProd =
+        (resumen['por_producto'] as List).cast<Map<String, Object?>>();
 
-  final b = BytesBuilder();
-  final lw = await _preferredLineWidth();
-  void init() { b.add([0x1B, 0x40]); }
+    final b = BytesBuilder();
+    final lw = await _preferredLineWidth();
+    void init() {
+      b.add([0x1B, 0x40]);
+    }
+
     void alignCenter() => b.add([0x1B, 0x61, 0x01]);
     void alignLeft() => b.add([0x1B, 0x61, 0x00]);
     void boldOn() => b.add([0x1B, 0x45, 0x01]);
@@ -539,13 +1299,29 @@ class PrintService {
     void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
     String clean(String s) {
       const map = {
-        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
-        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
-        'ñ': 'n', 'Ñ': 'N', 'ü': 'u', 'Ü': 'U'
+        'á': 'a',
+        'é': 'e',
+        'í': 'i',
+        'ó': 'o',
+        'ú': 'u',
+        'Á': 'A',
+        'É': 'E',
+        'Í': 'I',
+        'Ó': 'O',
+        'Ú': 'U',
+        'ñ': 'n',
+        'Ñ': 'N',
+        'ü': 'u',
+        'Ü': 'U'
       };
       return s.split('').map((c) => map[c] ?? c).join();
     }
-    void text(String s) { b.add(utf8.encode(clean(s))); feed(); }
+
+    void text(String s) {
+      b.add(utf8.encode(clean(s)));
+      feed();
+    }
+
     void writeWrapped(String prefix, String value) {
       final full = clean('$prefix$value');
       final runes = full.runes.toList();
@@ -555,6 +1331,7 @@ class PrintService {
         text(chunk);
       }
     }
+
     String sep() => ''.padLeft(lw, '=');
 
     init();
@@ -567,73 +1344,104 @@ class PrintService {
     // Intentar imprimir logo pequeño arriba
     if (withLogo) {
       try {
-        final data = await rootBundle.load('assets/icons/app_icon_foreground.png');
+        final data =
+            await rootBundle.load('assets/icons/app_icon_foreground.png');
         final decoded = img.decodeImage(Uint8List.view(data.buffer));
         if (decoded != null) {
           // Elegir ancho objetivo según ancho preferido
           final targetW = lw >= 48 ? 576 : (lw >= 42 ? 512 : 384);
-          final scaled = img.copyResize(decoded, width: targetW, interpolation: img.Interpolation.average);
+          final scaled = img.copyResize(decoded,
+              width: targetW, interpolation: img.Interpolation.average);
           _appendRasterImage(b, scaled);
           feed();
         }
       } catch (_) {}
     }
-    alignCenter(); boldOn();
+    alignCenter();
+    boldOn();
     text(sep());
-    sizeDouble(); text('CIERRE DE CAJA'); sizeNormal();
+    sizeDouble();
+    text('CIERRE DE CAJA');
+    sizeNormal();
     text(sep());
-    alignLeft(); boldOff();
-    text('${c['codigo_caja'] ?? ''}');
-    if ((c['estado'] as String?) != null) text('Estado: ${c['estado']}');
+    alignLeft();
+    boldOff();
+    text(codigoCaja);
+    if (pvLabel != null && pvLabel.trim().isNotEmpty) {
+      text('PV: ${pvLabel.trim()}');
+    }
+    if ((c['estado'] as String?) != null) {
+      text('Estado: ${c['estado']}');
+    }
     text('Fecha apertura: ${(c['fecha'] ?? '')} ${(c['hora_apertura'] ?? '')}');
-  text('Cajero apertura: ${c['cajero_apertura'] ?? ''}');
+    text('Cajero apertura: ${c['cajero_apertura'] ?? ''}');
     text('Disciplina: ${c['disciplina'] ?? ''}');
-    if (descripcionEvento.isNotEmpty) writeWrapped('Descripcion evento: ', descripcionEvento);
+    if (descripcionEvento.isNotEmpty) {
+      writeWrapped('Descripcion evento: ', descripcionEvento);
+    }
     final cierreDt = (c['cierre_dt'] as String?);
-  if (cierreDt != null) text('Fecha cierre: $cierreDt');
-  final cajCierre = (c['cajero_cierre'] as String?);
-  if (cajCierre != null && cajCierre.isNotEmpty) text('Cajero de cierre: $cajCierre');
+    if (cierreDt != null) {
+      text('Fecha cierre: $cierreDt');
+    }
+    final cajCierre = (c['cajero_cierre'] as String?);
+    if (cajCierre != null && cajCierre.isNotEmpty) {
+      text('Cajero de cierre: $cajCierre');
+    }
     if (obsApertura.isNotEmpty) writeWrapped('Obs. apertura: ', obsApertura);
     if (obsCierre.isNotEmpty) writeWrapped('Obs. cierre: ', obsCierre);
     feed();
-    boldOn(); text('TOTALES POR MEDIO DE PAGO'); boldOff();
+    boldOn();
+    text('TOTALES POR MEDIO DE PAGO');
+    boldOff();
     for (final m in totalesMp) {
       final mpdesc = (m['mp_desc'] as String?) ?? 'MP ${m['mp']}';
       final tot = ((m['total'] as num?) ?? 0).toDouble();
       text('$mpdesc: ${_formatCurrency(tot)}');
     }
-  // TOTAL más grande
-  sizeDouble(); boldOn(); text('TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}'); boldOff(); sizeNormal();
+    // TOTAL más grande
+    sizeDouble();
+    boldOn();
+    text(
+        'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}');
+    boldOff();
+    sizeNormal();
     feed();
-  text('Fondo inicial: ${_formatCurrency(fondo)}');
-  text('Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}');
-    boldOn(); text('Diferencia: ${_formatCurrency(diferencia)}'); boldOff();
-  text('Entradas vendidas: $entradasVendidas');
+    double ing = 0, ret = 0;
+    for (final m in movimientos) {
+      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+      final monto = ((m['monto'] as num?) ?? 0).toDouble();
+      if (tipo == 'INGRESO') {
+        ing += monto;
+      } else if (tipo == 'RETIRO') {
+        ret += monto;
+      }
+    }
+    text('Fondo inicial: ${_formatCurrency(fondo)}');
+    text('Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}');
+    text('Ingresos registrados: ${_formatCurrency(ing)}');
+    text('Retiros registrados: ${_formatCurrency(ret)}');
+    boldOn();
+    text('Diferencia: ${_formatCurrency(diferencia)}');
+    boldOff();
+    text(
+        'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}');
+    text('Tickets vendidos: ${(resumen['tickets']['emitidos'] ?? 0)}');
     text('Tickets anulados: ${(resumen['tickets']['anulados'] ?? 0)}');
     feed();
-    boldOn(); text('ITEMS VENDIDOS:'); boldOff();
+    boldOn();
+    text('ITEMS VENDIDOS:');
+    boldOff();
     for (final p in porProd) {
       final name = (p['nombre'] ?? '').toString();
       final cant = (p['cantidad'] ?? 0).toString();
       final tot = ((p['total'] as num?) ?? 0).toDouble();
-  text('($name x $cant) = ${_formatCurrency(tot)}');
+      text('($name x $cant) = ${_formatCurrency(tot)}');
     }
     if (movimientos.isNotEmpty) {
-      // Solo sumarización en ESC/POS
-      double ing = 0, ret = 0;
-      for (final m in movimientos) {
-        final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-        final monto = ((m['monto'] as num?) ?? 0).toDouble();
-        if (tipo == 'INGRESO') {
-          ing += monto;
-        } else if (tipo == 'RETIRO') {
-          ret += monto;
-        }
-      }
       feed();
-      boldOn(); text('MOVIMIENTOS:'); boldOff();
-      text('Ingresos registrados: ${_formatCurrency(ing)}');
-      text('Retiros registrados: ${_formatCurrency(ret)}');
+      boldOn();
+      text('MOVIMIENTOS:');
+      boldOff();
       // Detalle de movimientos (como en PDF)
       for (final m in movimientos) {
         final ts = (m['created_ts'] as num?)?.toInt();
@@ -666,7 +1474,8 @@ class PrintService {
     // Reducir altura si es muy grande (para tickets)
     final maxH = 160; // aprox. 160px de alto
     final input = grayscale.height > maxH
-        ? img.copyResize(grayscale, height: maxH, interpolation: img.Interpolation.average)
+        ? img.copyResize(grayscale,
+            height: maxH, interpolation: img.Interpolation.average)
         : grayscale;
 
     final width = input.width;
@@ -734,7 +1543,11 @@ class PrintService {
 
   Future<bool> printVentaTicketsForVentaUsbOrPdf(int ventaId) async {
     final db = await AppDatabase.instance();
-    final rows = await db.query('tickets', columns: ['id'], where: 'venta_id=?', whereArgs: [ventaId], orderBy: 'id');
+    final rows = await db.query('tickets',
+        columns: ['id'],
+        where: 'venta_id=?',
+        whereArgs: [ventaId],
+        orderBy: 'id');
     bool anyUsb = false;
     for (final r in rows) {
       final id = r['id'] as int;
@@ -746,11 +1559,16 @@ class PrintService {
 
   Future<bool> printVentaTicketsForVentaUsbOnly(int ventaId) async {
     final db = await AppDatabase.instance();
-    final rows = await db.query('tickets', columns: ['id'], where: 'venta_id=?', whereArgs: [ventaId], orderBy: 'id');
+    final rows = await db.query('tickets',
+        columns: ['id'],
+        where: 'venta_id=?',
+        whereArgs: [ventaId],
+        orderBy: 'id');
     bool allOk = true;
     for (final r in rows) {
       final id = r['id'] as int;
-      final ok = await printTicketUsbOnly(id).timeout(const Duration(seconds: 4), onTimeout: () => false);
+      final ok = await printTicketUsbOnly(id)
+          .timeout(const Duration(seconds: 4), onTimeout: () => false);
       allOk = allOk && ok;
     }
     return allOk;
@@ -771,6 +1589,217 @@ class PrintService {
   Future<bool> printCajaResumenUsbOnly(int cajaId) async {
     try {
       final bytes = await buildCajaResumenEscPos(cajaId);
+      if (bytes.isEmpty) return false;
+      return await _usb.printBytes(bytes);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Construye bytes ESC/POS para un resumen SUMARIZADO del evento (multi-caja).
+  /// Pensado para imprimir rápido por USB cuando hay impresora conectada.
+  Future<Uint8List> buildEventoResumenEscPos({
+    required String fecha, // YYYY-MM-DD
+    required String disciplina,
+    required List<int> cajaIds,
+  }) async {
+    if (cajaIds.isEmpty) return Uint8List(0);
+
+    final db = await AppDatabase.instance();
+    final resumen = await CajaService().resumenCajas(cajaIds);
+
+    final placeholders = List.filled(cajaIds.length, '?').join(',');
+
+    final cajas = await db.rawQuery('''
+      SELECT id, codigo_caja, alias_caja, diferencia
+      FROM caja_diaria
+      WHERE id IN ($placeholders)
+      ORDER BY id ASC
+    ''', cajaIds);
+
+    final mov = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ingresos,
+        COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto END),0) as retiros
+      FROM caja_movimiento
+      WHERE caja_id IN ($placeholders)
+    ''', cajaIds);
+
+    double sumFondo = 0.0;
+    double sumEfecDeclarado = 0.0;
+    int sumEntradas = 0;
+    bool anyEntradas = false;
+    try {
+      final sums = await db.rawQuery('''
+        SELECT
+          COALESCE(SUM(fondo_inicial),0) as fondo,
+          COALESCE(SUM(conteo_efectivo_final),0) as efectivo,
+          COALESCE(SUM(entradas),0) as entradas,
+          COUNT(entradas) as entradas_count
+        FROM caja_diaria
+        WHERE id IN ($placeholders)
+      ''', cajaIds);
+      if (sums.isNotEmpty) {
+        sumFondo = ((sums.first['fondo'] as num?) ?? 0).toDouble();
+        sumEfecDeclarado = ((sums.first['efectivo'] as num?) ?? 0).toDouble();
+        sumEntradas = ((sums.first['entradas'] as num?) ?? 0).toInt();
+        anyEntradas =
+            (((sums.first['entradas_count'] as num?) ?? 0).toInt() > 0);
+      }
+    } catch (e, st) {
+      AppDatabase.logLocalError(
+        scope: 'print_service.evento_resumen_escpos.sums',
+        error: e,
+        stackTrace: st,
+        payload: {'fecha': fecha, 'disciplina': disciplina},
+      );
+    }
+
+    final totalesMp = (resumen['por_mp'] as List?)
+            ?.cast<Map<String, Object?>>()
+            .toList(growable: false) ??
+        const <Map<String, Object?>>[];
+    final total = ((resumen['total'] as num?) ?? 0).toDouble();
+    final tickets = (resumen['tickets'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final ticketsAnulados = (tickets['anulados'] as num?)?.toInt() ?? 0;
+    final ticketsEmitidos = (tickets['emitidos'] as num?)?.toInt() ?? 0;
+
+    double diferenciaGlobal = 0.0;
+    for (final c in cajas) {
+      diferenciaGlobal += ((c['diferencia'] as num?) ?? 0).toDouble();
+    }
+
+    final ingresos = (mov.isNotEmpty
+        ? ((mov.first['ingresos'] as num?) ?? 0).toDouble()
+        : 0.0);
+    final retiros = (mov.isNotEmpty
+        ? ((mov.first['retiros'] as num?) ?? 0).toDouble()
+        : 0.0);
+
+    final b = BytesBuilder();
+    final lw = await _preferredLineWidth();
+
+    void init() {
+      b.add([0x1B, 0x40]);
+    }
+
+    void alignCenter() => b.add([0x1B, 0x61, 0x01]);
+    void alignLeft() => b.add([0x1B, 0x61, 0x00]);
+    void boldOn() => b.add([0x1B, 0x45, 0x01]);
+    void boldOff() => b.add([0x1B, 0x45, 0x00]);
+    void sizeNormal() => b.add([0x1D, 0x21, 0x00]);
+    void sizeDouble() => b.add([0x1D, 0x21, 0x11]);
+    void feed([int n = 1]) => b.add(List<int>.filled(n, 0x0A));
+
+    String clean(String s) {
+      const map = {
+        'á': 'a',
+        'é': 'e',
+        'í': 'i',
+        'ó': 'o',
+        'ú': 'u',
+        'Á': 'A',
+        'É': 'E',
+        'Í': 'I',
+        'Ó': 'O',
+        'Ú': 'U',
+        'ñ': 'n',
+        'Ñ': 'N',
+        'ü': 'u',
+        'Ü': 'U'
+      };
+      return s.split('').map((c) => map[c] ?? c).join();
+    }
+
+    void text(String s) {
+      b.add(utf8.encode(clean(s)));
+      feed();
+    }
+
+    void writeWrapped(String value) {
+      final full = clean(value);
+      final runes = full.runes.toList();
+      for (var i = 0; i < runes.length; i += lw) {
+        final end = (i + lw < runes.length) ? i + lw : runes.length;
+        final chunk = String.fromCharCodes(runes.sublist(i, end));
+        text(chunk);
+      }
+    }
+
+    String sep() => ''.padLeft(lw, '=');
+
+    init();
+    alignCenter();
+    boldOn();
+    text(sep());
+    sizeDouble();
+    text('RESUMEN EVENTO');
+    sizeNormal();
+    text(sep());
+    boldOff();
+    alignLeft();
+
+    writeWrapped('Disciplina: $disciplina');
+    text('Fecha: $fecha');
+    text('Cajas incluidas: ${cajaIds.length}');
+    feed();
+
+    boldOn();
+    text('TOTALES POR MEDIO DE PAGO');
+    boldOff();
+    for (final m in totalesMp) {
+      final mpdesc = (m['mp_desc'] as String?) ?? 'MP ${m['mp']}';
+      final tot = ((m['total'] as num?) ?? 0).toDouble();
+      text('$mpdesc: ${_formatCurrency(tot)}');
+    }
+
+    sizeDouble();
+    boldOn();
+    text('TOTAL: ${_formatCurrency(total)}');
+    boldOff();
+    sizeNormal();
+    feed();
+
+    text('Fondo inicial (suma): ${_formatCurrency(sumFondo)}');
+    text('Efectivo declarado (suma): ${_formatCurrency(sumEfecDeclarado)}');
+    text('Ingresos registrados: ${_formatCurrency(ingresos)}');
+    text('Retiros registrados: ${_formatCurrency(retiros)}');
+    boldOn();
+    text('Diferencia global: ${_formatCurrency(diferenciaGlobal)}');
+    boldOff();
+    text('Entradas vendidas (suma): ${anyEntradas ? sumEntradas : '-'}');
+    text('Tickets vendidos: $ticketsEmitidos');
+    text('Tickets anulados: $ticketsAnulados');
+    feed();
+
+    boldOn();
+    text('CAJAS');
+    boldOff();
+    for (final c in cajas) {
+      final codigo = (c['codigo_caja'] ?? '').toString();
+      final alias = (c['alias_caja'] ?? '').toString().trim();
+      final label = alias.isNotEmpty ? '$codigo • $alias' : codigo;
+      writeWrapped(label);
+    }
+
+    feed(2);
+    b.add([0x1D, 0x56, 0x42, 0x00]);
+    return Uint8List.fromList(b.toBytes());
+  }
+
+  /// Solo USB: imprime el resumen SUMARIZADO del evento (no hace fallback a PDF).
+  Future<bool> printEventoResumenUsbOnly({
+    required String fecha,
+    required String disciplina,
+    required List<int> cajaIds,
+  }) async {
+    try {
+      final bytes = await buildEventoResumenEscPos(
+        fecha: fecha,
+        disciplina: disciplina,
+        cajaIds: cajaIds,
+      );
       if (bytes.isEmpty) return false;
       return await _usb.printBytes(bytes);
     } catch (_) {
@@ -804,7 +1833,7 @@ class PrintService {
   Future<void> printCajaResumen(int cajaId) async {
     await Printing.layoutPdf(
       onLayout: (format) async => buildCajaResumenPdf(cajaId),
-  name: 'cierre_caja_$cajaId.pdf',
+      name: 'cierre_caja_$cajaId.pdf',
     );
   }
 

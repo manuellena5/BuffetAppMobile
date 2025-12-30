@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../../data/dao/db.dart';
 import '../format.dart';
 import '../state/cart_model.dart';
@@ -9,17 +10,16 @@ import 'payment_method_page.dart';
 import 'sales_list_page.dart';
 import 'products_page.dart';
 import 'caja_page.dart';
-import 'caja_list_page.dart';
+import 'caja_open_page.dart';
 import '../../services/caja_service.dart';
 import 'printer_test_page.dart';
 import 'home_page.dart';
-import 'settings_page.dart';
 import '../../app_version.dart';
 import 'help_page.dart';
 import 'movimientos_page.dart';
 import 'error_logs_page.dart';
-import 'reportes_page.dart';
-import 'dart:io';
+import 'eventos_page.dart';
+import 'settings_page.dart';
 import 'dart:async';
 import '../../services/usb_printer_service.dart';
 
@@ -357,29 +357,31 @@ class _PosMainPageState extends State<PosMainPage> {
               onTap: () async {
                 final nav = Navigator.of(context);
                 nav.pop();
-                await nav.push(
-                    MaterialPageRoute(builder: (_) => const CajaPage()));
+                final caja = await CajaService().getCajaAbierta();
+                if (caja == null) {
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const CajaOpenPage()),
+                  );
+                } else {
+                  await nav.push(
+                    MaterialPageRoute(builder: (_) => const CajaPage()),
+                  );
+                }
+                if (!mounted) return;
+                await _load();
               },
             ),
             ListTile(
-              leading: const Icon(Icons.inventory),
-              title: const Text('Historial de cajas'),
+              leading: const Icon(Icons.event),
+              title: const Text('Eventos'),
               onTap: () async {
                 final nav = Navigator.of(context);
                 nav.pop();
                 await nav.push(
-                    MaterialPageRoute(builder: (_) => const CajaListPage()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart),
-              title: const Text('Reportes'),
-              onTap: () async {
-                final nav = Navigator.of(context);
-                nav.pop();
-                await nav.push(
-                  MaterialPageRoute(builder: (_) => const ReportesPage()),
+                  MaterialPageRoute(builder: (_) => const EventosPage()),
                 );
+                if (!mounted) return;
+                await _load();
               },
             ),
             ListTile(
@@ -538,6 +540,57 @@ class _PosMainPageState extends State<PosMainPage> {
               onRefresh: _load,
               child: _useList ? _buildList() : _buildGrid(width),
             ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 1,
+        onDestinationSelected: (i) async {
+          final nav = Navigator.of(context);
+          if (i == 1) return;
+          if (i == 0) {
+            nav.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const HomePage()),
+              (route) => false,
+            );
+            return;
+          }
+          if (i == 2) {
+            await nav.push(
+              MaterialPageRoute(builder: (_) => const CajaPage()),
+            );
+            if (!mounted) return;
+            await _load();
+            return;
+          }
+          if (i == 3) {
+            final changed = await nav.push(
+              MaterialPageRoute(builder: (_) => const SettingsPage()),
+            );
+            if (!mounted) return;
+            if (changed == true) await _load();
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Inicio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.point_of_sale_outlined),
+            selectedIcon: Icon(Icons.point_of_sale),
+            label: 'Ventas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.store_outlined),
+            selectedIcon: Icon(Icons.store),
+            label: 'Caja',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Ajustes',
           ),
         ],
       ),

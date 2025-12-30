@@ -10,6 +10,7 @@ import 'data/dao/db.dart';
 import 'ui/state/app_settings.dart';
 import 'services/usb_printer_service.dart';
 import 'services/supabase_sync_service.dart';
+import 'ui/pages/punto_venta_setup_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,7 @@ class App extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CartModel()),
         ChangeNotifierProvider(create: (_) {
           final s = AppSettings();
-          s.load();
+          s.ensureLoaded();
           return s;
         }),
       ],
@@ -67,6 +68,8 @@ class _SeedGate extends StatefulWidget {
 class _SeedGateState extends State<_SeedGate> {
   late final Future<dynamic> _future;
 
+  static const _kNeedsPvSetup = '__needs_pv_setup__';
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +77,18 @@ class _SeedGateState extends State<_SeedGate> {
   }
 
   Future<dynamic> _load() async {
+    // Asegurar que el Punto de Venta esté configurado antes de seguir
+    try {
+      final settings = context.read<AppSettings>();
+      await settings.ensureLoaded();
+      if (!settings.isPuntoVentaConfigured) {
+        return _kNeedsPvSetup;
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(scope: 'startup.pv_setup_check', error: e, stackTrace: st);
+      return _kNeedsPvSetup;
+    }
+
     final isTest = Platform.environment['FLUTTER_TEST'] == 'true';
     // En tests NO usamos timeout para evitar timers pendientes
     final timeout = isTest ? null : const Duration(seconds: 8);
@@ -153,6 +168,9 @@ class _SeedGateState extends State<_SeedGate> {
           );
         }
         final caja = snap.data;
+        if (caja == _kNeedsPvSetup) {
+          return const PuntoVentaSetupPage(initialFlow: true);
+        }
         return caja == null ? const HomePage() : const PosMainPage();
       },
     );

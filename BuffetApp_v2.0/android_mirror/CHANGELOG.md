@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+- (sin cambios)
+
+## 1.2.1+13 — 2025-12-30
+- Eventos: nueva pantalla de Eventos (del día + históricos) 100% offline desde SQLite.
+- Eventos: históricos con filtro (mes actual / fecha / rango) y botón manual “Refrescar desde Supabase” para bajar cajas de la nube.
+- Evento (detalle): resumen global + listado de cajas con estado de sincronización y totales.
+- Evento (detalle): tarjetas de caja muestran total de ventas + totales por medio de pago (Efectivo / Transferencia).
+- Evento (sync): botón “Sincronizar Evento” con precheck (si no hay pendientes no vuelve a enviar) y progreso en vivo.
+- Reportes: PDF sumarizado del evento muestra PV (en Movimientos Globales) en lugar de código de caja.
+- Navegación: menú inferior (Inicio / Ventas / Caja / Ajustes) para acceso rápido.
+- Sincronización: validación previa contra Supabase al re-sincronizar una caja ya subida; si hay diferencias, se pide confirmación antes de sobreescribir.
+- Sincronización: re-encolado explícito de la caja para permitir reenvío aunque el outbox esté en estado "done".
+- Supabase: `fecha_apertura`/`fecha_cierre` ahora se envían en formato timestamp local (sin conversión a UTC) para coincidir con columnas tipo `timestamp`.
+- Comparación: diferencias de `fecha_apertura`/`fecha_cierre` se evalúan a nivel de minutos (YYYY-MM-DD HH:MM).
+- Caja: fix para que `cajero_apertura` se tome desde DB local y se incluya en el payload sincronizado.
+- Se quitaron las pantallas de Reportes y Listado de cajas. Se maneja a nivel Eventos la información ahora. 
+
 ## 1.2.0+12 — 2025-11-21
 - Reportes: nueva pantalla con KPIs (total ventas, ticket promedio, cantidad ventas, entradas, tickets emitidos/anulados) y gráfico de barras por disciplina con agregaciones Día/Mes/Año.
 - Reportes: manejo de estado vacío (sin cajas) mostrando calendario y KPIs en cero; placeholder "Sin datos disponibles".

@@ -135,5 +135,46 @@ void main() {
       expect((tk['emitidos'] as int?) ?? 0, 5);
       expect((tk['anulados'] as int?) ?? 0, 1);
     });
+
+    test('ensureCajaCierreResumenTable crea tabla y permite reemplazo', () async {
+      await AppDatabase.ensureCajaCierreResumenTable();
+      final db = await AppDatabase.instance();
+
+      // Insert 1
+      await db.insert(
+        'caja_cierre_resumen',
+        {
+          'evento_fecha': '2025-01-01',
+          'disciplina': 'Evento Demo',
+          'codigo_caja': 'Caj01-1',
+          'source_device': 'test',
+          'items_count': 2,
+          'payload': '{"ok":true,"n":1}',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      // Insert 2 (misma clave única) -> replace
+      await db.insert(
+        'caja_cierre_resumen',
+        {
+          'evento_fecha': '2025-01-01',
+          'disciplina': 'Evento Demo',
+          'codigo_caja': 'Caj01-1',
+          'source_device': 'test',
+          'items_count': 3,
+          'payload': '{"ok":true,"n":2}',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      final rows = await db.query(
+        'caja_cierre_resumen',
+        where: 'evento_fecha=? AND disciplina=? AND codigo_caja=?',
+        whereArgs: ['2025-01-01', 'Evento Demo', 'Caj01-1'],
+      );
+      expect(rows.length, 1);
+      expect((rows.first['items_count'] as num?)?.toInt(), 3);
+    });
   });
 }

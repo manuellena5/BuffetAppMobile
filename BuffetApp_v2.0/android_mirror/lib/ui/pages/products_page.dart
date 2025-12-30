@@ -168,6 +168,11 @@ class _ProductFormState extends State<_ProductForm> {
   String? _imagenPath; // ruta local a la imagen
   bool _updatingFields = false; // evita bucles entre listeners
 
+  bool _dirty = false;
+  bool _dirtyListenersAttached = false;
+
+  late final Map<String, Object?> _initialSnapshot;
+
   @override
   void initState() {
     super.initState();
@@ -186,6 +191,11 @@ class _ProductFormState extends State<_ProductForm> {
       _visible = ((d['visible'] as int?) ?? 1) == 1;
       _imagenPath = d['imagen'] as String?;
     }
+
+    _initialSnapshot = _snapshot();
+
+    _attachDirtyListenersIfNeeded();
+
     // Inicializar % ganancia si hay compra y venta
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _recalcFromSale();
@@ -204,6 +214,74 @@ class _ProductFormState extends State<_ProductForm> {
         }
       }
     });
+  }
+
+  void _attachDirtyListenersIfNeeded() {
+    if (_dirtyListenersAttached) return;
+    _dirtyListenersAttached = true;
+    _nombre.addListener(_recomputeDirty);
+    _codigo.addListener(_recomputeDirty);
+    _precio.addListener(_recomputeDirty);
+    _precioCompra.addListener(_recomputeDirty);
+    _porcGanancia.addListener(_recomputeDirty);
+    _stock.addListener(_recomputeDirty);
+  }
+
+  Map<String, Object?> _snapshot() {
+    return {
+      'nombre': _nombre.text.trim(),
+      'codigo': _codigo.text.trim().toUpperCase(),
+      'precio': _precio.text.trim(),
+      'precio_compra': _precioCompra.text.trim(),
+      'porc_ganancia': _porcGanancia.text.trim(),
+      'stock': _stock.text.trim(),
+      'contabiliza_stock': _contabilizaStock,
+      'cat_id': _catId,
+      'visible': _visible,
+      'imagen': (_imagenPath ?? '').trim(),
+    };
+  }
+
+  void _recomputeDirty() {
+    if (!mounted) return;
+    if (_updatingFields) return;
+    final next = _snapshot().toString() != _initialSnapshot.toString();
+    if (next != _dirty) setState(() => _dirty = next);
+  }
+
+  Future<void> _showUnsavedChangesModal() async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cambios sin guardar'),
+        content: const Text('Tenés cambios sin guardar. ¿Qué querés hacer?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'discard'),
+            child: const Text('Salir sin guardar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'save_exit'),
+            child: const Text('Guardar y salir'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (action == 'discard') {
+      Navigator.pop(context, false);
+      return;
+    }
+    if (action == 'save_exit') {
+      await _save();
+      return;
+    }
   }
 
   @override
@@ -381,7 +459,17 @@ class _ProductFormState extends State<_ProductForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (!_dirty) {
+          Navigator.pop(context, false);
+          return;
+        }
+        await _showUnsavedChangesModal();
+      },
+      child: Scaffold(
       appBar: AppBar(
           title:
               Text(widget.data == null ? 'Nuevo producto' : 'Editar producto')),
@@ -597,6 +685,6 @@ class _ProductFormState extends State<_ProductForm> {
           ),
         ),
       ),
-    );
+    ));
   }
 }

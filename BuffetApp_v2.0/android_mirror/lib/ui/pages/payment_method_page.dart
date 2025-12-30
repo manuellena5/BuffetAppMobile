@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../data/dao/db.dart';
+import '../../services/caja_service.dart';
 import '../../services/venta_service.dart';
 import '../../services/print_service.dart';
 import '../../services/usb_printer_service.dart';
@@ -20,6 +21,64 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
   bool _imprimir = true; // por defecto seleccionado
   final _usb = UsbPrinterService();
   bool _processing = false;
+
+  static final Set<int> _suppressNoUsbWarningForCajaIds = <int>{};
+
+  Future<int?> _getCajaAbiertaId() async {
+    final caja = await CajaService().getCajaAbierta();
+    return caja?['id'] as int?;
+  }
+
+  Future<_NoUsbDialogResult?> _showNoUsbPrintDialog() {
+    bool dontShowAgain = false;
+    return showDialog<_NoUsbDialogResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: const Text('Impresora no conectada'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'No hay una impresora conectada. El ticket se guardará como "No Impreso".',
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    value: dontShowAgain,
+                    onChanged: (v) =>
+                        setState(() => dontShowAgain = v ?? false),
+                    title: const Text('No volver a mostrar este mensaje'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(
+                    ctx,
+                    _NoUsbDialogResult(
+                      confirmed: true,
+                      dontShowAgain: dontShowAgain,
+                    ),
+                  ),
+                  child: const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -50,8 +109,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_processing)
-              const LinearProgressIndicator(minHeight: 3),
+            if (_processing) const LinearProgressIndicator(minHeight: 3),
             Text(formatCurrency(cart.total),
                 style:
                     const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
@@ -91,7 +149,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16)),
-          onPressed: cart.isEmpty || _processing
+                  onPressed: cart.isEmpty || _processing
                       ? null
                       : () async {
                           setState(() => _processing = true);
@@ -109,18 +167,31 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                           try {
                             bool usbConnected = false;
                             try {
-                              usbConnected = await _usb
-                                  .isConnected()
-                                  .timeout(const Duration(seconds: 2), onTimeout: () => false);
+                              usbConnected = await _usb.isConnected().timeout(
+                                  const Duration(seconds: 2),
+                                  onTimeout: () => false);
                             } catch (_) {
-                              usbConnected = false; // en emulador o sin plugin, continuar sin impresión
+                              usbConnected =
+                                  false; // en emulador o sin plugin, continuar sin impresión
                             }
+
+                            if (_imprimir && !usbConnected && context.mounted) {
+                              final cajaId = await _getCajaAbiertaId();
+                              final suppressed = cajaId != null &&
+                                  _suppressNoUsbWarningForCajaIds
+                                      .contains(cajaId);
+                              if (!suppressed) {
+                                final res = await _showNoUsbPrintDialog();
+                                if (res == null || res.confirmed != true) {
+                                  return;
+                                }
+                                if (res.dontShowAgain && cajaId != null) {
+                                  _suppressNoUsbWarningForCajaIds.add(cajaId);
+                                }
+                              }
+                            }
+
                             final marcarImpreso = _imprimir && usbConnected;
-                            if (!usbConnected && _imprimir && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('No hay impresora USB conectada. Los tickets se guardarán como No Impreso.')),
-                              );
-                            }
                             final result = await _ventaService.crearVenta(
                               metodoPagoId: m['id'] as int,
                               items: items,
@@ -131,17 +202,24 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                                 final ventaId = result['ventaId'] as int;
                                 final ok = await PrintService()
                                     .printVentaTicketsForVentaUsbOnly(ventaId)
-                                    .timeout(const Duration(seconds: 10), onTimeout: () => false);
+                                    .timeout(const Duration(seconds: 10),
+                                        onTimeout: () => false);
                                 if (!ok && context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Fallo la impresión por USB.')),
+                                    const SnackBar(
+                                        content: Text(
+                                            'Fallo la impresión por USB.')),
                                   );
                                 }
                               } catch (e, st) {
-                                AppDatabase.logLocalError(scope: 'payment.print_tickets', error: e, stackTrace: st);
+                                AppDatabase.logLocalError(
+                                    scope: 'payment.print_tickets',
+                                    error: e,
+                                    stackTrace: st);
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Error al imprimir: $e')),
+                                    SnackBar(
+                                        content: Text('Error al imprimir: $e')),
                                   );
                                 }
                               }
@@ -151,10 +229,15 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                               nav.pop(true);
                             }
                           } catch (e, st) {
-                            AppDatabase.logLocalError(scope: 'payment.crear_venta', error: e, stackTrace: st);
+                            AppDatabase.logLocalError(
+                                scope: 'payment.crear_venta',
+                                error: e,
+                                stackTrace: st);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('No se pudo registrar la venta: $e')),
+                                SnackBar(
+                                    content: Text(
+                                        'No se pudo registrar la venta: $e')),
                               );
                             }
                           } finally {
@@ -169,4 +252,11 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
       ),
     );
   }
+}
+
+class _NoUsbDialogResult {
+  final bool confirmed;
+  final bool dontShowAgain;
+  const _NoUsbDialogResult(
+      {required this.confirmed, required this.dontShowAgain});
 }

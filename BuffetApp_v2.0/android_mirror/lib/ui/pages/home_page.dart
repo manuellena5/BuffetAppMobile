@@ -3,7 +3,6 @@ import '../../services/caja_service.dart';
 import '../../services/usb_printer_service.dart';
 import '../format.dart';
 import 'caja_open_page.dart';
-import 'caja_list_page.dart';
 import 'caja_page.dart';
 import 'pos_main_page.dart';
 import 'printer_test_page.dart';
@@ -13,7 +12,7 @@ import 'settings_page.dart';
 import 'help_page.dart';
 import 'movimientos_page.dart';
 import 'error_logs_page.dart';
-import 'reportes_page.dart';
+import 'eventos_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,7 +50,11 @@ class _HomePageState extends State<HomePage> {
         final r = await svc.resumenCaja(c['id'] as int);
         total = (r['total'] as num?)?.toDouble() ?? 0.0;
       } catch (e, st) {
-        AppDatabase.logLocalError(scope: 'home_page.caja_resumen', error: e, stackTrace: st, payload: {'cajaId': c['id']});
+        AppDatabase.logLocalError(
+            scope: 'home_page.caja_resumen',
+            error: e,
+            stackTrace: st,
+            payload: {'cajaId': c['id']});
       }
     }
     try {
@@ -85,16 +88,20 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasCaja = _caja != null;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final now = DateTime.now();
-        if (_lastBackPress == null || now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
+        if (_lastBackPress == null ||
+            now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
           _lastBackPress = now;
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Volvé a tocar atrás para salir de la app')),
+            const SnackBar(
+                content: Text('Volvé a tocar atrás para salir de la app')),
           );
           return;
         }
@@ -125,7 +132,8 @@ class _HomePageState extends State<HomePage> {
                   if (_caja == null) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Abrí una caja para vender')),
+                      const SnackBar(
+                          content: Text('Abrí una caja para vender')),
                     );
                     return;
                   }
@@ -146,7 +154,8 @@ class _HomePageState extends State<HomePage> {
                   if (_caja == null) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Abrí una caja para ver los tickets')),
+                      const SnackBar(
+                          content: Text('Abrí una caja para ver los tickets')),
                     );
                     return;
                   }
@@ -163,35 +172,30 @@ class _HomePageState extends State<HomePage> {
                 onTap: () async {
                   final nav = Navigator.of(context);
                   nav.pop();
-                  await nav.push(
-                    MaterialPageRoute(builder: (_) => const CajaPage()),
-                  );
+                  if (_caja == null) {
+                    await nav.push(
+                      MaterialPageRoute(builder: (_) => const CajaOpenPage()),
+                    );
+                  } else {
+                    await nav.push(
+                      MaterialPageRoute(builder: (_) => const CajaPage()),
+                    );
+                  }
                   if (!mounted) return;
                   await _load();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.inventory),
-                title: const Text('Historial de cajas'),
+                leading: const Icon(Icons.event),
+                title: const Text('Eventos'),
                 onTap: () async {
                   final nav = Navigator.of(context);
                   nav.pop();
                   await nav.push(
-                    MaterialPageRoute(builder: (_) => const CajaListPage()),
+                    MaterialPageRoute(builder: (_) => const EventosPage()),
                   );
                   if (!mounted) return;
                   await _load();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.bar_chart),
-                title: const Text('Reportes'),
-                onTap: () async {
-                  final nav = Navigator.of(context);
-                  nav.pop();
-                  await nav.push(
-                    MaterialPageRoute(builder: (_) => const ReportesPage()),
-                  );
                 },
               ),
               ListTile(
@@ -204,12 +208,15 @@ class _HomePageState extends State<HomePage> {
                   if (_caja == null) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Abrí una caja para ver movimientos')),
+                      const SnackBar(
+                          content: Text('Abrí una caja para ver movimientos')),
                     );
                     return;
                   }
                   await nav.push(
-                    MaterialPageRoute(builder: (_) => MovimientosPage(cajaId: _caja!['id'] as int)),
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            MovimientosPage(cajaId: _caja!['id'] as int)),
                   );
                   if (!mounted) return;
                   await _load();
@@ -282,139 +289,315 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Logo pequeño
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Image.asset(
-                      'assets/icons/app_icon_foreground.png',
-                      width: 96,
-                      height: 96,
-                    ),
-                  ),
-                  if (_caja != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+            ? const Center(child: CircularProgressIndicator())
+            : SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.store, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Caja ${_caja!['codigo_caja']} • Total: '),
+                          Container(
+                            width: 132,
+                            height: 132,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Theme.of(context)
+                                      .dividerColor
+                                      .withValues(alpha: 0.6)),
+                            ),
+                            child: Image.asset(
+                              'assets/icons/app_icon_foreground.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
                           Text(
-                            formatCurrency((_cajaTotal ?? 0)),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            'Bienvenido',
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 8),
+                          if (hasCaja) ...[
+                            const SizedBox(height: 14),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.store, size: 18),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    '${(_caja?['disciplina'] ?? '').toString()} | ${(_caja?['fecha'] ?? '').toString()} • Total: ${formatCurrency((_cajaTotal ?? 0))}',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 22),
+                          if (hasCaja) ...[
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                icon: Icon(Icons.point_of_sale,
+                                    size: 26, color: cs.primary),
+                                onPressed: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const PosMainPage()),
+                                  );
+                                  if (!mounted) return;
+                                  await _load();
+                                },
+                                label: const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 14),
+                                  child: Text(
+                                    'Ir a ventas',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              icon: Icon(
+                                hasCaja ? Icons.lock : Icons.lock_open,
+                                size: 26,
+                              ),
+                              onPressed: () async {
+                                if (hasCaja) {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const CajaPage()),
+                                  );
+                                } else {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const CajaOpenPage()),
+                                  );
+                                }
+                                if (!mounted) return;
+                                await _load();
+                              },
+                              label: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                child: Text(
+                                  hasCaja ? 'Cerrar caja' : 'Abrir caja',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: cs.primary,
+                                foregroundColor: cs.onPrimary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              icon: Icon(Icons.print,
+                                  size: 26, color: cs.primary),
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const PrinterTestPage()),
+                                );
+                                if (!mounted) return;
+                                await _load();
+                              },
+                              label: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 14),
+                                child: Text(
+                                  'Conexión impresora',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              icon: Icon(Icons.event,
+                                  size: 26, color: cs.primary),
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const EventosPage()),
+                                );
+                                if (!mounted) return;
+                                await _load();
+                              },
+                              label: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 14),
+                                child: Text(
+                                  'Eventos',
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _usbConnected
+                                  ? Colors.green.withValues(alpha: 0.10)
+                                  : Colors.red.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: _usbConnected
+                                    ? Colors.green.withValues(alpha: 0.25)
+                                    : Colors.red.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: _usbConnected
+                                        ? Colors.green
+                                        : Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _usbConnected
+                                      ? 'Impresora conectada'
+                                      : 'Impresora desconectada',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  if (_caja != null) ...[
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const PosMainPage()));
-                        if (!mounted) return;
-                        await _load();
-                      },
-                      icon: const Icon(Icons.point_of_sale),
-                      label: const Text('Ventas'),
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const CajaPage()));
-                        if (!mounted) return;
-                        await _load();
-                      },
-                      icon: const Icon(Icons.lock),
-                      label: const Text('Cerrar caja'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const PrinterTestPage()),
-                        );
-                        if (!mounted) return;
-                      },
-                      icon: const Icon(Icons.print),
-                      label: const Text('Conexión impresora'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const CajaListPage()));
-                        if (!mounted) return;
-                        await _load();
-                      },
-                      icon: const Icon(Icons.history),
-                      label: const Text('Historial de cajas'),
-                    ),
-                  ] else ...[
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const CajaOpenPage()));
-                        if (!mounted) return;
-                        await _load();
-                      },
-                      icon: const Icon(Icons.lock_open),
-                      label: const Text('Abrir caja'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const PrinterTestPage()),
-                        );
-                        if (!mounted) return;
-                      },
-                      icon: const Icon(Icons.print),
-                      label: const Text('Conexión impresora'),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const CajaListPage()));
-                        if (!mounted) return;
-                        await _load();
-                      },
-                      icon: const Icon(Icons.history),
-                      label: const Text('Historial de cajas'),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  // Pie con estado de impresora
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.circle, size: 12, color: _usbConnected ? Colors.green : Colors.red),
-                      const SizedBox(width: 6),
-                      Text(_usbConnected ? 'Impresora conectada' : 'Impresora desconectada'),
-                    ],
+                  ),
+                ),
+              ),
+        bottomNavigationBar: _loading
+            ? null
+            : NavigationBar(
+                selectedIndex: 0,
+                onDestinationSelected: (i) async {
+                  final nav = Navigator.of(context);
+                  if (i == 0) return;
+                  if (i == 1) {
+                    if (_caja == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Abrí una caja para vender')),
+                      );
+                      return;
+                    }
+                    await nav.push(
+                      MaterialPageRoute(builder: (_) => const PosMainPage()),
+                    );
+                    if (!mounted) return;
+                    await _load();
+                    return;
+                  }
+                  if (i == 2) {
+                    if (_caja == null) {
+                      await nav.push(
+                        MaterialPageRoute(builder: (_) => const CajaOpenPage()),
+                      );
+                    } else {
+                      await nav.push(
+                        MaterialPageRoute(builder: (_) => const CajaPage()),
+                      );
+                    }
+                    if (!mounted) return;
+                    await _load();
+                    return;
+                  }
+                  if (i == 3) {
+                    final changed = await nav.push(
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    );
+                    if (!mounted) return;
+                    if (changed == true) await _load();
+                  }
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Inicio',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.point_of_sale_outlined),
+                    selectedIcon: Icon(Icons.point_of_sale),
+                    label: 'Ventas',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.store_outlined),
+                    selectedIcon: Icon(Icons.store),
+                    label: 'Caja',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings),
+                    label: 'Ajustes',
                   ),
                 ],
               ),
-            ),
       ),
     );
   }

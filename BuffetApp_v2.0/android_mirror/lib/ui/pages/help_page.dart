@@ -20,272 +20,155 @@ class HelpPage extends StatelessWidget {
               style: const TextStyle(color: Colors.grey),
             ),
           ),
-      //     const SizedBox(height: 12),
-      //     const Text('Sincronización',
-      //         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      //     const SizedBox(height: 8),
-      
-      // const Text('• Se muestra "Sincronizados: Caja n/m · Tickets n/m" y el ícono cambia de color según estado (verde: sin pendientes, naranja: pendientes, rojo: errores).'),
-      //     const SizedBox(height: 12),
-      //     const Text('Pantallas y funcionalidades',
-      //         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      //     const SizedBox(height: 8),
-      //     const Text('• Inicio: acceso general a la app, estado de impresora USB (verde/rojo) y doble “Atrás” para salir.'),
-      //     const Text('• Ventas (Ticket): agrega ítems al carrito, botón de limpiar carrito, estado USB en la barra superior.'),
-      //     const Text('• Recibos: listado de tickets emitidos y anulados con reimpresión.'),
-      //     const Text('• Caja: apertura, totales y cierre de caja. En Resumen y ticket se muestra “Entradas vendidas” (0 si está vacío).'),
-      //     const Text('• Historial de cajas: listado de cajas con resumen, impresión (USB primero) y exportación.'),
-      //     const Text('• Productos: alta, baja y modificación del catálogo; podés agregar imagen desde galería o cámara. La imagen se muestra en lista (avatar) y en grilla (tile cuadrado con nombre y chips de precio/stock).'),
-      //     const Text('• Config. impresora: conectar por USB (OTG), refrescar lista, pruebas de impresión y preferencia “Imprimir logo en cierre (USB)”.'),
-
-      //     const SizedBox(height: 16),
-      // const Text('Iconos en la pantalla de ventas',
-      //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      // const SizedBox(height: 8),
-      // //const Icon(Icons.receipt_long),
-      // const Text('• Ícono de ticket (arriba a la izquierda): abre el carrito. A la derecha se muestra el contador de ítems agregados.'),
-      // //const Icon(Icons.print),
-      // const Text('• Ícono de impresora: indica el estado de la conexión USB. Verde: conectada. Rojo: desconectada. Tocá para ir a “Config. impresora”.'),
-      // //const Icon(Icons.remove_shopping_cart),
-      // const Text('• Ícono de “Limpiar carrito” (tachito con carrito): borra todos los ítems del carrito.'),
-      // const Text('• Botón “COBRAR”: inicia la selección de medio de pago y registra la venta.'),
-      // //const Icon(Icons.store, size: 18),
-      // const Text('• Ícono de tienda junto al código de caja: muestra la caja abierta y el total acumulado.'),
-
-      const SizedBox(height: 16),
-          const Text('Impresión USB y PDF',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('• La app intenta imprimir por USB (ESC/POS) por defecto. Si falla o no hay conexión, se ofrece previsualización PDF como alternativa.'),
-          const Text('• El cierre de caja puede incluir el logo en el encabezado ESC/POS. Podés habilitar/deshabilitarlo en Config. impresora.'),
-
           const SizedBox(height: 16),
-      const Text('Ancho de papel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 8),
-      const Text('• Podés elegir el ancho de papel en Config. impresora: 58 mm, 75 mm o 80 mm.'),
-      const Text('• Los tickets de venta y el cierre/resumen se adaptan automáticamente al ancho seleccionado (USB y PDF).'),
-      const Text('• Si ves texto cortado, probá reducir el ancho (p. ej., 75→58 mm) o usar previsualización PDF.'),
-      const SizedBox(height: 16),
-          const Text('Conexión USB (pasos y solución de problemas)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Navegación (menú inferior)',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          const Text('• Conectá la impresora por USB (OTG) y encendela.'),
-          const Text('• Si Android pide permiso, tocá “Permitir”.'),
-          const Text('• En “Config. impresora”, elegí el dispositivo y tocá “Conectar USB”; luego “Refrescar” si no aparece.'),
-          const Text('• Probá desconectar y volver a conectar el cable USB/OTG.'),
-          const Text('• Reiniciá la app si persiste el problema.'),
-          const Text('• Verificá permisos en Android: Ajustes > Apps > BuffetApp > Permisos > USB.'),
-
-          // const SizedBox(height: 16),
-          // const Text('Exportar caja',
-          //     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          // const SizedBox(height: 8),
-          // const Text('• Desde el Resumen/Cierre de caja podés exportar los datos a un archivo JSON y compartirlo (WhatsApp, Drive o correo).'),
-          // const Text('• Incluye: metadatos, resumen, totales por medio de pago, tickets (incluye anulados), ventas por producto y catálogo visible.'),
-          // const Text('• Se guarda en /Android/data/<app>/files/exports/ y mantiene las últimas copias recientes.'),
-
-          const SizedBox(height: 16),
-          const Text('Fórmulas y criterios',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('• Total Ventas (sistema): suma de tickets no anulados en la caja.'),
-          const Text('• Cierre de caja: Diferencia = ((Efectivo declarado - Fondo Inicial - Ingresos + Retiros) + Transferencias) - Total Ventas (sistema).'),
-          //const Text('• Ventas por producto: ordenadas de mayor a menor por cantidad. Formato: "Item x Cantidad = \$Monto".'),
-
-          
-
-          const SizedBox(height: 16),
-          const Text('Pantallas y funcionalidades',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-
-          // Inicio / Home (sin caja abierta)
-          const Text('Inicio (sin caja abierta)',
-              style: TextStyle(fontWeight: FontWeight.w600)),
           RichText(
             text: TextSpan(
               style: bodyStyle,
               children: [
-                const TextSpan(text: '• Permite abrir caja y acceder a ajustes '),
+                const TextSpan(text: '• El menú inferior permite ir a '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.home, size: iconSize),
+                ),
+                const TextSpan(text: ' Inicio, '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.point_of_sale, size: iconSize),
+                ),
+                const TextSpan(text: ' Ventas, '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: Icon(Icons.store, size: iconSize),
+                ),
+                const TextSpan(text: ' Caja y '),
                 WidgetSpan(
                   alignment: PlaceholderAlignment.baseline,
                   baseline: TextBaseline.alphabetic,
                   child: Icon(Icons.settings, size: iconSize),
                 ),
-                const TextSpan(text: '.'),
+                const TextSpan(text: ' Ajustes.'),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-
-          // POS / Ventas
-          const Text('Ventas (POS)', style: TextStyle(fontWeight: FontWeight.w600)),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Abrir carrito: '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.shopping_cart, size: iconSize)),
-              const TextSpan(text: ' muestra ítems seleccionados; contador indica cantidad.'),
-            ]),
-          ),
           const SizedBox(height: 4),
+          const Text(
+            '• Si intentás entrar a Ventas sin caja abierta, la app te avisa para abrir una caja primero.',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Eventos',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '• En Inicio tenés el acceso a “Eventos”. Por defecto se muestran los eventos del día (offline desde SQLite).',
+          ),
+          const Text(
+            '• En “Históricos” podés filtrar por mes actual, por fecha o por un rango de fechas.',
+          ),
+          const Text(
+            '• “Refrescar desde Supabase” es manual (no automático) y sirve para bajar cajas/eventos de la nube si hay conexión.',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Detalle del evento',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '• Muestra un resumen global (total ventas, efectivo, transferencias, tickets y diferencia) y el listado de cajas del evento.',
+          ),
+          const Text(
+            '• Cada caja muestra total de ventas y totales por medio de pago (Ef/Tr).',
+          ),
+          const Text(
+            '• Estados de sincronización: Pendiente / Parcial / OK / Error (solo se sincronizan/imprimen reportes de cajas cerradas).',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Sincronización (evento)',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '• Botón “Sincronizar Evento”: envía las cajas cerradas pendientes y muestra progreso en vivo.',
+          ),
+          const Text(
+            '• Si ya no hay pendientes, avisa y no vuelve a re-enviar.',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Impresión USB y PDF',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
           RichText(
             text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Estado impresora: '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.print, size: iconSize)),
-              const TextSpan(text: ' indica conexión USB; tocá para ir a Config. impresora.'),
+              const TextSpan(
+                  text:
+                      '• La app intenta imprimir por USB (ESC/POS). Si falla, podés usar '),
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: Icon(Icons.picture_as_pdf, size: iconSize),
+              ),
+              const TextSpan(text: ' previsualización PDF.'),
             ]),
           ),
-          const SizedBox(height: 4),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Limpiar carrito: '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.remove_shopping_cart, size: iconSize)),
-              const TextSpan(text: ' borra todos los ítems.'),
-            ]),
+          const Text(
+            '• En reportes de evento podés elegir “Detalle por caja” o “Sumarizado”.',
           ),
-          const SizedBox(height: 4),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Cobrar: botón '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.payment, size: iconSize)),
-              const TextSpan(text: ' abre selección de medio de pago y confirma la venta.'),
-            ]),
+          const SizedBox(height: 16),
+          const Text(
+            'Ancho de papel',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-
-          // Tickets / Recibos
-          const Text('Tickets / Recibos', style: TextStyle(fontWeight: FontWeight.w600)),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Ver/filtrar tickets emitidos y anulados '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.receipt_long, size: iconSize)),
-              const TextSpan(text: '. Reimpresión disponible si corresponde.'),
-            ]),
+          const Text(
+            '• Podés elegir el ancho de papel en Config. impresora: 58 mm, 75 mm o 80 mm.',
+          ),
+          const Text(
+            '• Los tickets y reportes se adaptan automáticamente al ancho seleccionado (USB y PDF).',
+          ),
+          const Text(
+            '• Si ves texto cortado, probá reducir el ancho o usar previsualización PDF.',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Conexión USB (pasos y solución de problemas)',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-
-          // Caja (abierta/cierre/resumen)
-          const Text('Caja (apertura, resumen y cierre)', style: TextStyle(fontWeight: FontWeight.w600)),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Imprimir cierre/resumen: '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.print, size: iconSize)),
-              const TextSpan(text: ' (USB) o '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.picture_as_pdf, size: iconSize)),
-              const TextSpan(text: ' (PDF).'),
-            ]),
+          const Text('• Conectá la impresora por USB (OTG) y encendela.'),
+          const Text('• Si Android pide permiso, tocá “Permitir”.'),
+          const Text(
+            '• En “Config. impresora”, elegí el dispositivo y tocá “Conectar USB”; luego “Refrescar” si no aparece.',
           ),
-          const SizedBox(height: 4),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Exportar CSV (por caja): '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.grid_on, size: iconSize)),
-              const TextSpan(text: ' desde el detalle de la caja.'),
-            ]),
+          const Text(
+              '• Probá desconectar y volver a conectar el cable USB/OTG.'),
+          const Text('• Reiniciá la app si persiste el problema.'),
+          const Text(
+            '• Verificá permisos en Android: Ajustes > Apps > BuffetApp > Permisos > USB.',
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Fórmulas y criterios',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-
-          // Historial de cajas (ya detallado arriba)
-          const Text('Historial de cajas', style: TextStyle(fontWeight: FontWeight.w600)),
-          //const SizedBox(height: 16),
-          // const Text('Historial de cajas',
-          //     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('• Lista todas las cajas abiertas en el dispositivo con estado = "Visible".'),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              style: bodyStyle,
-              children: [
-                const TextSpan(text: '• El ícono de '),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Icon(Icons.visibility, size: iconSize),
-                ),
-                const TextSpan(text: ' sirve para ocultar o volver a mostrar las cajas en el listado.'),
-              ],
-            ),
+          const Text(
+            '• Total Ventas (sistema): suma de tickets no anulados en la caja.',
           ),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              style: bodyStyle,
-              children: [
-                const TextSpan(text: '• El ícono de descargas '),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Icon(Icons.file_download, size: iconSize),
-                ),
-                const TextSpan(text: ' permite exportar el listado de cajas visibles en formato CSV.'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              style: bodyStyle,
-              children: [
-                const TextSpan(text: '• El ícono de candado indica el estado: '),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Icon(Icons.lock_open, size: iconSize),
-                ),
-                const TextSpan(text: ' = abierta, '),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Icon(Icons.lock_outline, size: iconSize),
-                ),
-                const TextSpan(text: ' = cerrada.'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          // Productos / Catálogo
-          const Text('Productos / Catálogo', style: TextStyle(fontWeight: FontWeight.w600)),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Agregar producto: '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.add, size: iconSize)),
-              const TextSpan(text: ' editar '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.edit, size: iconSize)),
-              const TextSpan(text: ', visibilidad '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.visibility, size: iconSize)),
-              const TextSpan(text: ' y cargar imagen '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.image, size: iconSize)),
-              const TextSpan(text: '.'),
-            ]),
-          ),
-          const SizedBox(height: 8),
-
-          // Movimientos (ingresos / retiros)
-          const Text('Movimientos de caja', style: TextStyle(fontWeight: FontWeight.w600)),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Registrar '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.add_circle, size: iconSize)),
-              const TextSpan(text: ' ingresos y '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.remove_circle, size: iconSize)),
-              const TextSpan(text: ' retiros; se reflejan en el resumen de caja.'),
-            ]),
-          ),
-          const SizedBox(height: 8),
-
-          // Configuración de impresora
-          const Text('Configuración de impresora', style: TextStyle(fontWeight: FontWeight.w600)),
-          RichText(
-            text: TextSpan(style: bodyStyle, children: [
-              const TextSpan(text: '• Conectar USB '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.usb, size: iconSize)),
-              const TextSpan(text: ', refrescar dispositivos '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.refresh, size: iconSize)),
-              const TextSpan(text: ' y prueba de impresión '),
-              WidgetSpan(alignment: PlaceholderAlignment.baseline, baseline: TextBaseline.alphabetic, child: Icon(Icons.print, size: iconSize)),
-              const TextSpan(text: '.'),
-            ]),
+          const Text(
+            '• Cierre de caja: Diferencia = ((Efectivo declarado - Fondo Inicial - Ingresos + Retiros) + Transferencias) - Total Ventas (sistema).',
           ),
         ],
       ),

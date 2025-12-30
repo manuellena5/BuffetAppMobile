@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Estado de Caja - BuffetApp</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#3b5998", // Dark blue from the shield logo
+              secondary: "#22c55e", // Green for positive numbers/money
+              danger: "#ef4444", // Red for warnings/errors
+              "background-light": "#f3f4f6", // Light gray background
+              "background-dark": "#111827", // Dark gray background
+              "surface-light": "#ffffff",
+              "surface-dark": "#1f2937",
+              "text-light": "#1f2937",
+              "text-dark": "#f9fafb",
+              "subtext-light": "#6b7280",
+              "subtext-dark": "#9ca3af",
+              "border-light": "#e5e7eb",
+              "border-dark": "#374151",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+            },
+            borderRadius: {
+              DEFAULT: "0.5rem",
+              "card": "1rem",
+            },
+          },
+        },
+      };
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark min-h-screen pb-20 transition-colors duration-200">
+<header class="bg-surface-light dark:bg-surface-dark shadow-sm sticky top-0 z-10 px-4 py-3 flex items-center justify-between border-b border-border-light dark:border-border-dark">
+<div class="flex items-center gap-3">
+<button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-subtext-light dark:text-subtext-dark">
+<span class="material-icons-round">arrow_back</span>
+</button>
+<h1 class="text-xl font-bold tracking-tight">Estado de Caja</h1>
+</div>
+<div class="flex items-center gap-1">
+<button aria-label="Imprimir" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-primary">
+<span class="material-icons-round">print</span>
+</button>
+<button aria-label="Exportar PDF" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-subtext-light dark:text-subtext-dark">
+<span class="material-icons-round">picture_as_pdf</span>
+</button>
+<button aria-label="Más opciones" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-subtext-light dark:text-subtext-dark">
+<span class="material-icons-round">more_vert</span>
+</button>
+</div>
+</header>
+<main class="p-4 max-w-lg mx-auto space-y-4">
+<div class="bg-surface-light dark:bg-surface-dark rounded-card p-4 shadow-sm border-l-4 border-green-500 flex justify-between items-center">
+<div>
+<p class="text-xs text-subtext-light dark:text-subtext-dark uppercase font-semibold tracking-wider">Estado Actual</p>
+<p class="text-lg font-bold text-green-600 dark:text-green-400 flex items-center gap-1">
+                    ABIERTA
+                    <span class="material-icons-round text-sm">check_circle</span>
+</p>
+</div>
+<div class="text-right">
+<p class="text-xs text-subtext-light dark:text-subtext-dark">23/12/2025</p>
+<p class="text-sm font-medium">10:08 HS</p>
+</div>
+</div>
+<div class="bg-primary text-white rounded-card p-6 shadow-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full"></div>
+<div class="absolute bottom-0 left-0 -mb-4 -ml-4 w-16 h-16 bg-white opacity-10 rounded-full"></div>
+<p class="text-blue-100 text-sm font-medium mb-1">Total Ventas</p>
+<h2 class="text-4xl font-bold tracking-tight">$ 25.000,00</h2>
+<div class="mt-4 pt-4 border-t border-white/20 flex justify-between text-sm">
+<div>
+<span class="block text-blue-100 text-xs">Efectivo</span>
+<span class="font-semibold">$ 18.000,00</span>
+</div>
+<div class="text-right">
+<span class="block text-blue-100 text-xs">Transferencia</span>
+<span class="font-semibold">$ 7.000,00</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-card shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
+<div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-border-light dark:border-border-dark flex items-center gap-2">
+<span class="material-icons-round text-primary text-sm">event</span>
+<h3 class="text-sm font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Detalles del Evento</h3>
+</div>
+<div class="p-4 space-y-3">
+<div class="grid grid-cols-2 gap-4">
+<div>
+<p class="text-xs text-subtext-light dark:text-subtext-dark">Disciplina</p>
+<p class="font-medium text-sm">Evento</p>
+</div>
+<div>
+<p class="text-xs text-subtext-light dark:text-subtext-dark">Cajero</p>
+<p class="font-medium text-sm">Manu</p>
+</div>
+</div>
+<div class="pt-2 border-t border-border-light dark:border-border-dark">
+<p class="text-xs text-subtext-light dark:text-subtext-dark mb-1">Descripción</p>
+<p class="text-sm font-medium">Nocturno fecha 5</p>
+</div>
+<div>
+<p class="text-xs text-subtext-light dark:text-subtext-dark mb-1">Observación Apertura</p>
+<p class="text-sm font-medium italic text-subtext-light dark:text-subtext-dark">OBS apertura</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-card shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
+<div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-border-light dark:border-border-dark flex items-center gap-2">
+<span class="material-icons-round text-primary text-sm">account_balance_wallet</span>
+<h3 class="text-sm font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Movimientos de Caja</h3>
+</div>
+<div class="divide-y divide-border-light dark:divide-border-dark">
+<div class="p-4 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg text-blue-600 dark:text-blue-400">
+<span class="material-icons-round text-lg">attach_money</span>
+</div>
+<div>
+<p class="text-sm font-medium">Fondo Inicial</p>
+<p class="text-xs text-subtext-light dark:text-subtext-dark">Base de caja</p>
+</div>
+</div>
+<span class="font-semibold">$ 150.000,00</span>
+</div>
+<div class="p-4 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="bg-green-100 dark:bg-green-900/30 p-2 rounded-lg text-green-600 dark:text-green-400">
+<span class="material-icons-round text-lg">arrow_downward</span>
+</div>
+<div>
+<p class="text-sm font-medium">Ingresos</p>
+<p class="text-xs text-subtext-light dark:text-subtext-dark">Registrados manual</p>
+</div>
+</div>
+<span class="font-semibold text-green-600 dark:text-green-400">+ $ 0,00</span>
+</div>
+<div class="p-4 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="bg-red-100 dark:bg-red-900/30 p-2 rounded-lg text-red-600 dark:text-red-400">
+<span class="material-icons-round text-lg">arrow_upward</span>
+</div>
+<div>
+<p class="text-sm font-medium">Retiros</p>
+<p class="text-xs text-subtext-light dark:text-subtext-dark">Registrados manual</p>
+</div>
+</div>
+<span class="font-semibold text-danger">- $ 0,00</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-card shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
+<div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-border-light dark:border-border-dark flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-icons-round text-primary text-sm">shopping_cart</span>
+<h3 class="text-sm font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Ventas por Producto</h3>
+</div>
+<span class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs px-2 py-1 rounded-full font-medium">5 Items</span>
+</div>
+<div class="p-2">
+<table class="w-full text-sm text-left">
+<thead class="text-xs text-subtext-light dark:text-subtext-dark bg-gray-50 dark:bg-gray-800/30 uppercase">
+<tr>
+<th class="px-3 py-2 font-medium rounded-l-lg">Producto</th>
+<th class="px-3 py-2 font-medium text-center">Cant.</th>
+<th class="px-3 py-2 font-medium text-right rounded-r-lg">Total</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-light dark:divide-border-dark">
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-3 py-3 font-medium">Hamburguesa</td>
+<td class="px-3 py-3 text-center text-subtext-light dark:text-subtext-dark">3</td>
+<td class="px-3 py-3 text-right font-semibold">$ 9.000,00</td>
+</tr>
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-3 py-3 font-medium">Jarra Gaseosa</td>
+<td class="px-3 py-3 text-center text-subtext-light dark:text-subtext-dark">3</td>
+<td class="px-3 py-3 text-right font-semibold">$ 6.000,00</td>
+</tr>
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-3 py-3 font-medium">Fernet</td>
+<td class="px-3 py-3 text-center text-subtext-light dark:text-subtext-dark">1</td>
+<td class="px-3 py-3 text-right font-semibold">$ 5.000,00</td>
+</tr>
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-3 py-3 font-medium">Choripan</td>
+<td class="px-3 py-3 text-center text-subtext-light dark:text-subtext-dark">1</td>
+<td class="px-3 py-3 text-right font-semibold">$ 3.000,00</td>
+</tr>
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-3 py-3 font-medium">Cerveza</td>
+<td class="px-3 py-3 text-center text-subtext-light dark:text-subtext-dark">1</td>
+<td class="px-3 py-3 text-right font-semibold">$ 2.000,00</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-card shadow-sm border border-border-light dark:border-border-dark overflow-hidden">
+<div class="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-b border-border-light dark:border-border-dark flex items-center gap-2">
+<span class="material-icons-round text-primary text-sm">calculate</span>
+<h3 class="text-sm font-semibold text-subtext-light dark:text-subtext-dark uppercase tracking-wide">Arqueo de Caja</h3>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex justify-between items-center py-1">
+<span class="text-sm text-subtext-light dark:text-subtext-dark">Efectivo declarado</span>
+<span class="font-medium">$ 0,00</span>
+</div>
+<div class="flex justify-between items-center py-1 border-t border-border-light dark:border-border-dark pt-3">
+<span class="text-sm font-semibold">Diferencia</span>
+<span class="font-bold text-gray-400">$ 0,00</span>
+</div>
+<div class="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded-lg flex gap-3 items-start border border-yellow-100 dark:border-yellow-900/20">
+<span class="material-icons-round text-yellow-600 dark:text-yellow-500 text-sm mt-0.5">info</span>
+<p class="text-xs text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                        Aún no se ha realizado el cierre de caja. Declare el efectivo para calcular la diferencia final.
+                    </p>
+</div>
+</div>
+</div>
+</main>
+<div class="fixed bottom-0 left-0 right-0 p-4 bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20">
+<div class="max-w-lg mx-auto flex gap-3">
+<button class="flex-1 bg-white dark:bg-gray-800 text-subtext-light dark:text-subtext-dark border border-border-light dark:border-border-dark font-medium py-3 px-4 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
+<span class="material-icons-round text-sm">history</span>
+                Historial
+            </button>
+<button class="flex-[2] bg-primary text-white font-bold py-3 px-4 rounded-lg shadow-md hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+<span class="material-icons-round text-sm">lock</span>
+                Cerrar Caja
+            </button>
+</div>
+</div>
+
+</body></html>
