@@ -15,7 +15,7 @@ Principios NO negociables:
 - La DB local es la fuente primaria mientras la caja está ABIERTA.
 - Una caja CERRADA es solo lectura: NO se edita, NO se elimina.
 
-## Estructura del Código (carpeta `android_mirror/lib`)
+## Estructura del Código (carpeta `lib`)
 - `main.dart`: arranque, inicialización de fecha local, `SupaSyncService.init()`, reconexión impresora (`UsbPrinterService`), determina `HomePage` vs `PosMainPage` según caja abierta.
 - `data/dao/db.dart`: clase `AppDatabase`. Creación/migración, índices, seeds, logging de errores y helpers de columnas.
 - `services/`: lógica de negocio (caja, ventas, sync, impresora). Evitar lógica pesada en Widgets.

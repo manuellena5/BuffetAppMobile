@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Android APK (release)",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"cd 'c:\\Users\\manuel.ellena\\Git\\BuffetApp_v2.0\\BuffetApp_v2.0\\android_mirror'; flutter build apk --release\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

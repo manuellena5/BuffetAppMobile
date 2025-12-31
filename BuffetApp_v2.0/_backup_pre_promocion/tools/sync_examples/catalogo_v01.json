@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "generated_at": "2025-10-05T00:00:00Z",
+  "categorias": [
+    {"id": 1, "descripcion": "Bebidas"},
+    {"id": 2, "descripcion": "Comidas"}
+  ],
+  "metodos_pago": [
+    {"id": 1, "descripcion": "Efectivo"},
+    {"id": 2, "descripcion": "Transferencia"}
+  ],
+  "productos": [
+    {"id": 1, "codigo_producto": "C01", "nombre": "Coca 500ml", "precio_venta": 1500, "stock_minimo": 3, "categoria_id": 1, "visible": 1, "color": "#FFEEEE"},
+    {"id": 2, "codigo_producto": "H01", "nombre": "Hamburguesa", "precio_venta": 2500, "stock_minimo": 3, "categoria_id": 2, "visible": 1, "color": "#EEFFEE"}
+  ]
+}
