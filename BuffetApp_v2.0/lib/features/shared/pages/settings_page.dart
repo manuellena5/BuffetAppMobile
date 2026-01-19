@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/responsive_container.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -298,10 +299,12 @@ class _SettingsPageState extends State<SettingsPage> {
         ]),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                children: [
+            : ResponsiveContainer(
+                maxWidth: 800,
+                child: ListView(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    children: [
                   // Cambiar de módulo
                   Card(
                     color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
@@ -556,6 +559,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                 ],
               ),
+            ),
       ),
     );
   }

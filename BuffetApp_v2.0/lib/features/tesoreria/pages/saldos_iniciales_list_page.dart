@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../domain/models.dart';
+import '../../shared/widgets/responsive_container.dart';
 import '../services/saldo_inicial_service.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
@@ -203,7 +204,9 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : ResponsiveContainer(
+              maxWidth: 1000,
+              child: Column(
               children: [
                 // Mostrar unidad activa (no editable)
                 if (_unidadActiva != null)
@@ -352,6 +355,7 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
                         ),
                 ),
               ],
+              ),
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _navegarNuevo,

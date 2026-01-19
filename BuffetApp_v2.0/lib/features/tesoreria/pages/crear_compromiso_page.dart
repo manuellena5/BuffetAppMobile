@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/services/error_handler.dart';
+import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/state/app_settings.dart';
 import '../../../data/dao/db.dart';
 import '../services/categoria_movimiento_service.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 /// Página para crear un nuevo compromiso financiero con modalidades.
 /// FASE 13.5: Implementación con selector de modalidad y vista previa de cuotas.
@@ -21,6 +23,7 @@ class CrearCompromisoPage extends StatefulWidget {
 class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
   final _formKey = GlobalKey<FormState>();
   final _compromisosService = CompromisosService.instance;
+  final _plantelService = PlantelService.instance;
   
   // Controllers
   final _nombreController = TextEditingController();
@@ -48,6 +51,8 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
   List<Map<String, dynamic>> _frecuencias = [];
   List<Map<String, dynamic>> _unidades = [];
   List<Map<String, dynamic>> _categorias = [];
+  List<Map<String, dynamic>> _entidadesPlantel = [];
+  int? _entidadPlantelId;
 
   @override
   void initState() {
@@ -83,6 +88,9 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
     // Cargar categorías
     await _cargarCategorias();
     
+    // Cargar entidades del plantel (solo activas)
+    final entidades = await _plantelService.listarEntidades(soloActivos: true);
+    
     // Heredar unidad de gestión del contexto de tesorería
     final unidadActivaId = settings.unidadGestionActivaId;
     
@@ -90,6 +98,7 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
       setState(() {
         _frecuencias = frecuencias;
         _unidades = unidades;
+        _entidadesPlantel = entidades;
         if (unidadActivaId != null) {
           _unidadGestionId = unidadActivaId;
         } else if (_unidades.isNotEmpty) {
@@ -284,6 +293,7 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
         observaciones: _observacionesController.text.trim().isNotEmpty 
             ? _observacionesController.text.trim() 
             : null,
+        entidadPlantelId: _entidadPlantelId,
       );
 
       // Generar y guardar cuotas
@@ -360,14 +370,16 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
       appBar: AppBar(
         title: const Text('Nuevo Compromiso'),
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ===== CAMPOS SIEMPRE VISIBLES =====
+      body: ResponsiveContainer(
+        maxWidth: 800,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ===== CAMPOS SIEMPRE VISIBLES =====
               
               // Nombre
               TextFormField(
@@ -448,6 +460,35 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
                 }).toList(),
                 onChanged: (v) => setState(() => _codigoCategoria = v),
               ),
+              const SizedBox(height: 16),
+              
+              // Jugador/Staff del plantel
+              if (_entidadesPlantel.isNotEmpty)
+                DropdownButtonFormField<int>(
+                  value: _entidadPlantelId,
+                  decoration: const InputDecoration(
+                    labelText: 'Jugador / Staff (opcional)',
+                    border: OutlineInputBorder(),
+                    hintText: 'Asociar a un jugador o miembro del cuerpo técnico',
+                    helperText: 'Útil para sueldos, viandas, combustibles del plantel',
+                  ),
+                  items: [
+                    const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('-- Sin asociar --'),
+                    ),
+                    ..._entidadesPlantel.map((entidad) {
+                      final id = entidad['id'] as int;
+                      final nombre = entidad['nombre'] as String;
+                      final rol = entidad['rol'] as String;
+                      return DropdownMenuItem<int>(
+                        value: id,
+                        child: Text('$nombre ($rol)'),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setState(() => _entidadPlantelId = v),
+                ),
               const SizedBox(height: 16),
               
               // Observaciones
@@ -945,6 +986,7 @@ class _CrearCompromisoPageState extends State<CrearCompromisoPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

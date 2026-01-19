@@ -1,6 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import '../services/categoria_movimiento_service.dart';
+import '../services/categoria_import_export_service.dart';
 import 'categoria_movimiento_form_page.dart';
+import 'importar_categorias_page.dart';
+import '../../shared/widgets/responsive_container.dart';
+import '../../../data/dao/db.dart';
 
 /// Pantalla de Gestión de Categorías de Movimientos (según mockup)
 class CategoriasMovimientoPage extends StatefulWidget {
@@ -16,7 +23,7 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
   List<Map<String, dynamic>> _categoriasFiltradas = [];
   bool _loading = true;
   
-  String _filtroTipo = 'TODOS'; // TODOS, INGRESO, EGRESO, ARCHIVO
+  String _filtroTipo = 'TODOS'; // TODOS, INGRESO, EGRESO, AMBOS, INACTIVAS
   String _busqueda = '';
 
   @override
@@ -28,8 +35,9 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
   Future<void> _cargarCategorias() async {
     setState(() => _loading = true);
     try {
+      // Cargar TODAS las categorías (activas e inactivas)
       final categorias = await CategoriaMovimientoService.obtenerCategorias(
-        soloActivas: _filtroTipo != 'ARCHIVO',
+        soloActivas: false,
       );
       setState(() {
         _categorias = categorias;
@@ -50,12 +58,25 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
     var filtradas = List<Map<String, dynamic>>.from(_categorias);
     
     // Filtro por tipo
-    if (_filtroTipo == 'INGRESO' || _filtroTipo == 'EGRESO') {
+    if (_filtroTipo == 'INGRESO') {
       filtradas = filtradas.where((c) {
         final tipo = c['tipo'] as String;
-        return tipo == _filtroTipo || tipo == 'AMBOS';
+        final activa = (c['activa'] as int) == 1;
+        return activa && (tipo == 'INGRESO' || tipo == 'AMBOS');
       }).toList();
-    } else if (_filtroTipo == 'ARCHIVO') {
+    } else if (_filtroTipo == 'EGRESO') {
+      filtradas = filtradas.where((c) {
+        final tipo = c['tipo'] as String;
+        final activa = (c['activa'] as int) == 1;
+        return activa && (tipo == 'EGRESO' || tipo == 'AMBOS');
+      }).toList();
+    } else if (_filtroTipo == 'AMBOS') {
+      filtradas = filtradas.where((c) {
+        final tipo = c['tipo'] as String;
+        final activa = (c['activa'] as int) == 1;
+        return activa && tipo == 'AMBOS';
+      }).toList();
+    } else if (_filtroTipo == 'INACTIVAS') {
       filtradas = filtradas.where((c) => (c['activa'] as int) == 0).toList();
     } else {
       // TODOS - solo activas
@@ -108,10 +129,14 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              // Menú de opciones
-            },
+            icon: const Icon(Icons.upload),
+            tooltip: 'Importar',
+            onPressed: _importarCategorias,
+          ),
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: 'Exportar',
+            onPressed: _exportarCategorias,
           ),
         ],
         bottom: PreferredSize(
@@ -122,9 +147,11 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          // Barra de búsqueda
+      body: ResponsiveContainer(
+        maxWidth: 1000,
+        child: Column(
+          children: [
+            // Barra de búsqueda
           Padding(
             padding: const EdgeInsets.all(16),
             child: Container(
@@ -173,7 +200,9 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                 const SizedBox(width: 8),
                 _buildFilterChip('Egresos', 'EGRESO'),
                 const SizedBox(width: 8),
-                _buildFilterChip('Archivo', 'ARCHIVO'),
+                _buildFilterChip('Ambos', 'AMBOS'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Inactivas', 'INACTIVAS'),
               ],
             ),
           ),
@@ -186,15 +215,10 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
                 : _categoriasFiltradas.isEmpty
                     ? _buildEmpty()
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                        itemCount: _categoriasFiltradas.length,
-                        itemBuilder: (context, index) {
-                          return _buildCategoriaItem(_categoriasFiltradas[index], isDark);
-                        },
-                      ),
+                    : _buildVistaTabla(),
           ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _abrirFormulario(),
@@ -446,5 +470,331 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
     };
     
     return iconMap[iconName] ?? Icons.category;
+  }
+
+  Widget _buildVistaTabla() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SingleChildScrollView(
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Código')),
+            DataColumn(label: Text('Nombre')),
+            DataColumn(label: Text('Tipo')),
+            DataColumn(label: Text('Estado')),
+            DataColumn(label: Text('Acciones')),
+          ],
+          rows: _categoriasFiltradas.map((cat) {
+            final activa = (cat['activa'] as int) == 1;
+            final tipo = cat['tipo'] as String;
+            final icono = cat['icono'] as String?;
+            final nombre = cat['nombre'] as String;
+            final codigo = cat['codigo'] as String;
+
+            Color tipoColor;
+            String tipoText;
+            
+            switch (tipo) {
+              case 'INGRESO':
+                tipoColor = const Color(0xFF4CAF50);
+                tipoText = 'Ingreso';
+                break;
+              case 'EGRESO':
+                tipoColor = const Color(0xFFF44336);
+                tipoText = 'Egreso';
+                break;
+              default:
+                tipoColor = const Color(0xFFFF9800);
+                tipoText = 'Ambos';
+            }
+
+            return DataRow(
+              cells: [
+                DataCell(Text(codigo)),
+                DataCell(
+                  Row(
+                    children: [
+                      if (icono != null)
+                        Icon(_getIconData(icono), size: 20, color: tipoColor),
+                      const SizedBox(width: 8),
+                      Text(nombre),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: tipoColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: tipoColor.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      tipoText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: tipoColor,
+                      ),
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Chip(
+                    label: Text(activa ? 'Activa' : 'Inactiva', style: const TextStyle(fontSize: 11)),
+                    backgroundColor: activa ? Colors.green.shade100 : Colors.grey.shade300,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 18),
+                        tooltip: 'Editar',
+                        onPressed: () => _abrirFormulario(categoria: cat),
+                      ),
+                      if (activa)
+                        IconButton(
+                          icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                          tooltip: 'Eliminar',
+                          onPressed: () => _eliminarCategoria(cat),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.restore, size: 18, color: Colors.green),
+                          tooltip: 'Reactivar',
+                          onPressed: () async {
+                            await CategoriaMovimientoService.activarCategoria(cat['id'] as int);
+                            _cargarCategorias();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Categoría reactivada')),
+                              );
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _eliminarCategoria(Map<String, dynamic> cat) async {
+    final codigo = cat['codigo'] as String;
+    final nombre = cat['nombre'] as String;
+    
+    // Verificar si tiene movimientos asociados
+    final count = await CategoriaMovimientoService.contarMovimientosAsociados(codigo);
+    
+    if (count > 0) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('No se puede eliminar'),
+            content: Text(
+              'La categoría "$nombre" tiene $count movimiento(s) asociado(s).\n\n'
+              'No se puede eliminar una categoría con movimientos.\n\n'
+              'Podés desactivarla en su lugar.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+    
+    // Confirmar eliminación
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar Categoría'),
+        content: Text(
+          '¿Estás seguro de eliminar la categoría "$nombre"?\n\n'
+          'Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmar != true) return;
+    
+    try {
+      await CategoriaMovimientoService.eliminarCategoria(cat['id'] as int);
+      _cargarCategorias();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Categoría eliminada correctamente')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al eliminar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importarCategorias() async {
+    final resultado = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ImportarCategoriasPage(),
+      ),
+    );
+    
+    if (resultado == true) {
+      _cargarCategorias();
+    }
+  }
+
+  Future<void> _exportarCategorias() async {
+    try {
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final suggestedName = 'categorias_export_$timestamp.xlsx';
+      
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Guardar archivo de categorías',
+        fileName: suggestedName,
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+      );
+
+      if (outputPath == null) return;
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Exportando categorías...'),
+              ],
+            ),
+          ),
+        );
+      }
+
+      final tempPath = await CategoriaImportExportService.instance.exportarCategorias();
+      final tempFile = File(tempPath);
+      await tempFile.copy(outputPath);
+      await tempFile.delete();
+
+      if (mounted) Navigator.pop(context);
+
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green[700]),
+                const SizedBox(width: 8),
+                const Text('Exportación exitosa'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Las categorías se exportaron correctamente a:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: SelectableText(
+                    outputPath,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final directory = File(outputPath).parent.path;
+                  await Process.run('explorer', [directory]);
+                },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Abrir carpeta'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'categorias.exportar',
+        error: e.toString(),
+        stackTrace: stack,
+      );
+
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error, color: Colors.red[700]),
+                const SizedBox(width: 8),
+                const Text('Error'),
+              ],
+            ),
+            content: Text('Error al exportar categorías:\n\n${e.toString()}'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 }

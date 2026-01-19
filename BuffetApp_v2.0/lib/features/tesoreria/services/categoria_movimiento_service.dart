@@ -170,6 +170,7 @@ class CategoriaMovimientoService {
     required String nombre,
     required String tipo,
     String? icono,
+    String? observacion,
     bool activa = true,
   }) async {
     try {
@@ -186,6 +187,7 @@ class CategoriaMovimientoService {
         'nombre': nombre.trim(),
         'tipo': tipo,
         'icono': icono,
+        'observacion': observacion?.trim(),
         'activa': activa ? 1 : 0,
         'created_ts': DateTime.now().millisecondsSinceEpoch,
         'updated_ts': DateTime.now().millisecondsSinceEpoch,
@@ -202,6 +204,7 @@ class CategoriaMovimientoService {
           'nombre': nombre,
           'tipo': tipo,
           'icono': icono,
+          'observacion': observacion,
           'activa': activa,
         },
       );
@@ -216,6 +219,7 @@ class CategoriaMovimientoService {
     required String nombre,
     required String tipo,
     String? icono,
+    String? observacion,
     required bool activa,
   }) async {
     try {
@@ -234,6 +238,7 @@ class CategoriaMovimientoService {
           'nombre': nombre.trim(),
           'tipo': tipo,
           'icono': icono,
+          'observacion': observacion?.trim(),
           'activa': activa ? 1 : 0,
           'updated_ts': DateTime.now().millisecondsSinceEpoch,
         },
@@ -326,6 +331,41 @@ class CategoriaMovimientoService {
         error: e,
         stackTrace: st,
         payload: {'categoria': categoria},
+      );
+      rethrow;
+    }
+  }
+
+  /// Elimina físicamente una categoría (solo si no tiene movimientos asociados)
+  static Future<void> eliminarCategoriaFisicamente(int id) async {
+    try {
+      final db = await AppDatabase.instance();
+      
+      // Primero obtener el código para verificar movimientos
+      final cat = await obtenerCategoriaPorId(id);
+      if (cat == null) {
+        throw Exception('Categoría no encontrada');
+      }
+      
+      final codigo = cat['codigo'] as String;
+      final count = await contarMovimientosAsociados(codigo);
+      
+      if (count > 0) {
+        throw Exception('No se puede eliminar una categoría con movimientos asociados');
+      }
+      
+      // Eliminar físicamente
+      await db.delete(
+        'categoria_movimiento',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'categoria_movimiento.eliminarFisicamente',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
       );
       rethrow;
     }

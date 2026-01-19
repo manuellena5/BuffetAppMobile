@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../shared/widgets/responsive_container.dart';
 import 'package:open_filex/open_filex.dart';
 import '../../shared/services/movimiento_service.dart';
 import '../../shared/services/tesoreria_sync_service.dart';
 import '../../shared/services/compromisos_service.dart';
 import '../../shared/format.dart';
 import '../../../data/dao/db.dart';
+import '../services/categoria_movimiento_service.dart';
 import 'crear_movimiento_page.dart';
 
 /// Pantalla de detalle de un movimiento financiero
@@ -31,6 +33,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
   Map<String, dynamic>? _compromiso;
   bool _loading = true;
   bool _deleting = false;
+  String? _categoriaNombre;
 
   @override
   void initState() {
@@ -50,10 +53,20 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
         compromiso = await _compromisosService.obtenerCompromiso(compromisoId);
       }
       
+      // Cargar nombre de categoría
+      String? catNombre;
+      if (mov != null) {
+        final codigoCat = (mov['categoria'] ?? '').toString();
+        if (codigoCat.isNotEmpty) {
+          catNombre = await CategoriaMovimientoService.obtenerNombrePorCodigo(codigoCat);
+        }
+      }
+      
       if (mounted) {
         setState(() {
           _movimiento = mov;
           _compromiso = compromiso;
+          _categoriaNombre = catNombre;
           _loading = false;
         });
       }
@@ -353,11 +366,13 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
     final archivoPath = (mov['archivo_local_path'] ?? '').toString();
     final archivoNombre = (mov['archivo_nombre'] ?? '').toString();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return ResponsiveContainer(
+      maxWidth: 800,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Header con tipo y monto
           Card(
             elevation: 2,
@@ -477,7 +492,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
                   _buildDetailRow(
                     icon: Icons.category,
                     label: 'Categoría',
-                    value: categoria.isEmpty ? 'Sin categoría' : categoria,
+                    value: categoria.isEmpty ? 'Sin categoría' : (_categoriaNombre ?? categoria),
                   ),
                   _buildDetailRow(
                     icon: Icons.payment,
@@ -690,6 +705,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -8,6 +8,8 @@ import '../../../features/shared/services/movimiento_service.dart';
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/state/app_settings.dart';
 import '../../../data/dao/db.dart';
+import '../services/categoria_movimiento_service.dart';
+import '../../shared/widgets/responsive_container.dart';
 import 'dart:io';
 
 /// Página para confirmar un movimiento esperado como real.
@@ -56,6 +58,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
   bool _isSubmitting = false;
   List<Map<String, dynamic>> _mediosPago = [];
   Map<String, dynamic>? _compromiso;
+  String? _categoriaNombre;
   
   @override
   void initState() {
@@ -82,9 +85,16 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
       // Cargar compromiso
       final compromiso = await _compromisosService.obtenerCompromiso(widget.compromisoId);
       
+      // Cargar nombre de categoría
+      String? catNombre;
+      if (widget.categoria.isNotEmpty) {
+        catNombre = await CategoriaMovimientoService.obtenerNombrePorCodigo(widget.categoria);
+      }
+      
       setState(() {
         _mediosPago = medios;
         _compromiso = compromiso;
+        _categoriaNombre = catNombre;
         if (_mediosPago.isNotEmpty) {
           _medioPagoId = _mediosPago.first['id'] as int;
         }
@@ -275,13 +285,15 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      body: ResponsiveContainer(
+        maxWidth: 800,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // Info del compromiso
               if (_compromiso != null)
                 Card(
@@ -298,7 +310,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
                         const SizedBox(height: 8),
                         Text(_compromiso!['nombre'] as String? ?? ''),
                         Text('Tipo: ${widget.tipo}'),
-                        Text('Categoría: ${widget.categoria}'),
+                        Text('Categoría: ${_categoriaNombre ?? widget.categoria}'),
                         Text(
                           'Vencimiento esperado: ${DateFormat('dd/MM/yyyy').format(widget.fechaVencimiento)}',
                         ),
@@ -469,6 +481,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import 'features/buffet/pages/buffet_home_page.dart';
 import 'features/home/home_page.dart';
 import 'features/home/mode_selector_page.dart';
@@ -16,6 +17,15 @@ import 'features/shared/services/supabase_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Maximizar ventana en Windows
+  if (Platform.isWindows) {
+    await windowManager.ensureInitialized();
+    await windowManager.waitUntilReadyToShow();
+    await windowManager.maximize();
+    await windowManager.show();
+  }
+  
   await initializeDateFormatting('es_AR', null);
   // Supabase init (sin auth, anon)
   await SupaSyncService.init();

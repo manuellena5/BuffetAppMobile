@@ -677,7 +677,6 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     // Header con totales
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -688,204 +687,219 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ),
                       child: SafeArea(
                         bottom: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _unidadGestionNombre ?? 'Cargando...',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              DateFormat('MMMM yyyy', 'es_AR').format(_mesSeleccionado),
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            
-                            // Saldo de arrastre (saldo inicial del mes)
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1200),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Primera fila: Nombre y fecha | Saldo inicial
                                   Row(
-                                    children: [
-                                      Icon(
-                                        Icons.history,
-                                        color: Colors.white.withOpacity(0.8),
-                                        size: 18,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Saldo inicial (arrastre):',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    Format.money(_saldoArrastre),
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.95),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            
-                            const SizedBox(height: 8),
-                            Divider(color: Colors.white.withOpacity(0.3), height: 1),
-                            const SizedBox(height: 12),
-                            
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildTotalCard(
-                                    'Ingresos',
-                                    _totalIngresos,
-                                    Icons.arrow_downward,
-                                    Colors.green.shade100,
-                                    Colors.green.shade900,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildTotalCard(
-                                    'Egresos',
-                                    _totalEgresos,
-                                    Icons.arrow_upward,
-                                    Colors.red.shade100,
-                                    Colors.red.shade900,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: _saldo >= 0
-                                    ? Colors.white.withOpacity(0.2)
-                                    : Colors.red.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Saldo Real:',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    Format.money(_saldo),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Proyección (esperados)
-                            if (_movimientosEsperados.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              InkWell(
-                                onTap: () => _mostrarDetalleProyeccion(),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Icon(Icons.pending_actions, color: Colors.white.withOpacity(0.8), size: 20),
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  'Proyección pendiente:',
-                                                  style: TextStyle(
-                                                    color: Colors.white.withOpacity(0.9),
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ],
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _unidadGestionNombre ?? 'Cargando...',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '${_movimientosEsperados.length} compromiso${_movimientosEsperados.length != 1 ? 's' : ''}',
-                                              style: TextStyle(
-                                                color: Colors.white.withOpacity(0.7),
-                                                fontSize: 12,
-                                              ),
+                                          ),
+                                          Text(
+                                            DateFormat('MMMM yyyy', 'es_AR').format(_mesSeleccionado),
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.8),
+                                              fontSize: 13,
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
                                       Row(
                                         children: [
                                           Text(
-                                            Format.money(_saldoEsperado),
+                                            'Saldo inicial (arrastre): ',
                                             style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white.withOpacity(0.8),
+                                              fontSize: 13,
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          Icon(
-                                            Icons.chevron_right,
-                                            color: Colors.white.withOpacity(0.6),
-                                            size: 20,
+                                          Text(
+                                            Format.money(_saldoArrastre),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ],
                                   ),
-                                ),
+                                  const SizedBox(height: 6),
+                                  // Segunda fila: Ingresos | Egresos
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade100.withOpacity(0.3),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Ingresos:',
+                                                style: TextStyle(
+                                                  color: Colors.white.withOpacity(0.9),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              Text(
+                                                Format.money(_totalIngresos),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade100.withOpacity(0.3),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Egresos:',
+                                                style: TextStyle(
+                                                  color: Colors.white.withOpacity(0.9),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              Text(
+                                                Format.money(_totalEgresos),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  // Tercera fila: Saldo Real | Proyección
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: _saldo >= 0
+                                                ? Colors.white.withOpacity(0.2)
+                                                : Colors.red.withOpacity(0.3),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              const Text(
+                                                'Saldo Real:',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                Format.money(_saldo),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      if (_movimientosEsperados.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: InkWell(
+                                            onTap: () => _mostrarDetalleProyeccion(),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withOpacity(0.15),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      'Proyección pendiente:',
+                                                      style: TextStyle(
+                                                        color: Colors.white.withOpacity(0.9),
+                                                        fontSize: 13,
+                                                      ),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        Format.money(_saldoEsperado),
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                      Icon(
+                                                        Icons.chevron_right,
+                                                        color: Colors.white.withOpacity(0.6),
+                                                        size: 14,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
                               ),
-                            ],
-                          ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    
-                    // Selector de Mes
+                  
+                  // Selector de Mes
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
@@ -1008,7 +1022,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       child: RefreshIndicator(
                         onRefresh: _load,
                         child: _movimientosCombinados.isEmpty
-                            ? LayoutBuilder(
+                          ? LayoutBuilder(
                                 builder: (context, constraints) {
                                   return SingleChildScrollView(
                                     physics: const AlwaysScrollableScrollPhysics(),
@@ -1046,12 +1060,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                               )
                             : _vistaTabla
                                 ? SingleChildScrollView(
-                                    scrollDirection: Axis.vertical,
                                     physics: const AlwaysScrollableScrollPhysics(),
-                                    child: SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: _buildMovimientosTable(),
-                                    ),
+                                    child: _buildMovimientosTable(),
                                   )
                                 : ListView.builder(
                                     physics: const AlwaysScrollableScrollPhysics(),
@@ -1157,23 +1167,32 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   }
 
   Widget _buildMovimientosTable() {
-    return DataTable(
-      columnSpacing: 16,
-      headingRowColor: WidgetStateProperty.all(Colors.green.shade50),
-      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-      columns: const [
-        DataColumn(label: Text('Fecha', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Categoría', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Monto', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-        DataColumn(label: Text('Medio Pago', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Compromiso', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Observación', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Adjunto', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Estado', style: TextStyle(fontWeight: FontWeight.bold))),
-        DataColumn(label: Text('Sync', style: TextStyle(fontWeight: FontWeight.bold))),
-      ],
-      rows: _movimientosCombinados.map((item) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: DataTable(
+          columnSpacing: 8,
+          dataRowMinHeight: 36,
+          dataRowMaxHeight: 56,
+          headingRowHeight: 40,
+          headingRowColor: WidgetStateProperty.all(Colors.green.shade50),
+          border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+          columns: const [
+            DataColumn(label: Text('Fecha', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Categoría', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Monto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)), numeric: true),
+            DataColumn(label: Text('M. Pago', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Compromiso', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Obs.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Adj.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Estado', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Sync', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Acc.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+          ],
+          rows: _movimientosCombinados.map((item) {
         // Determinar si es movimiento real o esperado
         if (item is MovimientoProyectado) {
           // Movimiento esperado o cancelado - fila con estilo atenuado
@@ -1243,30 +1262,36 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 ),
               ),
               DataCell(
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      item.categoria,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: esCancelado ? Colors.red.shade400 : Colors.grey.shade700,
-                        fontWeight: FontWeight.w600,
-                        decoration: esCancelado ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-                    if (item.numeroCuota != null && item.totalCuotas != null)
-                      Text(
-                        'Cuota ${item.numeroCuota}/${item.totalCuotas}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: esCancelado ? Colors.red.shade300 : Colors.grey.shade500,
-                          fontStyle: FontStyle.italic,
-                          decoration: esCancelado ? TextDecoration.lineThrough : null,
+                FutureBuilder<String>(
+                  future: _obtenerNombreCategoria(item.categoria),
+                  builder: (context, snapshot) {
+                    final nombreCategoria = snapshot.data ?? item.categoria;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          nombreCategoria.isEmpty ? '-' : nombreCategoria,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: esCancelado ? Colors.red.shade400 : Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                            decoration: esCancelado ? TextDecoration.lineThrough : null,
+                          ),
                         ),
-                      ),
-                  ],
+                        if (item.numeroCuota != null && item.totalCuotas != null)
+                          Text(
+                            'Cuota ${item.numeroCuota}/${item.totalCuotas}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: esCancelado ? Colors.red.shade300 : Colors.grey.shade500,
+                              fontStyle: FontStyle.italic,
+                              decoration: esCancelado ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
               DataCell(
@@ -1338,6 +1363,13 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              DataCell(
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                  tooltip: 'Ver detalles',
+                  onPressed: () => _mostrarDetalleMovimientoEsperado(item),
                 ),
               ),
             ],
@@ -1502,9 +1534,18 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             DataCell(
               _buildSyncBadge(syncEstado),
             ),
+            DataCell(
+              IconButton(
+                icon: const Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                tooltip: 'Ver detalles',
+                onPressed: id != null ? () => _mostrarDetalleMovimientoModal(id) : null,
+              ),
+            ),
           ],
         );
       }).toList(),
+        ),
+      ),
     );
   }
 
@@ -2895,6 +2936,227 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _mostrarDetalleMovimientoModal(int movimientoId) async {
+    try {
+      final db = await AppDatabase.instance();
+      final movs = await db.rawQuery('''
+        SELECT 
+          em.*,
+          mp.descripcion as medio_pago_desc,
+          c.nombre as compromiso_nombre
+        FROM evento_movimiento em
+        LEFT JOIN metodos_pago mp ON em.medio_pago_id = mp.id
+        LEFT JOIN compromisos c ON em.compromiso_id = c.id
+        WHERE em.id = ?
+      ''', [movimientoId]);
+      
+      if (movs.isEmpty || !mounted) return;
+      
+      final mov = movs.first;
+      final tipo = (mov['tipo'] ?? '').toString();
+      final monto = (mov['monto'] as num?)?.toDouble() ?? 0.0;
+      final categoria = (mov['categoria'] ?? '').toString();
+      final nombreCategoria = await _obtenerNombreCategoria(categoria);
+      final medioPago = (mov['medio_pago_desc'] ?? '').toString();
+      final obs = (mov['observacion'] ?? '').toString();
+      final estado = (mov['estado'] ?? 'CONFIRMADO').toString();
+      final syncEstado = (mov['sync_estado'] ?? '').toString();
+      final compromisoNombre = (mov['compromiso_nombre'] ?? '').toString();
+      final ts = mov['created_ts'];
+      
+      DateTime? fecha;
+      if (ts is int) {
+        fecha = DateTime.fromMillisecondsSinceEpoch(ts);
+      } else if (ts is String) {
+        fecha = DateTime.tryParse(ts);
+      }
+      
+      if (!mounted) return;
+      
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                tipo == 'INGRESO' ? Icons.arrow_downward : Icons.arrow_upward,
+                color: tipo == 'INGRESO' ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Detalle de ${tipo == 'INGRESO' ? 'Ingreso' : 'Egreso'}'),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetalleRow('Tipo:', tipo),
+                const Divider(),
+                _buildDetalleRow('Monto:', Format.money(monto)),
+                const Divider(),
+                _buildDetalleRow('Categoría:', nombreCategoria),
+                const Divider(),
+                if (medioPago.isNotEmpty) ...[
+                  _buildDetalleRow('Medio de Pago:', medioPago),
+                  const Divider(),
+                ],
+                if (compromisoNombre.isNotEmpty) ...[
+                  _buildDetalleRow('Compromiso:', compromisoNombre),
+                  const Divider(),
+                ],
+                _buildDetalleRow('Estado:', estado),
+                const Divider(),
+                _buildDetalleRow('Sincronización:', syncEstado),
+                const Divider(),
+                if (fecha != null) ...[
+                  _buildDetalleRow('Fecha:', DateFormat('dd/MM/yyyy HH:mm').format(fecha)),
+                  const Divider(),
+                ],
+                if (obs.isNotEmpty) ...[
+                  _buildDetalleRow('Observación:', obs),
+                  const Divider(),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cerrar'),
+            ),
+            if (estado != 'CANCELADO')
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DetalleMovimientoPage(movimientoId: movimientoId),
+                    ),
+                  );
+                  if (result == true && mounted) {
+                    await _load();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Ver completo'),
+              ),
+          ],
+        ),
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'movimientos_list.mostrar_detalle_modal',
+        error: e,
+        stackTrace: st,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar detalle: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _mostrarDetalleMovimientoEsperado(MovimientoProyectado mov) async {
+    final nombreCategoria = await _obtenerNombreCategoria(mov.categoria);
+    
+    if (!mounted) return;
+    
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.pending,
+              color: mov.estado == 'CANCELADO' ? Colors.red : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Movimiento ${mov.estado == 'CANCELADO' ? 'Cancelado' : 'Esperado'}'),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetalleRow('Tipo:', mov.tipo),
+              const Divider(),
+              _buildDetalleRow('Monto:', Format.money(mov.monto)),
+              const Divider(),
+              _buildDetalleRow('Categoría:', nombreCategoria),
+              const Divider(),
+              _buildDetalleRow('Estado:', mov.estado),
+              const Divider(),
+              _buildDetalleRow(
+                'Fecha Vencimiento:', 
+                DateFormat('dd/MM/yyyy').format(mov.fechaVencimiento),
+              ),
+              const Divider(),
+              if (mov.nombre.isNotEmpty) ...[
+                _buildDetalleRow('Compromiso:', mov.nombre),
+                const Divider(),
+              ],
+              if (mov.numeroCuota != null && mov.totalCuotas != null) ...[
+                _buildDetalleRow('Cuota:', '${mov.numeroCuota}/${mov.totalCuotas}'),
+                const Divider(),
+              ],
+              if (mov.observaciones != null && mov.observaciones!.isNotEmpty) ...[
+                _buildDetalleRow('Observación:', mov.observaciones!),
+                const Divider(),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
+          ),
+          if (mov.estado != 'CANCELADO')
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ConfirmarMovimientoPage(
+                      compromisoId: mov.compromisoId,
+                      fechaVencimiento: mov.fechaVencimiento,
+                      montoSugerido: mov.monto,
+                      tipo: mov.tipo,
+                      categoria: mov.categoria,
+                      numeroCuota: mov.numeroCuota,
+                    ),
+                  ),
+                );
+                if (result == true && mounted) {
+                  await _load();
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Confirmar'),
+            ),
+        ],
+      ),
     );
   }
 

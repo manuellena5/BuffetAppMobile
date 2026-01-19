@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 
 import '../../../features/shared/format.dart';
 import '../../../features/shared/services/compromisos_service.dart';
+import '../../../features/shared/services/acuerdos_service.dart';
 import '../../../data/dao/db.dart';
+import '../services/categoria_movimiento_service.dart';
 import 'editar_compromiso_page.dart';
 import 'detalle_movimiento_page.dart';
 import 'confirmar_movimiento_page.dart';
+import 'detalle_acuerdo_page.dart';
 
 /// Página de detalle de un compromiso financiero.
 /// Muestra información completa, próximo vencimiento e historial de movimientos.
@@ -27,11 +31,14 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
   final _compromisosService = CompromisosService.instance;
   
   Map<String, dynamic>? _compromiso;
+  Map<String, dynamic>? _acuerdoOrigen;
   List<Map<String, dynamic>> _movimientos = [];
   DateTime? _proximoVencimiento;
   int? _cuotasRestantes;
   bool _isLoading = true;
   String? _error;
+  String? _categoriaNombre;
+  Map<int, String> _movimientosCategoriasNombres = {};
 
   @override
   void initState() {
@@ -69,11 +76,40 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
       final proximoVenc = await _compromisosService.calcularProximoVencimiento(widget.compromisoId);
       final cuotasRest = await _compromisosService.calcularCuotasRestantes(widget.compromisoId);
       
+      // Cargar acuerdo origen si existe
+      Map<String, dynamic>? acuerdoOrigen;
+      if (compromiso['acuerdo_id'] != null) {
+        acuerdoOrigen = await _compromisosService.obtenerAcuerdoOrigen(widget.compromisoId);
+      }
+      
+      // Cargar nombre de categoría del compromiso
+      String? catNombre;
+      final codigoCat = compromiso['categoria'] as String?;
+      if (codigoCat != null && codigoCat.isNotEmpty) {
+        catNombre = await CategoriaMovimientoService.obtenerNombrePorCodigo(codigoCat);
+      }
+      
+      // Cargar nombres de categorías de movimientos
+      final Map<int, String> movCategoriasNombres = {};
+      for (final mov in movimientos) {
+        final movId = mov['id'] as int;
+        final movCodigoCat = mov['categoria'] as String?;
+        if (movCodigoCat != null && movCodigoCat.isNotEmpty) {
+          final nombre = await CategoriaMovimientoService.obtenerNombrePorCodigo(movCodigoCat);
+          if (nombre != null) {
+            movCategoriasNombres[movId] = nombre;
+          }
+        }
+      }
+      
       setState(() {
         _compromiso = compromiso;
+        _acuerdoOrigen = acuerdoOrigen;
         _movimientos = movimientos;
         _proximoVencimiento = proximoVenc;
         _cuotasRestantes = cuotasRest;
+        _categoriaNombre = catNombre;
+        _movimientosCategoriasNombres = movCategoriasNombres;
         _isLoading = false;
       });
     } catch (e, st) {
@@ -243,16 +279,22 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
       return const Center(child: Text('Compromiso no encontrado'));
     }
     
-    return RefreshIndicator(
-      onRefresh: _cargarDatos,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return ResponsiveContainer(
+      maxWidth: 800,
+      child: RefreshIndicator(
+        onRefresh: _cargarDatos,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             _buildInfoCard(),
             const SizedBox(height: 16),
+            if (_acuerdoOrigen != null) ...[
+              _buildOrigenAcuerdoCard(),
+              const SizedBox(height: 16),
+            ],
             _buildEstadoFinanciero(),
             const SizedBox(height: 16),
             _buildEstadoCard(),
@@ -260,6 +302,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
             _buildMovimientosCard(),
           ],
         ),
+      ),
       ),
     );
   }
@@ -309,7 +352,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
             _buildInfoRow('Frecuencia', comp['frecuencia'] as String),
             if (comp['frecuencia_dias'] != null)
               _buildInfoRow('Días', '${comp['frecuencia_dias']} días'),
-            _buildInfoRow('Categoría', comp['categoria'] as String? ?? '—'),
+            _buildInfoRow('Categoría', _categoriaNombre ?? (comp['categoria'] as String? ?? '—')),
             _buildInfoRow(
               'Fecha inicio',
               _formatFecha(comp['fecha_inicio'] as String?),
@@ -484,7 +527,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(mov['categoria'] as String? ?? 'Sin categoría'),
+                        Text(_movimientosCategoriasNombres[mov['id'] as int] ?? (mov['categoria'] as String? ?? 'Sin categoría')),
                         Text(
                           _formatFechaTs(mov['created_ts'] as int?),
                           style: const TextStyle(fontSize: 11, color: Colors.grey),
@@ -692,5 +735,94 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     final pagado = await _compromisosService.calcularMontoPagado(compromisoId);
     final remanente = await _compromisosService.calcularMontoRemanente(compromisoId);
     return {'pagado': pagado, 'remanente': remanente};
+  }
+
+  /// Widget para mostrar información del acuerdo origen
+  Widget _buildOrigenAcuerdoCard() {
+    if (_acuerdoOrigen == null) return const SizedBox.shrink();
+    
+    final acuerdo = _acuerdoOrigen!;
+    final activo = acuerdo['activo'] == 1;
+    
+    return Card(
+      color: Colors.purple.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.handshake, color: Colors.purple.shade700),
+                const SizedBox(width: 8),
+                const Text(
+                  'Origen: Acuerdo',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (!activo)
+                  Chip(
+                    label: const Text('FINALIZADO', style: TextStyle(fontSize: 10)),
+                    backgroundColor: Colors.grey.shade300,
+                    labelStyle: const TextStyle(color: Colors.black87),
+                  ),
+              ],
+            ),
+            const Divider(),
+            _buildInfoRow('Nombre', acuerdo['nombre'] as String? ?? '—'),
+            _buildInfoRow('Modalidad', acuerdo['modalidad'] as String? ?? '—'),
+            _buildInfoRow('Frecuencia', acuerdo['frecuencia'] as String? ?? '—'),
+            if (acuerdo['monto_total'] != null)
+              _buildInfoRow(
+                'Monto Total',
+                Format.money((acuerdo['monto_total'] as num).toDouble()),
+              ),
+            if (acuerdo['monto_periodico'] != null)
+              _buildInfoRow(
+                'Monto Periódico',
+                Format.money((acuerdo['monto_periodico'] as num).toDouble()),
+              ),
+            if (acuerdo['cuotas'] != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(
+                    'Cuota ${_compromiso!['numero_cuota'] ?? '?'} de ${acuerdo['cuotas']}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.purple,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final resultado = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DetalleAcuerdoPage(
+                      acuerdoId: acuerdo['id'] as int,
+                    ),
+                  ),
+                );
+                if (resultado == true) {
+                  await _cargarDatos();
+                }
+              },
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('Ver Acuerdo Completo'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 36),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

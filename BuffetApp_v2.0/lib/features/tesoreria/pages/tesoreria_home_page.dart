@@ -8,10 +8,13 @@ import '../../buffet/pages/buffet_home_page.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/state/app_mode.dart';
 import '../../../data/dao/db.dart';
+import '../../shared/widgets/responsive_container.dart';
 import 'crear_movimiento_page.dart';
 import 'movimientos_list_page.dart';
 import 'unidad_gestion_selector_page.dart';
 import 'compromisos_page.dart';
+import 'acuerdos_page.dart';
+import 'plantel_page.dart';
 import 'categorias_movimiento_page.dart';
 import 'reportes_index_page.dart';
 import 'saldos_iniciales_list_page.dart';
@@ -199,10 +202,12 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
         ],
       ),
       drawer: _buildDrawer(context),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
+      body: ResponsiveContainer(
+        maxWidth: 1200,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
@@ -281,6 +286,36 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
                       ),
                       const Divider(),
                       ListTile(
+                        leading: const Icon(Icons.handshake, color: Colors.purple),
+                        title: const Text('Acuerdos'),
+                        subtitle: const Text('Gestionar contratos y acuerdos'),
+                        enabled: true,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AcuerdosPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(),
+                      ListTile(
+                        leading: const Icon(Icons.groups, color: Colors.green),
+                        title: const Text('Plantel'),
+                        subtitle: const Text('Ver situación económica del plantel'),
+                        enabled: true,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const PlantelPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(),
+                      ListTile(
                         leading: const Icon(Icons.sync, color: Colors.green),
                         title: const Text('Sincronizar'),
                         subtitle: const Text('Próximamente'),
@@ -296,6 +331,7 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
             ],
           ),
         ),
+      ),
       ),
     ));
   }
@@ -430,6 +466,20 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const CompromisosPage()),
+              );
+            },
+          ),
+          
+          // Plantel
+          ListTile(
+            leading: const Icon(Icons.groups, color: Colors.green),
+            title: const Text('Plantel'),
+            subtitle: const Text('Ver situación económica del plantel'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PlantelPage()),
               );
             },
           ),

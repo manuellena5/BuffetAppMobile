@@ -32,6 +32,8 @@ dependencies:
   fl_chart: ^0.66.2
   win32: ^5.5.4
   excel: ^2.1.0
+  file_picker: ^8.1.6
+  window_manager: ^0.4.3
 
 dev_dependencies:
   flutter_test:

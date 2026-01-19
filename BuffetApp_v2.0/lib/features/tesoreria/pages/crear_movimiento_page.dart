@@ -6,6 +6,7 @@ import '../../shared/services/attachment_service.dart';
 import '../../shared/services/error_handler.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 /// Pantalla para crear o editar un movimiento financiero (ingreso/egreso)
 class CrearMovimientoPage extends StatefulWidget {
@@ -320,11 +321,13 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   }
   
   Widget _buildFormulario() {
-    return Form(
-      key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+    return ResponsiveContainer(
+      maxWidth: 800,
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           // Tipo de movimiento
           Card(
             child: Padding(
@@ -507,6 +510,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

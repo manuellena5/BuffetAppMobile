@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../features/shared/services/compromisos_service.dart';
+import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/state/app_settings.dart';
 import '../../../data/dao/db.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 /// Página para editar un compromiso financiero existente.
 /// FASE 13.5: Implementación con modalidades y cuotas.
@@ -24,6 +26,7 @@ class EditarCompromisoPage extends StatefulWidget {
 class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
   final _formKey = GlobalKey<FormState>();
   final _compromisosService = CompromisosService.instance;
+  final _plantelService = PlantelService.instance;
   
   // Controllers
   final _nombreController = TextEditingController();
@@ -51,6 +54,8 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
   bool _isSubmitting = false;
   String? _error;
   List<Map<String, dynamic>> _frecuencias = [];
+  List<Map<String, dynamic>> _entidadesPlantel = [];
+  int? _entidadPlantelId;
   Map<String, dynamic>? _compromisoOriginal;
 
   @override
@@ -97,6 +102,9 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       // Cargar cuotas existentes
       final cuotasExistentes = await _compromisosService.obtenerCuotas(widget.compromisoId);
       
+      // Cargar entidades del plantel (solo activas)
+      final entidades = await _plantelService.listarEntidades(soloActivos: true);
+      
       // Cargar frecuencias
       final frecuencias = await db.query('frecuencias', orderBy: 'descripcion');
       
@@ -124,8 +132,12 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         _fechaFin = DateTime.parse(compromiso['fecha_fin'] as String);
       }
       
+      // Pre-cargar entidad del plantel si está asociada
+      _entidadPlantelId = compromiso['entidad_plantel_id'] as int?;
+      
       setState(() {
         _frecuencias = frecuencias;
+        _entidadesPlantel = entidades;
         _compromisoOriginal = compromiso;
         _cuotasExistentes = cuotasExistentes;
         _isLoading = false;
@@ -312,6 +324,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         observaciones: _observacionesController.text.trim().isNotEmpty 
             ? _observacionesController.text.trim() 
             : null,
+        entidadPlantelId: _entidadPlantelId,
       );
 
       // Regenerar y guardar cuotas si se modificaron parámetros relevantes
@@ -402,9 +415,11 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       );
     }
     
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Form(
+    return ResponsiveContainer(
+      maxWidth: 800,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -696,6 +711,36 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
             ),
             const SizedBox(height: 16),
             
+            // Jugador/Staff del plantel
+            if (_entidadesPlantel.isNotEmpty)
+              DropdownButtonFormField<int>(
+                value: _entidadPlantelId,
+                decoration: const InputDecoration(
+                  labelText: 'Jugador / Staff (opcional)',
+                  border: OutlineInputBorder(),
+                  hintText: 'Asociar a un jugador o miembro del cuerpo técnico',
+                  helperText: 'Útil para sueldos, viandas, combustibles del plantel',
+                  prefixIcon: Icon(Icons.person),
+                ),
+                items: [
+                  const DropdownMenuItem<int>(
+                    value: null,
+                    child: Text('-- Sin asociar --'),
+                  ),
+                  ..._entidadesPlantel.map((entidad) {
+                    final id = entidad['id'] as int;
+                    final nombre = entidad['nombre'] as String;
+                    final rol = entidad['rol'] as String;
+                    return DropdownMenuItem<int>(
+                      value: id,
+                      child: Text('$nombre ($rol)'),
+                    );
+                  }),
+                ],
+                onChanged: !_isSubmitting ? (v) => setState(() => _entidadPlantelId = v) : null,
+              ),
+            const SizedBox(height: 16),
+            
             // Observaciones
             TextFormField(
               controller: _observacionesController,
@@ -830,6 +875,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

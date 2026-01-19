@@ -1098,14 +1098,576 @@ Sincronizar compromisos y sus adjuntos con Supabase para acceso desde múltiples
 
 ---
 
-**Estado:** ✅ Fase 14 COMPLETADA - UI Gestión de Compromisos (14.1-14.5 ✅ Completadas)
-**Última actualización:** Enero 14, 2026
+### Fase 17 🚧 EN PROGRESO - Gestión de Plantel (Vista Económica)
 
-### Resumen de Logros - Fase 14:
-- ✅ **compromisos_page.dart**: Lista con filtros, tabla/tarjetas, pausar/reactivar
-- ✅ **crear_compromiso_page.dart**: Formulario completo con todas las validaciones
-- ✅ **detalle_compromiso_page.dart**: Vista completa con historial de movimientos
-- ✅ **editar_compromiso_page.dart**: Edición funcional con pre-carga de datos
-- ✅ **Navegación integrada**: Drawer, home, y flujos entre pantallas
-- ✅ **Sin errores**: Todas las páginas compilando correctamente
-- ✅ **UX profesional**: RefreshIndicator, estados de carga, confirmaciones, badges visuales
+#### Objetivo
+Crear una vista resumen de la situación económica del plantel de fútbol (jugadores + cuerpo técnico) sin mezclar con buffet, sponsors u otros gastos. Funciona sobre la base de compromisos ya existentes, agregando la entidad "jugador/técnico" como concepto independiente.
+
+#### 🎯 Concepto Clave
+- **NO es una pantalla de movimientos**
+- **ES una vista resumen construida sobre compromisos**
+- Un jugador puede tener múltiples compromisos (sueldo, vianda, combustible)
+- Los totales se calculan sumando todos los compromisos asociados
+- NO se registran pagos desde acá (se usa "Confirmar movimiento")
+
+#### 17.1: Nueva Tabla `entidades_plantel` ✅ COMPLETADO
+- [x] Crear tabla en SQLite con campos:
+  - `id` INTEGER PRIMARY KEY AUTOINCREMENT
+  - `nombre` TEXT NOT NULL (ej: "Juan Pérez")
+  - `rol` TEXT NOT NULL CHECK (rol IN ('JUGADOR','DT','AYUDANTE','PF','OTRO'))
+  - `estado_activo` INTEGER DEFAULT 1 (1=activo, 0=baja)
+  - `observaciones` TEXT
+  - `foto_url` TEXT (opcional - futuro)
+  - `contacto` TEXT (teléfono/email opcional)
+  - `dni` TEXT (opcional)
+  - `fecha_nacimiento` TEXT (opcional - formato YYYY-MM-DD)
+  - `created_ts` INTEGER NOT NULL
+  - `updated_ts` INTEGER NOT NULL
+- [x] Índices:
+  - `idx_entidades_plantel_rol` ON (rol, estado_activo)
+  - `idx_entidades_plantel_activo` ON (estado_activo)
+
+**Archivos modificados:**
+- `lib/data/dao/db.dart`: Tabla creada en onCreate, helper ensureEntidadesPlantelTabla()
+
+#### 17.2: Actualizar Tabla `compromisos` ✅ COMPLETADO
+- [x] Agregar columna:
+  - `entidad_plantel_id` INTEGER (FK a entidades_plantel, nullable)
+- [x] Migración idempotente
+- [x] Índice:
+  - `idx_compromisos_entidad_plantel` ON (entidad_plantel_id) WHERE entidad_plantel_id IS NOT NULL
+
+**Archivos modificados:**
+- `lib/data/dao/db.dart`: Columna agregada en onCreate y helper de migración
+
+#### 17.3: Servicio `PlantelService` ✅ COMPLETADO
+- [x] Métodos CRUD básicos
+- [x] Métodos de cálculo económico
+- [x] Validaciones completas
+
+**Archivos creados:**
+- `lib/features/shared/services/plantel_service.dart` (~390 líneas)
+
+#### 17.4: Página `plantel_page.dart` ✅ COMPLETADO
+- [x] Resumen general (KPIs)
+- [x] Tabla/Tarjetas con toggle
+- [x] Filtros por rol y estado (corregidos)
+- [x] Navegación a detalle y gestionar
+
+**Archivos creados:**
+- `lib/features/tesoreria/pages/plantel_page.dart` (~550 líneas)
+
+#### 17.5: Página `detalle_jugador_page.dart` ✅ COMPLETADO
+- [x] Información básica completa
+- [x] Compromisos asociados
+- [x] Resumen económico mensual
+- [x] Historial de pagos
+- [x] Acciones editar y cambiar estado
+
+**Archivos creados:**
+- `lib/features/tesoreria/pages/detalle_jugador_page.dart` (~567 líneas)
+
+#### 17.6: Página `gestionar_jugadores_page.dart` ✅ COMPLETADO
+- [x] Lista completa con filtros
+- [x] Toggle tabla/tarjetas
+- [x] Navegación a detalle y editar
+- [x] Acciones dar de baja/reactivar
+
+**Archivos creados:**
+- `lib/features/tesoreria/pages/gestionar_jugadores_page.dart` (~452 líneas)
+
+#### 17.7: Página `crear_jugador_page.dart` ✅ COMPLETADO
+- [x] Formulario completo con validaciones
+- [x] Guardado con PlantelService
+
+**Archivos creados:**
+- `lib/features/tesoreria/pages/crear_jugador_page.dart` (~260 líneas)
+
+#### 17.8: Página `editar_jugador_page.dart` ✅ COMPLETADO
+- [x] Formulario pre-cargado
+- [x] Información de solo lectura
+- [x] Actualización con PlantelService
+
+**Archivos creados:**
+- `lib/features/tesoreria/pages/editar_jugador_page.dart` (~410 líneas)
+
+#### 17.9: Actualizar `crear_compromiso_page` y `editar_compromiso_page` ✅ COMPLETADO
+- [x] Agregar campo opcional:
+  - "Asociar a jugador/técnico" (Dropdown de `entidades_plantel`)
+  - Solo muestra entidades activas
+  - Filtrable por nombre
+  - Puede quedar vacío (compromisos generales)
+- [x] Al guardar:
+  - Si se selecciona jugador → guardar `entidad_plantel_id`
+  - Si no → guardar NULL
+- [x] Actualizar `CompromisosService`:
+  - Agregar parámetro `entidadPlantelId` en `crearCompromiso()`
+  - Agregar parámetro `entidadPlantelId` en `actualizarCompromiso()`
+  - Incluir `entidad_plantel_id` en insert y update
+
+**Archivos modificados:**
+- `lib/features/tesoreria/pages/crear_compromiso_page.dart` (agregado dropdown y lógica)
+- `lib/features/tesoreria/pages/editar_compromiso_page.dart` (agregado dropdown y pre-carga)
+- `lib/features/shared/services/compromisos_service.dart` (parámetro agregado en ambos métodos)
+
+**Resultado:** Ahora los compromisos pueden asociarse a jugadores/técnicos del plantel. Esto permite rastrear sueldos, viandas, combustibles, etc. por persona.
+
+#### 17.10: Navegación e Integración ✅ COMPLETADO
+- [x] Drawer de Tesorería: Ítem "Plantel" agregado
+- [x] `tesoreria_home_page.dart`: Tarjeta "Plantel" con navegación
+- [x] Navegación completa implementada entre todas las páginas
+
+**Archivos modificados:**
+- `lib/features/tesoreria/pages/tesoreria_home_page.dart`
+
+#### 17.11: Tests Unitarios ⏳ PENDIENTE
+- [ ] Crear `test/plantel_service_test.dart`
+- [ ] Tests para CRUD:
+  - Crear entidad
+  - Listar con filtros
+  - Actualizar
+  - Dar de baja / Reactivar
+  - Validación nombre único
+  - Validación no dar de baja con compromisos activos
+- [ ] Tests para cálculos económicos:
+  - calcularTotalMensualPorEntidad
+  - calcularEstadoMensualPorEntidad
+  - calcularResumenGeneral
+  - listarCompromisosDeEntidad
+  - obtenerHistorialPagosPorEntidad
+
+**Archivos a crear:**
+- `test/plantel_service_test.dart` (~400 líneas estimadas)
+
+#### 17.12: Import/Export Excel ✅ COMPLETADO
+- [x] **Nuevo servicio:** `PlantelImportExportService` (~350 líneas):
+  - Generación de template Excel con instrucciones y ejemplos
+  - Lectura y validación de archivos Excel (formato, roles válidos, fechas DD/MM/YYYY)
+  - Importación masiva con detección de duplicados y reporte de resultados (creados/duplicados/errores)
+  - Exportación filtrable por rol y estado (activos/todos)
+  - Compartir archivos vía Share
+- [x] **Nueva pantalla:** `importar_jugadores_page.dart` (~450 líneas):
+  - Instrucciones claras del formato Excel (columnas requeridas, roles válidos, formato de fecha)
+  - Botón para descargar template con ejemplos
+  - Selector de archivo Excel con file_picker
+  - Previsualización en tabla de datos a importar
+  - Validación en tiempo real con listado de errores por fila
+  - Confirmación de importación con reporte detallado (creados/duplicados/errores)
+- [x] **Actualización gestionar_jugadores_page.dart:**
+  - Botón de importar en AppBar (navega a importar_jugadores_page)
+  - Menú de exportar con opciones por rol (todos/jugadores/DT/ayudantes)
+  - Exportación respeta filtros actuales (activos/todos)
+- [x] **Dependencias:** Agregado `file_picker: ^8.1.6` al pubspec.yaml
+- [x] **Manejo de errores:** Todos los métodos del servicio tienen try-catch con logging a `app_error_log`
+
+**Archivos creados:**
+- `lib/features/shared/services/plantel_import_export_service.dart` (~350 líneas)
+- `lib/features/tesoreria/pages/importar_jugadores_page.dart` (~450 líneas)
+
+**Archivos modificados:**
+- `lib/features/tesoreria/pages/gestionar_jugadores_page.dart` (agregados botones import/export, ~570 líneas)
+- `pubspec.yaml` (agregado file_picker: ^8.1.6)
+
+**Formato del Excel:**
+- Hoja "Instrucciones": Detalle completo de formato y reglas
+- Hoja "Jugadores": Tabla con columnas:
+  - Nombre (requerido)
+  - Rol (requerido: JUGADOR/DT/AYUDANTE/PF/OTRO)
+  - Contacto (opcional)
+  - DNI (opcional)
+  - Fecha Nacimiento (opcional, formato DD/MM/YYYY)
+  - Observaciones (opcional)
+
+**Validaciones implementadas:**
+- Rol debe estar en lista de roles válidos
+- Fecha de nacimiento parseada correctamente (DD/MM/YYYY → YYYY-MM-DD)
+- Nombres duplicados se reportan en resultado (no se importan)
+- Errores de lectura se reportan por fila
+
+**UX de importación:**
+1. Usuario descarga template con ejemplos
+2. Completa Excel con datos
+3. Selecciona archivo en la app
+4. Ve previsualización de datos + errores de validación
+5. Confirma importación
+6. Ve reporte final (creados/duplicados/errores)
+
+#### 17.13: Manejo Robusto de Errores ✅ COMPLETADO
+- [x] **Problema identificado:** Error "type 'Null' is not a subtype of type 'String'"
+  - Campo `concepto` no existía en tabla `compromisos` (el campo correcto es `nombre`)
+  - Falta de null-safety en acceso a campos de base de datos
+  - No había logging de errores en módulo de Plantel
+
+- [x] **Correcciones implementadas:**
+  - Cambiado `comp['concepto']` por `comp['nombre']` con null-safety
+  - Agregado try-catch en TODAS las operaciones críticas
+  - Logging automático con `AppDatabase.logLocalError(scope, error, stackTrace, payload)`
+  - Mensajes amigables al usuario en español
+  - Operadores null-safe: `?.toString() ?? 'valor_por_defecto'`
+  - Scopes granulares de logging para debugging
+
+- [x] **Páginas protegidas con error handling:**
+  - `detalle_jugador_page.dart`: Try-catch en carga de compromisos, renderizado individual con fallback
+  - `plantel_page.dart`: Try-catch en carga general y por entidad, tarjetas con manejo de errores
+  - `editar_jugador_page.dart`: Try-catch en carga de datos y guardado
+  - `gestionar_jugadores_page.dart`: Try-catch en listado y cambio de estado
+  - `crear_jugador_page.dart`: Try-catch en guardado con mensajes contextuales
+
+- [x] **Scopes de logging implementados:**
+  - `detalle_jugador.cargar_compromisos`
+  - `detalle_jugador.render_compromiso`
+  - `plantel_page.cargar_estado_entidad`
+  - `plantel_page.cargar_datos`
+  - `plantel_page.render_tarjeta`
+  - `editar_jugador.cargar_datos`
+  - `editar_jugador.guardar`
+  - `gestionar_jugadores.cargar_entidades`
+  - `gestionar_jugadores.cambiar_estado`
+  - `crear_jugador.guardar`
+
+- [x] **Actualizar instrucciones globales:**
+  - Agregada sección "Manejo de Errores (OBLIGATORIO)" en `.github/copilot-instructions.md`
+  - Reglas NO negociables para todas las pantallas futuras
+  - Checklist de implementación con 7 puntos de verificación
+  - Ejemplos de código completos con mejores prácticas
+
+**Archivos modificados:**
+- `lib/features/tesoreria/pages/detalle_jugador_page.dart` (~570 líneas)
+- `lib/features/tesoreria/pages/plantel_page.dart` (~560 líneas)
+- `lib/features/tesoreria/pages/editar_jugador_page.dart` (~380 líneas)
+- `lib/features/tesoreria/pages/gestionar_jugadores_page.dart` (~460 líneas)
+- `lib/features/tesoreria/pages/crear_jugador_page.dart` (~300 líneas)
+- `.github/copilot-instructions.md` (nueva sección: ~120 líneas)
+
+**Resultado de compilación:**
+- ✅ 0 errores de compilación
+- ✅ Solo 13 warnings de deprecación del framework (no críticos)
+- ✅ Todos los errores ahora se loguean en `app_error_log`
+- ✅ Mensajes amigables en español para el usuario
+- ✅ No rompe la UX (muestra widgets de error en lugar de crashear)
+
+---
+
+## ✅ Resumen Fase 17
+
+**Estado:** ✅ **COMPLETADO**
+
+**Funcionalidad lograda:**
+- ✅ Base de datos completa (tablas + FK + índices)
+- ✅ Servicio con CRUD y cálculos económicos (PlantelService ~390 líneas)
+- ✅ 6 pantallas operativas (plantel, detalle, gestionar, crear, editar, importar)
+- ✅ Integración con compromisos (asociar jugadores/staff)
+- ✅ Navegación completa entre todas las pantallas
+- ✅ Filtros corregidos (roles individuales + estado TODOS funcional)
+- ✅ Manejo robusto de errores con logging y null-safety
+- ✅ Mensajes amigables al usuario en español
+- ✅ Todos los errores se registran en `app_error_log`
+- ✅ Import/Export Excel completo con template, preview y validaciones
+
+**Pendiente:**
+- ⏳ Tests unitarios (17.11) - opcional
+
+**Archivos creados:** 9
+- 6 páginas (~2,850 líneas totales: plantel, detalle, gestionar, crear, editar, importar)
+- 2 servicios (PlantelService ~390 líneas + PlantelImportExportService ~350 líneas)
+- Migración DB (entidades_plantel)
+
+**Archivos modificados:** 12
+- db.dart (migración + tabla + índices)
+- crear_compromiso_page.dart (dropdown asociar jugador/técnico)
+- editar_compromiso_page.dart (dropdown asociar jugador/técnico)
+- gestionar_jugadores_page.dart (botones import/export)
+- tesoreria_home_page.dart (tarjeta Plantel)
+- detalle_jugador_page.dart (error handling)
+- plantel_page.dart (error handling)
+- editar_jugador_page.dart (error handling)
+- crear_jugador_page.dart (error handling)
+- pubspec.yaml (file_picker dependency)
+- .github/copilot-instructions.md (manejo de errores obligatorio)
+- CHANGELOG.md (documentación completa)
+
+**Total Fase 17:** ~4,500 líneas de código nuevo
+
+---
+- compromisos_service.dart (parámetro entidad_plantel_id)
+- tesoreria_home_page.dart (navegación)
+- crear_compromiso_page.dart (dropdown jugador/staff)
+- editar_compromiso_page.dart (dropdown + pre-carga)
+- 5 páginas de plantel (manejo de errores robusto)
+- copilot-instructions.md (nueva sección manejo de errores)
+
+**Líneas de código totales:** ~3,600 líneas de producción
+
+**Archivos a modificar:**
+- `lib/features/tesoreria/pages/tesoreria_home_page.dart`
+
+#### 17.11: Tests Unitarios ⏳ PENDIENTE
+- [ ] `test/plantel_service_test.dart`:
+  - CRUD de entidades
+  - Cálculo de totales mensuales
+  - Estado mensual (pagado/esperado/atrasado)
+  - Validaciones (nombre único, no dar baja con compromisos activos)
+  - Listar compromisos de entidad
+  - Historial de pagos
+
+**Archivos a crear:**
+- `test/plantel_service_test.dart` (~400 líneas estimadas)
+
+#### 17.12: Importar/Exportar Jugadores (FUTURO - Fase 18) ⏳ PLANIFICADO
+- [ ] Formato CSV para importación masiva:
+  - Columnas: Nombre, Rol, Contacto, DNI, Fecha_Nacimiento, Observaciones
+  - Validaciones al importar
+  - Evitar duplicados
+- [ ] Exportar listado actual a CSV
+- [ ] Importar compromisos asociados (opcional)
+
+**Nota:** Esta funcionalidad se implementará en Fase 18 después de validar el flujo básico.
+
+---
+
+## 🧠 Reglas de Negocio - Plantel
+
+1. **Entidad ≠ Compromiso:** Un jugador puede tener múltiples compromisos (sueldo, vianda, combustible).
+2. **Totales dinámicos:** Se calculan sumando compromisos activos, NO se guardan.
+3. **Soft delete:** Jugadores de baja conservan historial (`estado_activo=0`).
+4. **Validación de baja:** No se puede dar de baja si tiene compromisos esperados sin confirmar.
+5. **Vista resumen:** La pantalla Plantel NO registra pagos, solo muestra estado.
+6. **Confirmación desde Movimientos:** Los pagos se confirman desde la pantalla de Movimientos (flujo existente).
+7. **Categorías claras:** Sueldos, Vianda, Combustible, Premios → cada uno es un compromiso separado.
+
+---
+
+## 📊 Estructura de Datos - Ejemplo
+
+### Jugador: Juan Pérez
+**Tabla `entidades_plantel`:**
+```
+id: 1
+nombre: Juan Pérez
+rol: JUGADOR
+estado_activo: 1
+contacto: 3512345678
+dni: 12345678
+```
+
+**Tabla `compromisos` (asociados):**
+```
+1. Sueldo – Juan Pérez        | 250.000 | MENSUAL | entidad_plantel_id=1
+2. Vianda – Juan Pérez        |  40.000 | MENSUAL | entidad_plantel_id=1
+3. Combustible – Juan Pérez   |  30.000 | MENSUAL | entidad_plantel_id=1
+```
+
+**Cálculo en Plantel:**
+- Total mensual: 320.000 (suma de compromisos)
+- Estado mes actual: consulta `evento_movimiento` filtrado por `compromiso_id`
+
+---
+
+## 🎨 Wireframe Conceptual
+
+### Pantalla: Plantel (vista resumen)
+```
+┌─────────────────────────────────────┐
+│ Plantel – Fútbol Mayor         ☰   │
+├─────────────────────────────────────┤
+│ 📊 Resumen General                  │
+│ Total mensual:      $ 6.800.000     │
+│ Pagado este mes:    $ 5.900.000     │
+│ Pendiente:          $   900.000     │
+│ Al día: 18 / 22                     │
+├─────────────────────────────────────┤
+│ Filtros: [Todos▾] [Activos▾] 📊◼   │
+├─────────────────────────────────────┤
+│ Jugador     │ Rol  │ Total │ Estado│
+│ Juan Pérez  │ JUG  │ 320k  │   ✅  │
+│ Lucas Gómez │ JUG  │ 300k  │   ⚠️  │
+│ Carlos Díaz │ DT   │ 600k  │   ⏳  │
+└─────────────────────────────────────┘
+                                   [➕]
+```
+
+### Pantalla: Detalle Jugador
+```
+┌─────────────────────────────────────┐
+│ ← Juan Pérez                    ✏️  │
+├─────────────────────────────────────┤
+│ 👤 Información                       │
+│ Rol: Jugador                         │
+│ Estado: Activo                       │
+│ Contacto: 3512345678                 │
+├─────────────────────────────────────┤
+│ 💰 Compromisos                       │
+│ Sueldo          250.000  Activo      │
+│ Vianda           40.000  Activo      │
+│ Combustible      30.000  Activo      │
+│ ──────────────────────────           │
+│ Total mensual   320.000              │
+├─────────────────────────────────────┤
+│ 📊 Este mes (Enero)                  │
+│ Pagado:         250.000              │
+│ Pendiente:       70.000              │
+├─────────────────────────────────────┤
+│ 📜 Historial (últimos 6 meses)       │
+│ 15/12 Sueldo Diciembre  250.000      │
+│ 10/12 Vianda Diciembre   40.000      │
+│ ...                                  │
+└─────────────────────────────────────┘
+```
+
+---
+
+**Estado:** 🚧 Fase 17 EN PROGRESO - Gestión de Plantel
+**Última actualización:** Enero 18, 2026
+
+### Resumen de Tareas Fase 17:
+- ⏳ **Modelo de datos**: Tabla `entidades_plantel` + FK en `compromisos`
+- ⏳ **Servicio**: `PlantelService` con CRUD y cálculos económicos
+- ⏳ **UI Principal**: `plantel_page` con resumen y tabla
+- ⏳ **UI Detalle**: `detalle_jugador_page` con compromisos e historial
+- ⏳ **UI Gestión**: `gestionar_jugadores_page` + crear/editar
+- ⏳ **Integración**: Actualizar compromisos para asociar jugadores
+- ⏳ **Navegación**: Drawer + home + flujos completos
+- ⏳ **Testing**: Validar flujos principales
+
+---
+
+**Estado:** ✅ Fase 15 COMPLETADA - Generación y Confirmación de Movimientos  
+🚧 Fase 18 EN PROGRESO - Acuerdos (Reglas/Contratos)  
+**Última actualización:** Enero 19, 2026
+
+### Resumen de Logros - Fase 15:
+- ✅ **movimientos_list_page.dart**: Vista unificada (reales + esperados)
+- ✅ **confirmar_movimiento_page.dart**: Formulario completo con adjuntos
+- ✅ **KPIs separados**: Saldo real vs Proyección
+- ✅ **Cancelación**: Long-press en esperado → registrar cancelado
+- ✅ **Navegación**: Desde detalle de compromiso → confirmar pago
+- ✅ **Estados visuales**: CONFIRMADO (blanco), ESPERADO (gris), CANCELADO (rojo)
+- ✅ **Filtros**: Por estado (Todos/Confirmados/Esperados/Cancelados)
+- ✅ **Interacción**: Tap confirmar, Long-press cancelar (vista tarjetas)
+
+---
+
+### Fase 18 🚧 EN PROGRESO - Acuerdos (Reglas/Contratos que Generan Compromisos)
+
+#### Objetivo
+Incorporar el concepto de **Acuerdo** como entidad separada que representa reglas o contratos económicos (ej: sueldos, sponsors, servicios). Un acuerdo genera automáticamente compromisos, separando la lógica de reglas de las expectativas puntuales.
+
+#### 🧠 Modelo Conceptual
+
+**Jerarquía de abstracción:**
+- **Acuerdo** = regla / contrato / condición repetitiva
+- **Compromiso** = expectativa futura concreta
+- **Movimiento** = hecho real confirmado
+
+**Regla de oro:**
+- Si algo puede ocurrir varias veces → **Acuerdo**
+- Si algo se espera que ocurra → **Compromiso**
+- Si algo ya ocurrió → **Movimiento**
+
+#### 18.1: Nueva Tabla `acuerdos` ✅ COMPLETADO
+- [x] Crear tabla en SQLite con campos:
+  - `id`, `unidad_gestion_id`, `entidad_plantel_id`, `nombre`, `tipo`
+  - `modalidad` (MONTO_TOTAL_CUOTAS / RECURRENTE)
+  - `monto_total`, `monto_periodico`, `frecuencia`, `cuotas`
+  - `fecha_inicio`, `fecha_fin`, `categoria`, `observaciones`
+  - Adjuntos, dispositivo, soft delete, sync
+- [x] Constraints CHECK para modalidades
+- [x] Índices optimizados
+- [x] Creada en `onCreate` y `onUpgrade` (idempotente)
+
+**Archivos modificados:** `lib/data/dao/db.dart`
+
+#### 18.2: Actualizar Tabla `compromisos` ✅ COMPLETADO
+- [x] Agregar columna `acuerdo_id INTEGER` (FK nullable)
+- [x] Helper `_ensureCompromisoAcuerdoIdColumn()` para migración
+- [x] Índice `idx_compromisos_acuerdo`
+
+**Archivos modificados:** `lib/data/dao/db.dart`
+
+#### 18.3: Servicio `AcuerdosService` ⏳ PENDIENTE
+- [ ] CRUD básico (crear, leer, listar, actualizar, finalizar, desactivar)
+- [ ] Generación de compromisos (`generarCompromisos`, `previewCompromisos`)
+- [ ] Validaciones (no editar con confirmados, fechas, montos, FK)
+
+**Archivos a crear:** `lib/features/shared/services/acuerdos_service.dart` (~600 líneas)
+
+#### 18.4: Actualizar `CompromisosService` ⏳ PENDIENTE
+- [ ] Aceptar `acuerdoId` opcional en `crearCompromiso()`
+- [ ] Métodos `listarCompromisosPorAcuerdo()`, `esCompromisoPorAcuerdo()`
+
+**Archivos a modificar:** `lib/features/shared/services/compromisos_service.dart`
+
+#### 18.5-18.8: Pantallas de Acuerdos ⏳ PENDIENTE
+- [ ] `acuerdos_page.dart` (~600 líneas) - Lista con filtros y toggle tabla/tarjetas
+- [ ] `crear_acuerdo_page.dart` (~700 líneas) - Formulario con preview de compromisos
+- [ ] `detalle_acuerdo_page.dart` (~500 líneas) - Info + compromisos generados
+- [ ] `editar_acuerdo_page.dart` (~600 líneas) - Solo si no tiene confirmados
+
+**Archivos a crear:** 4 páginas (~2,400 líneas totales)
+
+#### 18.9: Integrar con Compromisos ⏳ PENDIENTE
+- [ ] `detalle_compromiso_page.dart` - Mostrar acuerdo origen
+- [ ] `compromisos_page.dart` - Filtro "Manual/Por acuerdo", columna "Origen"
+
+**Archivos a modificar:** 2 páginas existentes
+
+#### 18.10: Navegación ⏳ PENDIENTE
+- [ ] Drawer: ítem "Acuerdos" (ícono handshake)
+- [ ] `tesoreria_home_page.dart`: tarjeta "Acuerdos"
+- [ ] Navegación completa entre pantallas
+
+**Archivos a modificar:** `lib/features/tesoreria/pages/tesoreria_home_page.dart`
+
+#### 18.11: Tests ⏳ PENDIENTE
+- [ ] `test/acuerdos_service_test.dart` (~400 líneas)
+  - CRUD, generación, validaciones
+
+**Archivos a crear:** `test/acuerdos_service_test.dart`
+
+#### 18.12: Sincronización ⏳ PENDIENTE
+- [ ] Script SQL Supabase
+- [ ] Bucket `acuerdos-adjuntos` (50MB, PDF/imágenes)
+- [ ] Actualizar `TesoreriaSyncService`
+- [ ] UI de sincronización en `acuerdos_page`
+
+**Archivos a crear/modificar:**
+- `tools/supabase_acuerdos_schema.sql`
+- `lib/features/shared/services/tesoreria_sync_service.dart`
+- `lib/features/tesoreria/pages/acuerdos_page.dart`
+
+---
+
+## 🎯 Resumen de Fases - Modelo Económico Completo
+
+| Fase | Objetivo | Estado | Componentes |
+|------|----------|--------|-------------|
+| **13** | Compromisos (base) | ✅ Completado | Tablas, servicios, proyección |
+| **14** | UI Compromisos | ✅ Completado | CRUD, navegación, filtros |
+| **15** | Confirmación | ✅ Completado | Esperados, reales, KPIs |
+| **16** | Sync Compromisos | ⏳ Planificado | Supabase, Storage |
+| **17** | Plantel | ✅ Completado | Entidades, económico |
+| **18** | Acuerdos | 🚧 En Progreso | Reglas, generación automática |
+
+---
+
+## 🧠 Reglas de Negocio - Acuerdos (NO NEGOCIABLES)
+
+1. **Acuerdo ≠ Compromiso ≠ Movimiento** - Tres entidades distintas
+2. **Acuerdos NO impactan saldo** - Solo en gestión, no en balances
+3. **Compromisos legacy** - Compatibilidad con `acuerdo_id=NULL`
+4. **No editar con confirmados** - Solo finalizar
+5. **Soft delete** - `eliminado=1`, nunca físico
+6. **Usuario confirma** - No generación automática de movimientos
+7. **Auditable** - Todo compromiso conoce su acuerdo origen
+8. **Preview obligatorio** - Ver antes de generar
+9. **Modalidades claras** - MONTO_TOTAL_CUOTAS vs RECURRENTE
+10. **Separación** - Buffet NO conoce Acuerdos
+
+---
+
+### Progreso de Fase 18:
+- ✅ **18.1**: Tabla `acuerdos` creada (onCreate + onUpgrade)
+- ✅ **18.2**: Columna `acuerdo_id` en `compromisos` con FK
+- ⏳ **18.3-18.12**: Servicios, UI y sync pendientes
+
+**Estimación:** ~4,000 líneas de código nuevo para completar Fase 18

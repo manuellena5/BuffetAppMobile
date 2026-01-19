@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../data/dao/db.dart';
+import '../../shared/widgets/responsive_container.dart';
 import '../../../domain/models.dart';
 import '../services/saldo_inicial_service.dart';
 import '../../shared/format.dart';
@@ -251,7 +252,9 @@ class _ConfigurarSaldoInicialPageState
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+          : ResponsiveContainer(
+              maxWidth: 800,
+              child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Form(
                 key: _formKey,
@@ -511,6 +514,7 @@ class _ConfigurarSaldoInicialPageState
                 ),
               ),
             ),
+          ),
     );
   }
 

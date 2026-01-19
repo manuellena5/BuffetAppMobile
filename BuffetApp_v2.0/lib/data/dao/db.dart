@@ -303,6 +303,46 @@ class AppDatabase {
               'dias INTEGER'
               ')');
 
+          // FASE 18: Tabla de acuerdos (reglas/contratos que generan compromisos)
+          batch.execute('CREATE TABLE acuerdos ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'unidad_gestion_id INTEGER NOT NULL, '
+              'entidad_plantel_id INTEGER, '
+              'nombre TEXT NOT NULL, '
+              "tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), "
+              "modalidad TEXT NOT NULL CHECK (modalidad IN ('MONTO_TOTAL_CUOTAS','RECURRENTE')), "
+              'monto_total REAL, '
+              'monto_periodico REAL, '
+              'frecuencia TEXT NOT NULL, '
+              'frecuencia_dias INTEGER, '
+              'cuotas INTEGER, '
+              'fecha_inicio TEXT NOT NULL, '
+              'fecha_fin TEXT, '
+              'categoria TEXT NOT NULL, '
+              'observaciones TEXT, '
+              'activo INTEGER NOT NULL DEFAULT 1, '
+              'archivo_local_path TEXT, '
+              'archivo_remote_url TEXT, '
+              'archivo_nombre TEXT, '
+              'archivo_tipo TEXT, '
+              'archivo_size INTEGER, '
+              'dispositivo_id TEXT, '
+              'eliminado INTEGER NOT NULL DEFAULT 0, '
+              "sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), "
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              'FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), '
+              'FOREIGN KEY (entidad_plantel_id) REFERENCES entidades_plantel(id), '
+              'FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), '
+              'CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio), '
+              'CHECK ((modalidad = \'MONTO_TOTAL_CUOTAS\' AND monto_total IS NOT NULL AND cuotas IS NOT NULL) OR (modalidad = \'RECURRENTE\' AND monto_periodico IS NOT NULL))'
+              ')');
+          batch.execute('CREATE INDEX idx_acuerdos_unidad ON acuerdos(unidad_gestion_id, activo)');
+          batch.execute('CREATE INDEX idx_acuerdos_tipo ON acuerdos(tipo, activo)');
+          batch.execute('CREATE INDEX idx_acuerdos_entidad ON acuerdos(entidad_plantel_id) WHERE entidad_plantel_id IS NOT NULL');
+          batch.execute('CREATE INDEX idx_acuerdos_sync ON acuerdos(sync_estado)');
+          batch.execute('CREATE INDEX idx_acuerdos_eliminado ON acuerdos(eliminado, activo)');
+
           // Tabla de categorías de movimientos de tesorería
           batch.execute('CREATE TABLE categoria_movimiento ('
               'id INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -316,9 +356,12 @@ class AppDatabase {
               ')');
 
           // FASE 13.1: Tabla de compromisos (obligaciones financieras recurrentes)
+          // FASE 18: Agregado acuerdo_id para vincular con acuerdos
           batch.execute('CREATE TABLE compromisos ('
               'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'acuerdo_id INTEGER, '
               'unidad_gestion_id INTEGER NOT NULL, '
+              'entidad_plantel_id INTEGER, '
               'nombre TEXT NOT NULL, '
               "tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), "
               "modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE')), "
@@ -342,14 +385,34 @@ class AppDatabase {
               "sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), "
               "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
               "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              'FOREIGN KEY (acuerdo_id) REFERENCES acuerdos(id), '
               'FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), '
+              'FOREIGN KEY (entidad_plantel_id) REFERENCES entidades_plantel(id), '
               'FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), '
               'CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio)'
-              ')');
+              ')');          batch.execute('CREATE INDEX idx_compromisos_acuerdo ON compromisos(acuerdo_id) WHERE acuerdo_id IS NOT NULL');
           batch.execute('CREATE INDEX idx_compromisos_unidad ON compromisos(unidad_gestion_id, activo)');
           batch.execute('CREATE INDEX idx_compromisos_tipo ON compromisos(tipo, activo)');
           batch.execute('CREATE INDEX idx_compromisos_sync ON compromisos(sync_estado)');
           batch.execute('CREATE INDEX idx_compromisos_eliminado ON compromisos(eliminado, activo)');
+          batch.execute('CREATE INDEX idx_compromisos_entidad_plantel ON compromisos(entidad_plantel_id) WHERE entidad_plantel_id IS NOT NULL');
+          
+          // FASE 17.1: Tabla de entidades del plantel (jugadores, cuerpo técnico)
+          batch.execute('CREATE TABLE entidades_plantel ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'nombre TEXT NOT NULL, '
+              "rol TEXT NOT NULL CHECK (rol IN ('JUGADOR','DT','AYUDANTE','PF','OTRO')), "
+              'estado_activo INTEGER NOT NULL DEFAULT 1, '
+              'observaciones TEXT, '
+              'foto_url TEXT, '
+              'contacto TEXT, '
+              'dni TEXT, '
+              'fecha_nacimiento TEXT, '
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+              ')');
+          batch.execute('CREATE INDEX idx_entidades_plantel_rol ON entidades_plantel(rol, estado_activo)');
+          batch.execute('CREATE INDEX idx_entidades_plantel_activo ON entidades_plantel(estado_activo)');
           
           // FASE 13.5: Tabla de cuotas de compromisos
           batch.execute('CREATE TABLE compromiso_cuotas ('
@@ -495,15 +558,34 @@ class AppDatabase {
           await db.execute(
               'CREATE TABLE IF NOT EXISTS frecuencias (codigo TEXT PRIMARY KEY, descripcion TEXT NOT NULL, dias INTEGER)');
           
+          // FASE 18: Crear tabla de acuerdos (idempotente)
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS acuerdos (id INTEGER PRIMARY KEY AUTOINCREMENT, unidad_gestion_id INTEGER NOT NULL, entidad_plantel_id INTEGER, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), modalidad TEXT NOT NULL CHECK (modalidad IN ('MONTO_TOTAL_CUOTAS','RECURRENTE')), monto_total REAL, monto_periodico REAL, frecuencia TEXT NOT NULL, frecuencia_dias INTEGER, cuotas INTEGER, fecha_inicio TEXT NOT NULL, fecha_fin TEXT, categoria TEXT NOT NULL, observaciones TEXT, activo INTEGER NOT NULL DEFAULT 1, archivo_local_path TEXT, archivo_remote_url TEXT, archivo_nombre TEXT, archivo_tipo TEXT, archivo_size INTEGER, dispositivo_id TEXT, eliminado INTEGER NOT NULL DEFAULT 0, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), FOREIGN KEY (entidad_plantel_id) REFERENCES entidades_plantel(id), FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio), CHECK ((modalidad = 'MONTO_TOTAL_CUOTAS' AND monto_total IS NOT NULL AND cuotas IS NOT NULL) OR (modalidad = 'RECURRENTE' AND monto_periodico IS NOT NULL)))");
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_acuerdos_unidad ON acuerdos(unidad_gestion_id, activo)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_acuerdos_tipo ON acuerdos(tipo, activo)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_acuerdos_entidad ON acuerdos(entidad_plantel_id) WHERE entidad_plantel_id IS NOT NULL');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_acuerdos_sync ON acuerdos(sync_estado)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_acuerdos_eliminado ON acuerdos(eliminado, activo)');
+          
           // Tabla de categorías de movimientos (idempotente)
           await db.execute(
-              "CREATE TABLE IF NOT EXISTS categoria_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO','AMBOS')), icono TEXT, activa INTEGER NOT NULL DEFAULT 1, created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))");
+              "CREATE TABLE IF NOT EXISTS categoria_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO','AMBOS')), icono TEXT, observacion TEXT, activa INTEGER NOT NULL DEFAULT 1, created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))");
           
           // FASE 13.5: Agregar columna modalidad a compromisos si no existe
           await _ensureCompromisoModalidadColumn(db);
           
+          // FASE 18: Asegurar columna acuerdo_id en compromisos si no existe
+          await _ensureCompromisoAcuerdoIdColumn(db);
+          
           await db.execute(
-              "CREATE TABLE IF NOT EXISTS compromisos (id INTEGER PRIMARY KEY AUTOINCREMENT, unidad_gestion_id INTEGER NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE')), monto REAL NOT NULL CHECK (monto > 0), frecuencia TEXT NOT NULL, frecuencia_dias INTEGER, cuotas INTEGER, cuotas_confirmadas INTEGER DEFAULT 0, fecha_inicio TEXT NOT NULL, fecha_fin TEXT, categoria TEXT NOT NULL, observaciones TEXT, activo INTEGER NOT NULL DEFAULT 1, archivo_local_path TEXT, archivo_remote_url TEXT, archivo_nombre TEXT, archivo_tipo TEXT, archivo_size INTEGER, dispositivo_id TEXT, eliminado INTEGER NOT NULL DEFAULT 0, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio))");
+              "CREATE TABLE IF NOT EXISTS compromisos (id INTEGER PRIMARY KEY AUTOINCREMENT, acuerdo_id INTEGER, unidad_gestion_id INTEGER NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE')), monto REAL NOT NULL CHECK (monto > 0), frecuencia TEXT NOT NULL, frecuencia_dias INTEGER, cuotas INTEGER, cuotas_confirmadas INTEGER DEFAULT 0, fecha_inicio TEXT NOT NULL, fecha_fin TEXT, categoria TEXT NOT NULL, observaciones TEXT, activo INTEGER NOT NULL DEFAULT 1, archivo_local_path TEXT, archivo_remote_url TEXT, archivo_nombre TEXT, archivo_tipo TEXT, archivo_size INTEGER, dispositivo_id TEXT, eliminado INTEGER NOT NULL DEFAULT 0, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (acuerdo_id) REFERENCES acuerdos(id), FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio))");
+          
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_acuerdo ON compromisos(acuerdo_id) WHERE acuerdo_id IS NOT NULL');
           
           // FASE 13.5: Crear tabla de cuotas si no existe
           await db.execute(
@@ -780,6 +862,9 @@ class AppDatabase {
           
           // Seed de categorías de movimientos
           await _seedCategoriasMovimiento(db);
+          
+          // FASE 17.1-17.2: Asegurar tabla entidades_plantel y columna en compromisos
+          await ensureEntidadesPlantelTabla();
 
           // Deduplicar outbox pre-índice único (por si existía)
           await db.rawDelete(
@@ -827,6 +912,26 @@ class AppDatabase {
     }
   }
 
+  /// FASE 18: Asegura que exista la columna acuerdo_id en compromisos (idempotente)
+  static Future<void> _ensureCompromisoAcuerdoIdColumn(Database db) async {
+    try {
+      final result = await db.rawQuery('PRAGMA table_info(compromisos)');
+      final hasAcuerdoId = result.any((col) => col['name'] == 'acuerdo_id');
+      
+      if (!hasAcuerdoId) {
+        await db.execute(
+          'ALTER TABLE compromisos ADD COLUMN acuerdo_id INTEGER'
+        );
+        // Crear índice después de agregar la columna
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_compromisos_acuerdo ON compromisos(acuerdo_id) WHERE acuerdo_id IS NOT NULL'
+        );
+      }
+    } catch (e) {
+      // Si la tabla no existe, no hacer nada (se creará después)
+    }
+  }
+
   static Future<void> _ensureCompromisoCuotasObservacionColumn(Database db) async {
     try {
       final result = await db.rawQuery('PRAGMA table_info(compromiso_cuotas)');
@@ -866,17 +971,17 @@ class AppDatabase {
   static Future<void> _seedCategoriasMovimiento(Database db) async {
     const categorias = [
       // INGRESOS
-      {'codigo': 'ENTR', 'nombre': 'ENTRADAS', 'tipo': 'INGRESO', 'icono': 'confirmation_number', 'activa': 1},
-      {'codigo': 'UTBP', 'nombre': 'UTILIDAD BAR Y PARRILLA', 'tipo': 'INGRESO', 'icono': 'restaurant', 'activa': 1},
-      {'codigo': 'VENT', 'nombre': 'VENTA NÚMERO EN CANCHA', 'tipo': 'INGRESO', 'icono': 'sports_soccer', 'activa': 1},
-      {'codigo': 'TRIB', 'nombre': 'TRIBUNA', 'tipo': 'INGRESO', 'icono': 'stadium', 'activa': 1},
-      {'codigo': 'PUBL', 'nombre': 'REC.PUBLICIDAD ESTÁTICA Y GASTO', 'tipo': 'INGRESO', 'icono': 'campaign', 'activa': 1},
-      {'codigo': 'COLA', 'nombre': 'COLABORADORES PAGO DT Y JUG', 'tipo': 'INGRESO', 'icono': 'volunteer_activism', 'activa': 1},
-      {'codigo': 'PEIN', 'nombre': 'PEÑAS E INGRESOS VARIOS', 'tipo': 'INGRESO', 'icono': 'groups', 'activa': 1},
-      {'codigo': 'COVE', 'nombre': 'COMISIONES VENTA RIFAS ETC.', 'tipo': 'INGRESO', 'icono': 'local_activity', 'activa': 1},
-      {'codigo': 'INTE', 'nombre': 'INTERESES y GASTOS Cuenta', 'tipo': 'INGRESO', 'icono': 'account_balance', 'activa': 1},
-      {'codigo': 'LIGA', 'nombre': 'LIGA - FICHAJES Y MULTAS', 'tipo': 'INGRESO', 'icono': 'gavel', 'activa': 1},
-      {'codigo': 'COBR', 'nombre': 'COBROS Y PAGOS PASE JUGADOR', 'tipo': 'INGRESO', 'icono': 'swap_horiz', 'activa': 1},
+      {'codigo': 'ENTR', 'nombre': 'ENTRADAS', 'tipo': 'INGRESO', 'icono': 'confirmation_number', 'observacion': 'Ingresos por venta de entradas a eventos', 'activa': 1},
+      {'codigo': 'UTBP', 'nombre': 'UTILIDAD BAR Y PARRILLA', 'tipo': 'INGRESO', 'icono': 'restaurant', 'observacion': 'Ganancias netas del servicio de bar y parrilla', 'activa': 1},
+      {'codigo': 'VENT', 'nombre': 'VENTA NÚMERO EN CANCHA', 'tipo': 'INGRESO', 'icono': 'sports_soccer', 'observacion': 'Venta de números para sorteos en partidos', 'activa': 1},
+      {'codigo': 'TRIB', 'nombre': 'TRIBUNA', 'tipo': 'INGRESO', 'icono': 'stadium', 'observacion': 'Ingresos por uso de tribunas', 'activa': 1},
+      {'codigo': 'PUBL', 'nombre': 'REC.PUBLICIDAD ESTÁTICA Y GASTO', 'tipo': 'INGRESO', 'icono': 'campaign', 'observacion': 'Ingresos por publicidad y gastos asociados', 'activa': 1},
+      {'codigo': 'COLA', 'nombre': 'COLABORADORES PAGO DT Y JUG', 'tipo': 'INGRESO', 'icono': 'volunteer_activism', 'observacion': 'Aportes de colaboradores para pago de DT y jugadores', 'activa': 1},
+      {'codigo': 'PEIN', 'nombre': 'PEÑAS E INGRESOS VARIOS', 'tipo': 'INGRESO', 'icono': 'groups', 'observacion': 'Ingresos de peñas y otros conceptos varios', 'activa': 1},
+      {'codigo': 'COVE', 'nombre': 'COMISIONES VENTA RIFAS ETC.', 'tipo': 'INGRESO', 'icono': 'local_activity', 'observacion': 'Comisiones por venta de rifas y sorteos', 'activa': 1},
+      {'codigo': 'INTE', 'nombre': 'INTERESES y GASTOS Cuenta', 'tipo': 'INGRESO', 'icono': 'account_balance', 'observacion': 'Intereses ganados y gastos bancarios', 'activa': 1},
+      {'codigo': 'LIGA', 'nombre': 'LIGA - FICHAJES Y MULTAS', 'tipo': 'INGRESO', 'icono': 'gavel', 'observacion': 'Ingresos por fichajes de jugadores y multas de liga', 'activa': 1},
+      {'codigo': 'COBR', 'nombre': 'COBROS Y PAGOS PASE JUGADOR', 'tipo': 'INGRESO', 'icono': 'swap_horiz', 'observacion': 'Transacciones por pases de jugadores', 'activa': 1},
       
       // EGRESOS
       {'codigo': 'SARB', 'nombre': 'SERVICIO DE ÁRBITROS', 'tipo': 'EGRESO', 'icono': 'sports', 'activa': 1},
@@ -1142,6 +1247,44 @@ class AppDatabase {
     } catch (e, st) {
       await logLocalError(
           scope: 'db.ensureEventoMovimientoCompromisosColumns', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
+  /// FASE 17.1-17.2: Asegura tabla entidades_plantel y columna en compromisos.
+  static Future<void> ensureEntidadesPlantelTabla() async {
+    try {
+      final db = await instance();
+      
+      // Tabla entidades_plantel
+      await db.execute('CREATE TABLE IF NOT EXISTS entidades_plantel ('
+          'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+          'nombre TEXT NOT NULL, '
+          "rol TEXT NOT NULL CHECK (rol IN ('JUGADOR','DT','AYUDANTE','PF','OTRO')), "
+          'estado_activo INTEGER NOT NULL DEFAULT 1, '
+          'observaciones TEXT, '
+          'foto_url TEXT, '
+          'contacto TEXT, '
+          'dni TEXT, '
+          'fecha_nacimiento TEXT, '
+          "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+          "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+          ')');
+      
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_entidades_plantel_rol ON entidades_plantel(rol, estado_activo)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_entidades_plantel_activo ON entidades_plantel(estado_activo)');
+      
+      // Columna entidad_plantel_id en compromisos
+      final compromisosInfo = await db.rawQuery('PRAGMA table_info(compromisos)');
+      final existeEntidadPlantel = compromisosInfo.any((c) => (c['name'] as String?) == 'entidad_plantel_id');
+      
+      if (!existeEntidadPlantel) {
+        await db.execute('ALTER TABLE compromisos ADD COLUMN entidad_plantel_id INTEGER');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_entidad_plantel ON compromisos(entidad_plantel_id) WHERE entidad_plantel_id IS NOT NULL');
+      }
+    } catch (e, st) {
+      await logLocalError(
+          scope: 'db.ensureEntidadesPlantelTabla', error: e, stackTrace: st);
       rethrow;
     }
   }

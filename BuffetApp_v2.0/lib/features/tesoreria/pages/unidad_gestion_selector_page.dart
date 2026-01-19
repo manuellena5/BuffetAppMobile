@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/dao/db.dart';
+import '../../shared/widgets/responsive_container.dart';
 import '../../shared/state/app_settings.dart';
 
 /// Página/Diálogo para seleccionar la Unidad de Gestión activa.
@@ -193,7 +194,9 @@ class _UnidadGestionSelectorPageState extends State<UnidadGestionSelectorPage> {
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : ResponsiveContainer(
+                maxWidth: 800,
+                child: Column(
                 children: [
                   // Descripción
                   Container(
@@ -282,6 +285,7 @@ class _UnidadGestionSelectorPageState extends State<UnidadGestionSelectorPage> {
                           ),
                   ),
                 ],
+                ),
               ),
         bottomNavigationBar: _loading
             ? null

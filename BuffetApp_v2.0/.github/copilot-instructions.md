@@ -369,6 +369,101 @@ Reportes:
 - Antes de crear un test nuevo, verificar si ya existe uno similar en `test/`.
 - Política: no mergear cambios críticos sin tests verdes.
 
+## Manejo de Errores (OBLIGATORIO en todas las pantallas)
+
+### Principio rector
+> TODO error debe ser capturado, logueado y presentado al usuario de forma amigable.
+
+### Reglas NO negociables
+
+**1. Try-Catch en operaciones críticas:**
+- Wrap SIEMPRE las operaciones async en try-catch (cargar datos, guardar, actualizar, eliminar)
+- Incluir stack trace en el catch: `catch (e, stack)`
+- NO mostrar stacktraces técnicos al usuario
+
+**2. Logging automático con AppDatabase.logLocalError:**
+```dart
+try {
+  // operación crítica
+} catch (e, stack) {
+  await AppDatabase.logLocalError(
+    scope: 'nombre_pantalla.operacion',  // Ej: 'detalle_jugador.cargar_datos'
+    error: e.toString(),
+    stackTrace: stack,                    // StackTrace, NO String
+    payload: {'context': 'data'},         // Información de contexto
+  );
+  
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Mensaje amigable al usuario'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+```
+
+**3. Mensajes amigables al usuario:**
+- ❌ MAL: `"type 'Null' is not a subtype of type 'String'"`
+- ✅ BIEN: `"Error al cargar datos. Por favor, intente nuevamente."`
+- ✅ MEJOR: `"No se pudieron cargar los jugadores. Verifique su conexión e intente nuevamente."`
+
+**4. Null-safety en datos de UI:**
+- NUNCA asumir que un campo existe o no es null
+- Usar operadores seguros: `campo?.toString() ?? 'valor_por_defecto'`
+- Casteos seguros: `(valor as num?)?.toDouble() ?? 0.0`
+
+**5. Scope naming (granular):**
+- Formato: `pantalla.operacion`
+- Ejemplos válidos:
+  - `detalle_jugador.cargar_datos`
+  - `plantel_page.render_tarjeta`
+  - `crear_compromiso.guardar`
+  - `sync.enviar_caja`
+  - `buffet.abrir_caja`
+
+**6. Try-catch individual en renderizado:**
+Para listas/iteraciones, wrap cada item:
+```dart
+itemBuilder: (context, index) {
+  try {
+    final item = items[index];
+    // renderizar item
+    return Card(...);
+  } catch (e, stack) {
+    AppDatabase.logLocalError(
+      scope: 'pantalla.render_item',
+      error: e.toString(),
+      stackTrace: stack,
+      payload: {'index': index},
+    );
+    return Card(
+      child: ListTile(
+        leading: Icon(Icons.warning),
+        title: Text('Error al mostrar elemento'),
+      ),
+    );
+  }
+}
+```
+
+**7. Estados de error en la UI:**
+- Agregar variables de estado: `String? _errorMessage;`
+- Mostrar widgets de error condicionalmente: `if (_errorMessage != null) _buildError()`
+- Permitir reintentos: botón "Reintentar" que llama nuevamente a `_cargarDatos()`
+
+### Checklist de implementación
+
+Antes de dar por completa una pantalla, verificar:
+- [ ] Todos los métodos async tienen try-catch
+- [ ] Todos los errores se loguean con `AppDatabase.logLocalError`
+- [ ] Los mensajes al usuario son en español y amigables
+- [ ] Los campos de datos usan null-safety (`?.`, `??`)
+- [ ] Los scopes de error son específicos y descriptivos
+- [ ] El stackTrace se pasa como `StackTrace`, no como `String`
+- [ ] La app NO crashea si hay datos malformados o nulls inesperados
+
 ## Convenciones de Código
 - Nombres de archivos: snake_case; pantallas terminan en `_page.dart`.
 - Evitar lógica de negocio en Widgets; mover a `services/`.
@@ -467,7 +562,119 @@ Comportamiento:
 - Sin romper el buffet.
 
 ---
+## Modelo Conceptual de Tesorería (Acuerdos, Compromisos, Movimientos)
 
+### 🎯 Conceptos Fundamentales (NO MODIFICAR)
+
+**Jerarquía de abstracción:**
+- **Acuerdo** = regla / contrato / condición repetitiva (ej: sueldo mensual de un DT)
+- **Compromiso** = expectativa futura concreta (ej: cuota 3 del sueldo del DT)
+- **Movimiento** = hecho real confirmado (ej: pago confirmado de la cuota 3)
+
+**Regla de oro:**
+- Si algo puede ocurrir varias veces → **Acuerdo**
+- Si algo se espera que ocurra → **Compromiso**
+- Si algo ya ocurrió → **Movimiento**
+
+### 📊 Tabla `acuerdos` (FASE 18)
+
+**Propósito:** Representar reglas o contratos económicos que generan compromisos automáticamente.
+
+**Características:**
+- NO impacta saldo (no aparece en reportes contables)
+- NO es un evento (es una regla)
+- Genera 1 o más compromisos según modalidad y frecuencia
+- Puede asociarse a `entidad_plantel` (jugador/DT) o ser general
+
+**Estructura:**
+```sql
+acuerdos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  unidad_gestion_id INTEGER NOT NULL,      -- FK a unidades_gestion
+  entidad_plantel_id INTEGER,              -- FK a entidades_plantel (opcional)
+  nombre TEXT NOT NULL,
+  tipo TEXT NOT NULL,                      -- 'INGRESO' | 'EGRESO'
+  modalidad TEXT NOT NULL,                 -- 'MONTO_TOTAL_CUOTAS' | 'RECURRENTE'
+  monto_total REAL,                        -- Para MONTO_TOTAL_CUOTAS
+  monto_periodico REAL,                    -- Para RECURRENTE
+  frecuencia TEXT NOT NULL,                -- FK a frecuencias.codigo
+  frecuencia_dias INTEGER,
+  cuotas INTEGER,                          -- Solo para MONTO_TOTAL_CUOTAS
+  fecha_inicio TEXT NOT NULL,              -- YYYY-MM-DD
+  fecha_fin TEXT,                          -- YYYY-MM-DD (opcional)
+  categoria TEXT NOT NULL,
+  observaciones TEXT,
+  activo INTEGER NOT NULL DEFAULT 1,
+  archivo_local_path TEXT,                 -- Adjuntos (contratos)
+  archivo_remote_url TEXT,
+  archivo_nombre TEXT,
+  archivo_tipo TEXT,
+  archivo_size INTEGER,
+  dispositivo_id TEXT,
+  eliminado INTEGER NOT NULL DEFAULT 0,
+  sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+  created_ts INTEGER NOT NULL,
+  updated_ts INTEGER NOT NULL,
+  FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id),
+  FOREIGN KEY (entidad_plantel_id) REFERENCES entidades_plantel(id),
+  FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo),
+  CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio),
+  CHECK ((modalidad = 'MONTO_TOTAL_CUOTAS' AND monto_total IS NOT NULL AND cuotas IS NOT NULL) 
+         OR (modalidad = 'RECURRENTE' AND monto_periodico IS NOT NULL))
+)
+```
+
+**Modalidades:**
+- `MONTO_TOTAL_CUOTAS`: Monto total dividido en X cuotas iguales (ej: $100.000 en 10 cuotas de $10.000)
+- `RECURRENTE`: Mismo monto cada período hasta fecha_fin o indefinidamente (ej: sueldo mensual de $50.000)
+
+**Relación con Compromisos:**
+- Tabla `compromisos` tiene columna `acuerdo_id INTEGER` (FK a acuerdos, nullable)
+- Si `acuerdo_id IS NOT NULL` → compromiso generado automáticamente por un acuerdo
+- Si `acuerdo_id IS NULL` → compromiso creado manualmente (legacy)
+
+### 🔄 Flujo de Trabajo con Acuerdos
+
+1. **Crear Acuerdo:** Usuario crea acuerdo (ej: Sueldo DT - $50.000/mes - 12 meses)
+2. **Preview:** Sistema muestra preview de compromisos a generar (12 compromisos de $50.000)
+3. **Confirmar:** Usuario confirma → sistema genera compromisos con `acuerdo_id` y `estado='ESPERADO'`
+4. **Confirmación de pago:** En la fecha real, usuario confirma compromiso → genera `evento_movimiento` con `estado='CONFIRMADO'`
+5. **Actualización:** Sistema marca compromiso como `CONFIRMADO` y actualiza `cuotas_confirmadas` en acuerdo
+
+### ⚠️ Reglas NO Negociables
+
+1. **Acuerdo ≠ Compromiso ≠ Movimiento:** Tres entidades distintas con responsabilidades claras
+2. **Acuerdos NO impactan saldo:** Solo aparecen en pantallas de gestión, no en balances
+3. **Compromisos legacy:** Mantener compatibilidad con compromisos sin `acuerdo_id`
+4. **No editar con confirmados:** Acuerdos con compromisos CONFIRMADO no se pueden editar (solo finalizar)
+5. **Soft delete:** Acuerdos nunca se eliminan físicamente (`eliminado=1`)
+6. **Usuario confirma todo:** No hay generación automática de movimientos
+7. **Auditable:** Cada compromiso conoce su acuerdo origen (`acuerdo_id`)
+
+### 🚫 Fuera de Alcance (NO Implementar)
+
+- ❌ Recalcular automáticamente cuotas futuras
+- ❌ Ajustar acuerdos retroactivamente
+- ❌ Compartir un mismo acuerdo entre varios jugadores
+- ❌ Automatismos contables
+- ❌ Eliminaciones físicas
+- ❌ Generación automática de movimientos en DB
+
+### 📋 Pantallas de Acuerdos (FASE 18)
+
+1. **`acuerdos_page.dart`:** Listado con filtros (tipo, unidad, entidad, activo/finalizado)
+2. **`crear_acuerdo_page.dart`:** Formulario guiado con preview de compromisos
+3. **`detalle_acuerdo_page.dart`:** Info + compromisos generados + acciones
+4. **`editar_acuerdo_page.dart`:** Solo si no tiene compromisos confirmados
+
+### 🔗 Relación con Módulos Existentes
+
+- **Compromisos:** Se crean desde acuerdos O manualmente (compatibilidad)
+- **Movimientos:** Se generan al confirmar compromisos (flujo existente)
+- **Plantel:** Acuerdos pueden asociarse a `entidad_plantel_id`
+- **Unidades de Gestión:** Todo acuerdo pertenece a una unidad
+
+---
 ## Backlog incremental (lista de cambios por complejidad)
 
 ### Fase 0 — Alinear modelos (bajo riesgo)

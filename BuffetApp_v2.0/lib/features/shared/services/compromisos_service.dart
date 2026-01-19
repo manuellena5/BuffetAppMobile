@@ -29,7 +29,10 @@ class CompromisosService {
   /// - monto <= 0
   /// - frecuencia no existe en catálogo
   /// - modalidad inválida
+  ///
+  /// FASE 18: Nuevo parámetro opcional acuerdoId para vincular con acuerdos
   Future<int> crearCompromiso({
+    int? acuerdoId,
     required int unidadGestionId,
     required String nombre,
     required String tipo, // 'INGRESO' | 'EGRESO'
@@ -48,6 +51,7 @@ class CompromisosService {
     String? archivoTipo,
     int? archivoSize,
     String? dispositivoId,
+    int? entidadPlantelId,
   }) async {
     // Validaciones
     if (monto <= 0) {
@@ -98,6 +102,7 @@ class CompromisosService {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final id = await db.insert('compromisos', {
+      'acuerdo_id': acuerdoId,
       'unidad_gestion_id': unidadGestionId,
       'nombre': nombre,
       'tipo': tipo,
@@ -118,6 +123,7 @@ class CompromisosService {
       'archivo_tipo': archivoTipo,
       'archivo_size': archivoSize,
       'dispositivo_id': dispositivoId,
+      'entidad_plantel_id': entidadPlantelId,
       'eliminado': 0,
       'sync_estado': 'PENDIENTE',
       'created_ts': now,
@@ -216,6 +222,7 @@ class CompromisosService {
     String? archivoNombre,
     String? archivoTipo,
     int? archivoSize,
+    int? entidadPlantelId,
   }) async {
     final db = await AppDatabase.instance();
 
@@ -281,6 +288,7 @@ class CompromisosService {
     if (archivoNombre != null) updates['archivo_nombre'] = archivoNombre;
     if (archivoTipo != null) updates['archivo_tipo'] = archivoTipo;
     if (archivoSize != null) updates['archivo_size'] = archivoSize;
+    if (entidadPlantelId != null) updates['entidad_plantel_id'] = entidadPlantelId;
 
     return await db.update(
       'compromisos',
@@ -918,5 +926,50 @@ class CompromisosService {
       return montoTotal - pagado;
     }
   }
+
+  /// FASE 18: Listar compromisos vinculados a un acuerdo
+  ///
+  /// Retorna todos los compromisos generados desde un acuerdo específico.
+  Future<List<Map<String, dynamic>>> listarCompromisosPorAcuerdo(int acuerdoId) async {
+    final db = await AppDatabase.instance();
+    final rows = await db.query(
+      'compromisos',
+      where: 'acuerdo_id = ? AND eliminado = 0',
+      whereArgs: [acuerdoId],
+      orderBy: 'fecha_inicio ASC, created_ts ASC',
+    );
+    return rows;
+  }
+
+  /// FASE 18: Verificar si un compromiso fue generado por un acuerdo
+  ///
+  /// Retorna true si el compromiso tiene acuerdo_id != null
+  Future<bool> esCompromisoPorAcuerdo(int compromisoId) async {
+    final compromiso = await obtenerCompromiso(compromisoId);
+    if (compromiso == null) return false;
+    return compromiso['acuerdo_id'] != null;
+  }
+
+  /// FASE 18: Obtener información del acuerdo de origen de un compromiso
+  ///
+  /// Retorna el acuerdo que generó este compromiso, o null si no existe o el compromiso es manual
+  Future<Map<String, dynamic>?> obtenerAcuerdoOrigen(int compromisoId) async {
+    final compromiso = await obtenerCompromiso(compromisoId);
+    if (compromiso == null || compromiso['acuerdo_id'] == null) {
+      return null;
+    }
+
+    final acuerdoId = compromiso['acuerdo_id'] as int;
+    final db = await AppDatabase.instance();
+    final rows = await db.query(
+      'acuerdos',
+      where: 'id = ? AND eliminado = 0',
+      whereArgs: [acuerdoId],
+      limit: 1,
+    );
+
+    return rows.isEmpty ? null : rows.first;
+  }
 }
+
 

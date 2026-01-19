@@ -1,7 +1,71 @@
 # Changelog
 
 ## Unreleased
-- (sin cambios)
+### Fase 17 — Gestión de Plantel (Vista Económica) ✅ COMPLETADO
+- **Nueva funcionalidad:** Módulo completo de gestión de plantel (jugadores y cuerpo técnico) con vista económica integrada a compromisos.
+- **Base de datos:**
+  - Nueva tabla `entidades_plantel` con campos: nombre, rol (JUGADOR/DT/AYUDANTE/PF/OTRO), estado_activo, contacto, DNI, fecha_nacimiento, observaciones.
+  - Tabla `compromisos` extendida con columna `entidad_plantel_id` (FK opcional para asociar compromisos a jugadores/staff).
+  - Índices optimizados para consultas por rol, estado y asociación con compromisos.
+- **Servicio PlantelService (~390 líneas):**
+  - CRUD completo: crear, listar, actualizar, dar de baja, reactivar entidades.
+  - Cálculos económicos: total mensual por entidad, estado mensual (pagado/esperado/atrasado), resumen general del plantel.
+  - Validaciones: nombre único, no dar de baja con compromisos activos, roles válidos.
+  - Consultas: listar compromisos asociados, historial de pagos por entidad.
+- **Pantallas nuevas (5 páginas, ~2,400 líneas):**
+  - `plantel_page.dart` (~550 líneas): Resumen general con KPIs (total mensual, pagado, pendiente, jugadores al día), filtros por rol y estado, toggle tabla/tarjetas.
+  - `detalle_jugador_page.dart` (~570 líneas): Información completa del jugador, compromisos asociados, resumen económico mensual, historial de pagos (últimos 6 meses).
+  - `gestionar_jugadores_page.dart` (~570 líneas): Lista completa con filtros, toggle tabla/tarjetas, navegación a detalle/editar, acciones dar de baja/reactivar, **botones de import/export Excel**.
+  - `crear_jugador_page.dart` (~300 líneas): Formulario completo con validaciones (nombre, rol, contacto, DNI, fecha nacimiento, observaciones).
+  - `editar_jugador_page.dart` (~380 líneas): Formulario pre-cargado, información de solo lectura (ID, compromisos count, estado).
+  - `importar_jugadores_page.dart` (~450 líneas): **NUEVO** - Importación masiva desde Excel con instrucciones, selector de archivo, previsualización de datos, validaciones y resultados detallados.
+- **Integración con Compromisos:**
+  - `crear_compromiso_page.dart` y `editar_compromiso_page.dart` actualizadas con dropdown opcional "Asociar a jugador/técnico".
+  - Solo muestra entidades activas, filtrable por nombre, puede quedar vacío (compromisos generales).
+  - CompromisosService extendido con parámetro `entidadPlantelId` en métodos crear y actualizar.
+- **Navegación:**
+  - Drawer de Tesorería: nuevo ítem "Plantel" con ícono people_alt.
+  - `tesoreria_home_page.dart`: nueva tarjeta "Plantel" con descripción y navegación.
+  - Flujos completos: Home → Plantel → Detalle → Editar, Plantel → Gestionar → Crear, Gestionar → Importar/Exportar.
+- **Manejo Robusto de Errores (17.13) ✅ COMPLETADO:**
+  - **Problema resuelto:** Error "type 'Null' is not a subtype of type 'String'" al visualizar compromisos en detalle de jugador.
+  - **Causa:** Campo `concepto` no existía en tabla `compromisos` (campo correcto: `nombre`), falta de null-safety en acceso a datos.
+  - **Solución implementada:**
+    - Try-catch en TODAS las operaciones críticas (cargar datos, guardar, actualizar, eliminar, renderizado).
+    - Logging automático con `AppDatabase.logLocalError(scope, error, stackTrace, payload)` en 10 scopes granulares.
+    - Mensajes amigables al usuario en español (sin stacktraces técnicos).
+    - Null-safety completo: `?.toString() ?? 'valor_por_defecto'`, `(valor as num?)?.toDouble() ?? 0.0`.
+    - Widgets de error en lugar de crashes: tarjetas con ícono warning y mensaje "Error al mostrar elemento".
+  - **Páginas protegidas (5 archivos, ~2,270 líneas):**
+    - `detalle_jugador_page.dart`: Try-catch en carga de compromisos, renderizado individual con fallback.
+    - `plantel_page.dart`: Try-catch en carga general y por entidad, tarjetas con manejo de errores.
+    - `editar_jugador_page.dart`: Try-catch en carga de datos y guardado con mensajes contextuales.
+    - `gestionar_jugadores_page.dart`: Try-catch en listado y cambio de estado (mensaje específico para compromisos activos).
+    - `crear_jugador_page.dart`: Try-catch en guardado con detección de nombre duplicado.
+  - **Scopes de logging implementados:** 10 scopes granulares (`detalle_jugador.cargar_compromisos`, `plantel_page.render_tarjeta`, etc.).
+  - **Instrucciones actualizadas:** Nueva sección "Manejo de Errores (OBLIGATORIO)" en `.github/copilot-instructions.md` (~120 líneas) con reglas NO negociables, checklist de 7 puntos y ejemplos completos.
+- **Import/Export Excel (17.12) ✅ COMPLETADO:**
+  - **Nuevo servicio:** `PlantelImportExportService` (~350 líneas):
+    - Generación de template Excel con instrucciones y ejemplos.
+    - Lectura y validación de archivos Excel (formato, roles válidos, fechas DD/MM/YYYY).
+    - Importación masiva con detección de duplicados y reporte de resultados (creados/duplicados/errores).
+    - Exportación filtrable por rol y estado (activos/todos) con formato amigable.
+    - Compartir archivos vía Share.
+  - **Nueva pantalla:** `importar_jugadores_page.dart` (~450 líneas):
+    - Instrucciones claras del formato Excel (columnas requeridas, roles válidos, formato de fecha).
+    - Botón para descargar template con ejemplos.
+    - Selector de archivo Excel con file_picker.
+    - Previsualización en tabla de datos a importar.
+    - Validación en tiempo real con listado de errores por fila.
+    - Confirmación de importación con reporte detallado (creados/duplicados/errores).
+  - **Actualización:** `gestionar_jugadores_page.dart`:
+    - Botón de importar en AppBar (navega a `importar_jugadores_page.dart`).
+    - Menú de exportar con opciones por rol (todos/jugadores/DT/ayudantes).
+    - Exportación respeta filtros actuales (activos/todos).
+  - **Dependencias:** Agregado `file_picker: ^8.1.6` al pubspec.yaml.
+  - **Manejo de errores:** Todos los métodos del servicio tienen try-catch con logging a `app_error_log`.
+- **Compilación:** 0 errores, solo 13 warnings de deprecación del framework (no críticos).
+- **Total de código:** ~4,500 líneas de producción (6 páginas + 2 servicios + migraciones + manejo de errores + import/export).
 
 ## 1.2.1+13 — 2025-12-30
 - Eventos: nueva pantalla de Eventos (del día + históricos) 100% offline desde SQLite.

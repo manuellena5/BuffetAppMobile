@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/format.dart';
+import '../../shared/widgets/responsive_container.dart';
 import 'crear_compromiso_page.dart';
 import 'detalle_compromiso_page.dart';
 
@@ -39,11 +40,25 @@ class _CompromisosPageState extends State<CompromisosPage> {
     setState(() => _isLoading = true);
     
     try {
-      final compromisos = await _compromisosService.listarCompromisos(
+      final compromisosRaw = await _compromisosService.listarCompromisos(
         unidadGestionId: _unidadGestionId,
         tipo: _tipoFiltro,
         activo: _activoFiltro,
       );
+      
+      // Convertir a Maps mutables para poder enriquecerlos
+      final compromisos = compromisosRaw.map((c) => Map<String, dynamic>.from(c)).toList();
+      
+      // Enriquecer con información de origen (si viene de acuerdo)
+      for (final comp in compromisos) {
+        final acuerdoId = comp['acuerdo_id'];
+        if (acuerdoId != null) {
+          final esDeAcuerdo = await _compromisosService.esCompromisoPorAcuerdo(comp['id'] as int);
+          comp['es_de_acuerdo'] = esDeAcuerdo;
+        } else {
+          comp['es_de_acuerdo'] = false;
+        }
+      }
       
       setState(() {
         _compromisos = compromisos;
@@ -124,11 +139,14 @@ class _CompromisosPageState extends State<CompromisosPage> {
           ? const Center(child: CircularProgressIndicator())
           : _compromisos.isEmpty
               ? _buildEmpty()
-              : RefreshIndicator(
-                  onRefresh: _cargarCompromisos,
-                  child: _vistaTabla
-                      ? _buildTabla()
-                      : _buildTarjetas(),
+              : ResponsiveContainer(
+                  maxWidth: _vistaTabla ? 1400 : 1000,
+                  child: RefreshIndicator(
+                    onRefresh: _cargarCompromisos,
+                    child: _vistaTabla
+                        ? _buildTabla()
+                        : _buildTarjetas(),
+                  ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _crearCompromiso,
@@ -171,6 +189,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
             DataColumn(label: Text('Frecuencia')),
             DataColumn(label: Text('Próximo Vencimiento')),
             DataColumn(label: Text('Cuotas')),
+            DataColumn(label: Text('Origen')),
             DataColumn(label: Text('Estado')),
             DataColumn(label: Text('Acciones')),
           ],
@@ -185,6 +204,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
     final tipo = c['tipo'] as String;
     final cuotas = c['cuotas'];
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
+    final esDeAcuerdo = c['es_de_acuerdo'] == true;
     
     return DataRow(
       onSelectChanged: (_) => _verDetalle(c['id'] as int),
@@ -194,7 +214,8 @@ class _CompromisosPageState extends State<CompromisosPage> {
         DataCell(Text(Format.money(c['monto'] ?? 0))),
         DataCell(Text(c['frecuencia'] ?? '')),
         DataCell(_buildProximoVencimiento(c['id'] as int)),
-        DataCell(Text(cuotas != null ? '$cuotasConfirmadas/$cuotas' : '-')),
+        DataCell(Text(cuotas != null ? '$cuotasConfirmadas/$cuotas' : '—')),
+        DataCell(_buildOrigenBadge(esDeAcuerdo)),
         DataCell(_buildEstadoBadge(activo)),
         DataCell(
           Row(
@@ -235,6 +256,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
     final tipo = c['tipo'] as String;
     final cuotas = c['cuotas'];
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
+    final esDeAcuerdo = c['es_de_acuerdo'] == true;
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -245,7 +267,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: nombre y tipo
+              // Header: nombre, tipo y estado
               Row(
                 children: [
                   Expanded(
@@ -262,6 +284,26 @@ class _CompromisosPageState extends State<CompromisosPage> {
                   _buildEstadoBadge(activo),
                 ],
               ),
+              
+              // Indicador de origen
+              if (esDeAcuerdo) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.handshake, size: 16, color: Colors.purple.shade700),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Generado desde Acuerdo',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.purple.shade700,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              
               const SizedBox(height: 12),
               
               // Monto y frecuencia
@@ -390,6 +432,35 @@ class _CompromisosPageState extends State<CompromisosPage> {
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+
+  Widget _buildOrigenBadge(bool esDeAcuerdo) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: esDeAcuerdo ? Colors.purple[100] : Colors.grey[200],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            esDeAcuerdo ? Icons.handshake : Icons.edit,
+            size: 14,
+            color: esDeAcuerdo ? Colors.purple[900] : Colors.grey[700],
+          ),
+          const SizedBox(width: 4),
+          Text(
+            esDeAcuerdo ? 'ACUERDO' : 'MANUAL',
+            style: TextStyle(
+              color: esDeAcuerdo ? Colors.purple[900] : Colors.grey[700],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
