@@ -11,6 +11,16 @@ class AppDatabase {
   static bool _desktopFactoryInitialized = false;
   static DatabaseFactory? _explicitFactory;
 
+  /// Solo para tests: cierra y resetea el singleton para aislar casos.
+  static Future<void> resetForTests() async {
+    try {
+      await _db?.close();
+    } catch (_) {}
+    _db = null;
+    _desktopFactoryInitialized = false;
+    _explicitFactory = null;
+  }
+
   static void _ensureDesktopFactory() {
     if (_desktopFactoryInitialized) return;
     // En Windows/Linux/macOS usamos sqflite_common_ffi.
@@ -69,7 +79,7 @@ class AppDatabase {
     _db = await factory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 5,
+        version: 11,
         onConfigure: (db) async {
           // PRAGMAs: en Android usar rawQuery porque devuelven filas
           await db.rawQuery('PRAGMA foreign_keys=ON');
@@ -222,6 +232,43 @@ class AppDatabase {
           batch.execute(
               'CREATE INDEX idx_mov_caja_tipo ON caja_movimiento(caja_id, tipo)');
 
+          // Movimientos financieros externos al buffet (vNext)
+          // FASE 13.1: Actualizado con campos de compromisos
+          batch.execute('CREATE TABLE evento_movimiento ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'evento_id TEXT, '
+              'disciplina_id INTEGER NOT NULL, '
+              "tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), "
+              'categoria TEXT, '
+              'monto REAL NOT NULL CHECK (monto > 0), '
+              'medio_pago_id INTEGER NOT NULL, '
+              'observacion TEXT, '
+              'dispositivo_id TEXT, '
+              'archivo_local_path TEXT, '
+              'archivo_remote_url TEXT, '
+              'archivo_nombre TEXT, '
+              'archivo_tipo TEXT, '
+              'archivo_size INTEGER, '
+              'eliminado INTEGER NOT NULL DEFAULT 0, '
+              'compromiso_id INTEGER, '
+              "estado TEXT NOT NULL DEFAULT 'CONFIRMADO' CHECK (estado IN ('ESPERADO','CONFIRMADO','CANCELADO')), "
+              "sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), "
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              'updated_ts INTEGER, '
+              'FOREIGN KEY (medio_pago_id) REFERENCES metodos_pago(id), '
+              'FOREIGN KEY (compromiso_id) REFERENCES compromisos(id)'
+              ')');
+          batch.execute(
+              'CREATE INDEX idx_evento_mov_disc_created ON evento_movimiento(disciplina_id, created_ts)');
+          batch.execute(
+              'CREATE INDEX idx_evento_mov_evento_id ON evento_movimiento(evento_id)');
+          batch.execute(
+              'CREATE INDEX idx_evento_mov_mp_id ON evento_movimiento(medio_pago_id)');
+          batch.execute(
+              'CREATE INDEX idx_evento_mov_compromiso ON evento_movimiento(compromiso_id, estado)');
+          batch.execute(
+              'CREATE INDEX idx_evento_mov_estado ON evento_movimiento(estado, created_ts)');
+
           // Catálogo: Punto de venta / Disciplinas
           batch.execute('CREATE TABLE punto_venta ('
               'codigo TEXT PRIMARY KEY, '
@@ -236,6 +283,91 @@ class AppDatabase {
               "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
               "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
               ')');
+          
+          // Nueva tabla: Unidades de Gestión (reemplaza conceptualmente a disciplinas)
+          batch.execute('CREATE TABLE unidades_gestion ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'nombre TEXT UNIQUE NOT NULL, '
+              "tipo TEXT NOT NULL CHECK (tipo IN ('DISCIPLINA','COMISION','EVENTO')), "
+              'disciplina_ref TEXT, '
+              'activo INTEGER NOT NULL DEFAULT 1, '
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+              ')');
+          batch.execute('CREATE INDEX idx_unidades_gestion_tipo ON unidades_gestion(tipo, activo)');
+
+          // FASE 13.1: Tabla de frecuencias (catálogo estático para compromisos)
+          batch.execute('CREATE TABLE frecuencias ('
+              'codigo TEXT PRIMARY KEY, '
+              'descripcion TEXT NOT NULL, '
+              'dias INTEGER'
+              ')');
+
+          // Tabla de categorías de movimientos de tesorería
+          batch.execute('CREATE TABLE categoria_movimiento ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'codigo TEXT UNIQUE NOT NULL, '
+              'nombre TEXT NOT NULL, '
+              "tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO','AMBOS')), "
+              'icono TEXT, '
+              'activa INTEGER NOT NULL DEFAULT 1, '
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)"
+              ')');
+
+          // FASE 13.1: Tabla de compromisos (obligaciones financieras recurrentes)
+          batch.execute('CREATE TABLE compromisos ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'unidad_gestion_id INTEGER NOT NULL, '
+              'nombre TEXT NOT NULL, '
+              "tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), "
+              "modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE')), "
+              'monto REAL NOT NULL CHECK (monto > 0), '
+              'frecuencia TEXT NOT NULL, '
+              'frecuencia_dias INTEGER, '
+              'cuotas INTEGER, '
+              'cuotas_confirmadas INTEGER DEFAULT 0, '
+              'fecha_inicio TEXT NOT NULL, '
+              'fecha_fin TEXT, '
+              'categoria TEXT NOT NULL, '
+              'observaciones TEXT, '
+              'activo INTEGER NOT NULL DEFAULT 1, '
+              'archivo_local_path TEXT, '
+              'archivo_remote_url TEXT, '
+              'archivo_nombre TEXT, '
+              'archivo_tipo TEXT, '
+              'archivo_size INTEGER, '
+              'dispositivo_id TEXT, '
+              'eliminado INTEGER NOT NULL DEFAULT 0, '
+              "sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), "
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              'FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), '
+              'FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), '
+              'CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio)'
+              ')');
+          batch.execute('CREATE INDEX idx_compromisos_unidad ON compromisos(unidad_gestion_id, activo)');
+          batch.execute('CREATE INDEX idx_compromisos_tipo ON compromisos(tipo, activo)');
+          batch.execute('CREATE INDEX idx_compromisos_sync ON compromisos(sync_estado)');
+          batch.execute('CREATE INDEX idx_compromisos_eliminado ON compromisos(eliminado, activo)');
+          
+          // FASE 13.5: Tabla de cuotas de compromisos
+          batch.execute('CREATE TABLE compromiso_cuotas ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'compromiso_id INTEGER NOT NULL, '
+              'numero_cuota INTEGER NOT NULL, '
+              'fecha_programada TEXT NOT NULL, '
+              'monto_esperado REAL NOT NULL CHECK (monto_esperado > 0), '
+              "estado TEXT NOT NULL DEFAULT 'ESPERADO' CHECK (estado IN ('ESPERADO','CONFIRMADO','CANCELADO')), "
+              'monto_real REAL, '
+              'observacion_cancelacion TEXT, '
+              "created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              "updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), "
+              'FOREIGN KEY (compromiso_id) REFERENCES compromisos(id) ON DELETE CASCADE, '
+              'UNIQUE(compromiso_id, numero_cuota)'
+              ')');
+          batch.execute('CREATE INDEX idx_compromiso_cuotas_compromiso ON compromiso_cuotas(compromiso_id, numero_cuota)');
+          batch.execute('CREATE INDEX idx_compromiso_cuotas_fecha ON compromiso_cuotas(fecha_programada, estado)');
 
           // Outbox de sincronización con Supabase
           batch.execute('CREATE TABLE sync_outbox ('
@@ -282,10 +414,34 @@ class AppDatabase {
           batch.execute(
               'CREATE UNIQUE INDEX ux_caja_cierre_resumen_evento ON caja_cierre_resumen(evento_fecha, disciplina, codigo_caja)');
 
+          // Saldos Iniciales: balance al comienzo de un período (anual o mensual)
+          // NO se registra como movimiento, se usa como base para cálculos
+          batch.execute('CREATE TABLE saldos_iniciales ('
+              'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+              'unidad_gestion_id INTEGER NOT NULL, '
+              "periodo_tipo TEXT NOT NULL CHECK (periodo_tipo IN ('ANIO','MES')), "
+              'periodo_valor TEXT NOT NULL, '
+              'monto REAL NOT NULL, '
+              'observacion TEXT, '
+              'fecha_carga TEXT NOT NULL, '
+              'FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id)'
+              ')');
+          batch.execute(
+              'CREATE UNIQUE INDEX ux_saldo_inicial_unidad_periodo ON saldos_iniciales(unidad_gestion_id, periodo_tipo, periodo_valor)');
+
           await batch.commit(noResult: true);
 
           // Semillas iniciales (única vez)
           await _seedData(db);
+          
+          // Seed de unidades de gestión (tabla nueva que reemplaza disciplinas)
+          await _seedUnidadesGestion(db);
+          
+          // FASE 13.1: Seed de frecuencias
+          await _seedFrecuencias(db);
+          
+          // Seed de categorías de movimientos
+          await _seedCategoriasMovimiento(db);
         },
         // Migraciones para instalaciones previas (v1 -> v2)
         onUpgrade: (db, from, to) async {
@@ -313,6 +469,10 @@ class AppDatabase {
           await db.execute(
               'CREATE TABLE IF NOT EXISTS disciplinas (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT UNIQUE NOT NULL, created_ts INTEGER, updated_ts INTEGER)');
           await db.execute(
+              "CREATE TABLE IF NOT EXISTS unidades_gestion (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT UNIQUE NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('DISCIPLINA','COMISION','EVENTO')), disciplina_ref TEXT, activo INTEGER NOT NULL DEFAULT 1, created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))");
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_unidades_gestion_tipo ON unidades_gestion(tipo, activo)');
+          await db.execute(
               'CREATE TABLE IF NOT EXISTS sync_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, ref TEXT NOT NULL, payload TEXT NOT NULL, estado TEXT NOT NULL DEFAULT \"pending\", reintentos INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_ts INTEGER NOT NULL DEFAULT (strftime(\'%s\',\'now\')*1000))');
           await db.execute(
               'CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_tipo_ref ON sync_outbox(tipo, ref)');
@@ -320,6 +480,96 @@ class AppDatabase {
               'CREATE TABLE IF NOT EXISTS sync_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, message TEXT, payload TEXT, created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
           await db.execute(
               'CREATE TABLE IF NOT EXISTS app_error_log (id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, message TEXT, stacktrace TEXT, payload TEXT, created_ts TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+
+          // Tabla vNext: movimientos financieros externos (idempotente)
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS evento_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, evento_id TEXT, disciplina_id INTEGER NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), categoria TEXT, monto REAL NOT NULL CHECK (monto > 0), medio_pago_id INTEGER NOT NULL, observacion TEXT, dispositivo_id TEXT, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (medio_pago_id) REFERENCES metodos_pago(id))");
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_evento_mov_disc_created ON evento_movimiento(disciplina_id, created_ts)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_evento_mov_evento_id ON evento_movimiento(evento_id)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_evento_mov_mp_id ON evento_movimiento(medio_pago_id)');
+
+          // FASE 13.1: Crear tablas de compromisos si no existen (idempotente)
+          await db.execute(
+              'CREATE TABLE IF NOT EXISTS frecuencias (codigo TEXT PRIMARY KEY, descripcion TEXT NOT NULL, dias INTEGER)');
+          
+          // Tabla de categorías de movimientos (idempotente)
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS categoria_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO','AMBOS')), icono TEXT, activa INTEGER NOT NULL DEFAULT 1, created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000))");
+          
+          // FASE 13.5: Agregar columna modalidad a compromisos si no existe
+          await _ensureCompromisoModalidadColumn(db);
+          
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS compromisos (id INTEGER PRIMARY KEY AUTOINCREMENT, unidad_gestion_id INTEGER NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE')), monto REAL NOT NULL CHECK (monto > 0), frecuencia TEXT NOT NULL, frecuencia_dias INTEGER, cuotas INTEGER, cuotas_confirmadas INTEGER DEFAULT 0, fecha_inicio TEXT NOT NULL, fecha_fin TEXT, categoria TEXT NOT NULL, observaciones TEXT, activo INTEGER NOT NULL DEFAULT 1, archivo_local_path TEXT, archivo_remote_url TEXT, archivo_nombre TEXT, archivo_tipo TEXT, archivo_size INTEGER, dispositivo_id TEXT, eliminado INTEGER NOT NULL DEFAULT 0, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio))");
+          
+          // FASE 13.5: Crear tabla de cuotas si no existe
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS compromiso_cuotas (id INTEGER PRIMARY KEY AUTOINCREMENT, compromiso_id INTEGER NOT NULL, numero_cuota INTEGER NOT NULL, fecha_programada TEXT NOT NULL, monto_esperado REAL NOT NULL CHECK (monto_esperado > 0), estado TEXT NOT NULL DEFAULT 'ESPERADO' CHECK (estado IN ('ESPERADO','CONFIRMADO','CANCELADO')), monto_real REAL, created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (compromiso_id) REFERENCES compromisos(id) ON DELETE CASCADE, UNIQUE(compromiso_id, numero_cuota))");
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_compromiso_cuotas_compromiso ON compromiso_cuotas(compromiso_id, numero_cuota)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_compromiso_cuotas_fecha ON compromiso_cuotas(fecha_programada, estado)');
+          
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_unidad ON compromisos(unidad_gestion_id, activo)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_tipo ON compromisos(tipo, activo)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_sync ON compromisos(sync_estado)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_eliminado ON compromisos(eliminado, activo)');
+
+          // Migración desde v6 (id TEXT / medio_pago TEXT) a v7 (id autoincrement / medio_pago_id FK)
+          try {
+            final emInfo = await db.rawQuery('PRAGMA table_info(evento_movimiento)');
+            final hasMedioPagoId =
+                emInfo.any((c) => (c['name'] as String?) == 'medio_pago_id');
+            final hasMedioPagoText =
+                emInfo.any((c) => (c['name'] as String?) == 'medio_pago');
+            final idType = emInfo
+                .firstWhere(
+                  (c) => (c['name'] as String?) == 'id',
+                  orElse: () => const <String, Object?>{},
+                )['type']
+                ?.toString()
+                .toUpperCase();
+            final idIsText = (idType ?? '').contains('TEXT');
+
+            if (emInfo.isNotEmpty && (hasMedioPagoText || !hasMedioPagoId || idIsText)) {
+              await db.transaction((txn) async {
+                await txn.execute(
+                    'ALTER TABLE evento_movimiento RENAME TO evento_movimiento_legacy_v6');
+
+                await txn.execute(
+                    "CREATE TABLE evento_movimiento (id INTEGER PRIMARY KEY AUTOINCREMENT, evento_id TEXT, disciplina_id INTEGER NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), categoria TEXT, monto REAL NOT NULL CHECK (monto > 0), medio_pago_id INTEGER NOT NULL, observacion TEXT, dispositivo_id TEXT, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (medio_pago_id) REFERENCES metodos_pago(id))");
+                await txn.execute(
+                    'CREATE INDEX IF NOT EXISTS idx_evento_mov_disc_created ON evento_movimiento(disciplina_id, created_ts)');
+                await txn.execute(
+                    'CREATE INDEX IF NOT EXISTS idx_evento_mov_evento_id ON evento_movimiento(evento_id)');
+                await txn.execute(
+                    'CREATE INDEX IF NOT EXISTS idx_evento_mov_mp_id ON evento_movimiento(medio_pago_id)');
+
+                // Copia best-effort desde el esquema viejo.
+                // Mapear medio_pago TEXT -> medio_pago_id (1/2) si aplica; fallback a 1 (Efectivo).
+                await txn.execute(
+                    "INSERT INTO evento_movimiento (evento_id, disciplina_id, tipo, categoria, monto, medio_pago_id, observacion, dispositivo_id, sync_estado, created_ts) "
+                    "SELECT evento_id, disciplina_id, tipo, categoria, monto, "
+                    "CASE medio_pago "
+                    "  WHEN 'Efectivo' THEN 1 "
+                    "  WHEN 'Transferencia' THEN 2 "
+                    "  ELSE 1 "
+                    "END AS medio_pago_id, "
+                    "observacion, dispositivo_id, sync_estado, created_ts "
+                    "FROM evento_movimiento_legacy_v6");
+
+                await txn.execute('DROP TABLE evento_movimiento_legacy_v6');
+              });
+            }
+          } catch (e, st) {
+            await logLocalError(
+                scope: 'db.migrate_evento_movimiento_v7',
+                error: e,
+                stackTrace: st);
+          }
 
           // Tabla para persistir descargas de cierres (idempotente)
           await db.execute(
@@ -347,6 +597,48 @@ class AppDatabase {
           await _ensureCol('conteo_transferencias_final',
               'conteo_transferencias_final REAL');
           await _ensureCol('visible', 'visible INTEGER NOT NULL DEFAULT 1');
+
+          // Asegurar columnas de archivo en evento_movimiento
+          final emColumnInfo = await db.rawQuery('PRAGMA table_info(evento_movimiento)');
+          Future<void> _ensureColEM(String name, String ddl) async {
+            final exists = emColumnInfo.any((c) => (c['name'] as String?) == name);
+            if (!exists) {
+              await db.execute('ALTER TABLE evento_movimiento ADD COLUMN $ddl');
+            }
+          }
+          
+          await _ensureColEM('archivo_local_path', 'archivo_local_path TEXT');
+          await _ensureColEM('archivo_remote_url', 'archivo_remote_url TEXT');
+          await _ensureColEM('archivo_nombre', 'archivo_nombre TEXT');
+          await _ensureColEM('archivo_tipo', 'archivo_tipo TEXT');
+          await _ensureColEM('archivo_size', 'archivo_size INTEGER');
+          await _ensureColEM('eliminado', 'eliminado INTEGER NOT NULL DEFAULT 0');
+          await _ensureColEM('updated_ts', 'updated_ts INTEGER');
+          
+          // FASE 13.1: Asegurar nuevas columnas de compromisos en evento_movimiento
+          await _ensureColEM('compromiso_id', 'compromiso_id INTEGER');
+          await _ensureColEM('estado', "estado TEXT NOT NULL DEFAULT 'CONFIRMADO' CHECK (estado IN ('ESPERADO','CONFIRMADO','CANCELADO'))");
+          
+          // Crear índices de compromisos si no existen
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_evento_mov_compromiso ON evento_movimiento(compromiso_id, estado)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_evento_mov_estado ON evento_movimiento(estado, created_ts)');
+
+          // Tabla para saldos iniciales (idempotente)
+          // Balance al comienzo de un período (anual o mensual) - NO se registra como movimiento
+          await db.execute(
+              "CREATE TABLE IF NOT EXISTS saldos_iniciales ("
+              "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+              "unidad_gestion_id INTEGER NOT NULL, "
+              "periodo_tipo TEXT NOT NULL CHECK (periodo_tipo IN ('ANIO','MES')), "
+              "periodo_valor TEXT NOT NULL, "
+              "monto REAL NOT NULL, "
+              "observacion TEXT, "
+              "fecha_carga TEXT NOT NULL, "
+              "FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id)"
+              ")");
+          await db.execute(
+              'CREATE UNIQUE INDEX IF NOT EXISTS ux_saldo_inicial_unidad_periodo ON saldos_iniciales(unidad_gestion_id, periodo_tipo, periodo_valor)');
+
 
           // Asegurar columna alias_caja en punto_venta
           try {
@@ -406,6 +698,9 @@ class AppDatabase {
 
           // Catálogos base (normalizados): como no consideramos datos históricos,
           // dejamos los catálogos exactamente como el listado esperado.
+          
+          // Asegurar seed de unidades_gestion (incluso si la tabla ya existía)
+          await _seedUnidadesGestion(db);
 
           // metodos_pago
           await db.rawUpdate(
@@ -460,7 +755,7 @@ class AppDatabase {
           await db.insert('punto_venta', {'codigo': 'Caj04', 'nombre': 'Caja4'},
               conflictAlgorithm: ConflictAlgorithm.ignore);
 
-          // disciplinas
+          // disciplinas (deprecated - mantener para compatibilidad)
           await db.delete('disciplinas');
           const disciplinas = [
             {'id': 1, 'nombre': 'Futbol Infantil'},
@@ -476,6 +771,15 @@ class AppDatabase {
             await db.insert('disciplinas', d,
                 conflictAlgorithm: ConflictAlgorithm.ignore);
           }
+          
+          // unidades_gestion (nuevo concepto que reemplaza disciplinas)
+          await _seedUnidadesGestion(db);
+          
+          // FASE 13.1: Seed de frecuencias (catálogo estático)
+          await _seedFrecuencias(db);
+          
+          // Seed de categorías de movimientos
+          await _seedCategoriasMovimiento(db);
 
           // Deduplicar outbox pre-índice único (por si existía)
           await db.rawDelete(
@@ -485,6 +789,131 @@ class AppDatabase {
     );
 
     return _db!;
+  }
+  
+  /// Seed de unidades de gestión (se ejecuta en onCreate y onUpgrade)
+  /// para asegurar que siempre estén presentes
+  static Future<void> _seedUnidadesGestion(Database db) async {
+    const unidadesGestion = [
+      {'id': 1, 'nombre': 'Fútbol Mayor', 'tipo': 'DISCIPLINA', 'disciplina_ref': 'FUTBOL', 'activo': 1},
+      {'id': 2, 'nombre': 'Fútbol Infantil', 'tipo': 'DISCIPLINA', 'disciplina_ref': 'FUTBOL', 'activo': 1},
+      {'id': 3, 'nombre': 'Vóley', 'tipo': 'DISCIPLINA', 'disciplina_ref': 'VOLEY', 'activo': 1},
+      {'id': 4, 'nombre': 'Patín', 'tipo': 'DISCIPLINA', 'disciplina_ref': 'PATIN', 'activo': 1},
+      {'id': 5, 'nombre': 'Tenis', 'tipo': 'DISCIPLINA', 'disciplina_ref': 'TENIS', 'activo': 1},
+      {'id': 6, 'nombre': 'Fútbol Senior', 'tipo': 'DISCIPLINA', 'disciplina_ref': 'FUTBOL', 'activo': 1},
+      {'id': 7, 'nombre': 'Comisión Directiva', 'tipo': 'COMISION', 'disciplina_ref': null, 'activo': 1},
+      {'id': 8, 'nombre': 'Evento Especial', 'tipo': 'EVENTO', 'disciplina_ref': null, 'activo': 1},
+    ];
+    
+    for (final u in unidadesGestion) {
+      await db.insert('unidades_gestion', u,
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
+  /// FASE 13.5: Asegura que exista la columna modalidad en compromisos (idempotente)
+  static Future<void> _ensureCompromisoModalidadColumn(Database db) async {
+    try {
+      final result = await db.rawQuery('PRAGMA table_info(compromisos)');
+      final hasModalidad = result.any((col) => col['name'] == 'modalidad');
+      
+      if (!hasModalidad) {
+        await db.execute(
+          "ALTER TABLE compromisos ADD COLUMN modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE'))"
+        );
+      }
+    } catch (e) {
+      // Si la tabla no existe, no hacer nada (se creará después)
+    }
+  }
+
+  static Future<void> _ensureCompromisoCuotasObservacionColumn(Database db) async {
+    try {
+      final result = await db.rawQuery('PRAGMA table_info(compromiso_cuotas)');
+      final hasObservacion = result.any((col) => col['name'] == 'observacion_cancelacion');
+      
+      if (!hasObservacion) {
+        await db.execute(
+          'ALTER TABLE compromiso_cuotas ADD COLUMN observacion_cancelacion TEXT'
+        );
+      }
+    } catch (e) {
+      // Si la tabla no existe, no hacer nada (se creará después)
+    }
+  }
+
+  /// FASE 13.1: Seed de frecuencias para compromisos (se ejecuta en onCreate y onUpgrade)
+  /// Catálogo estático de frecuencias de pago/cobro
+  static Future<void> _seedFrecuencias(Database db) async {
+    const frecuencias = [
+      {'codigo': 'MENSUAL', 'descripcion': 'Mensual', 'dias': 30},
+      {'codigo': 'BIMESTRAL', 'descripcion': 'Bimestral', 'dias': 60},
+      {'codigo': 'TRIMESTRAL', 'descripcion': 'Trimestral', 'dias': 90},
+      {'codigo': 'CUATRIMESTRAL', 'descripcion': 'Cuatrimestral', 'dias': 120},
+      {'codigo': 'SEMESTRAL', 'descripcion': 'Semestral', 'dias': 180},
+      {'codigo': 'ANUAL', 'descripcion': 'Anual', 'dias': 365},
+      {'codigo': 'UNICA_VEZ', 'descripcion': 'Única vez', 'dias': null},
+    ];
+    
+    for (final f in frecuencias) {
+      await db.insert('frecuencias', f,
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
+  /// Seed de categorías de movimientos de tesorería (se ejecuta en onCreate y onUpgrade)
+  /// Catálogo inicial de categorías comunes
+  static Future<void> _seedCategoriasMovimiento(Database db) async {
+    const categorias = [
+      // INGRESOS
+      {'codigo': 'ENTR', 'nombre': 'ENTRADAS', 'tipo': 'INGRESO', 'icono': 'confirmation_number', 'activa': 1},
+      {'codigo': 'UTBP', 'nombre': 'UTILIDAD BAR Y PARRILLA', 'tipo': 'INGRESO', 'icono': 'restaurant', 'activa': 1},
+      {'codigo': 'VENT', 'nombre': 'VENTA NÚMERO EN CANCHA', 'tipo': 'INGRESO', 'icono': 'sports_soccer', 'activa': 1},
+      {'codigo': 'TRIB', 'nombre': 'TRIBUNA', 'tipo': 'INGRESO', 'icono': 'stadium', 'activa': 1},
+      {'codigo': 'PUBL', 'nombre': 'REC.PUBLICIDAD ESTÁTICA Y GASTO', 'tipo': 'INGRESO', 'icono': 'campaign', 'activa': 1},
+      {'codigo': 'COLA', 'nombre': 'COLABORADORES PAGO DT Y JUG', 'tipo': 'INGRESO', 'icono': 'volunteer_activism', 'activa': 1},
+      {'codigo': 'PEIN', 'nombre': 'PEÑAS E INGRESOS VARIOS', 'tipo': 'INGRESO', 'icono': 'groups', 'activa': 1},
+      {'codigo': 'COVE', 'nombre': 'COMISIONES VENTA RIFAS ETC.', 'tipo': 'INGRESO', 'icono': 'local_activity', 'activa': 1},
+      {'codigo': 'INTE', 'nombre': 'INTERESES y GASTOS Cuenta', 'tipo': 'INGRESO', 'icono': 'account_balance', 'activa': 1},
+      {'codigo': 'LIGA', 'nombre': 'LIGA - FICHAJES Y MULTAS', 'tipo': 'INGRESO', 'icono': 'gavel', 'activa': 1},
+      {'codigo': 'COBR', 'nombre': 'COBROS Y PAGOS PASE JUGADOR', 'tipo': 'INGRESO', 'icono': 'swap_horiz', 'activa': 1},
+      
+      // EGRESOS
+      {'codigo': 'SARB', 'nombre': 'SERVICIO DE ÁRBITROS', 'tipo': 'EGRESO', 'icono': 'sports', 'activa': 1},
+      {'codigo': 'SPOL', 'nombre': 'SERVICIO POLICIA ADICIONAL', 'tipo': 'EGRESO', 'icono': 'local_police', 'activa': 1},
+      {'codigo': 'FUMA', 'nombre': 'FUMIGACION', 'tipo': 'EGRESO', 'icono': 'pest_control', 'activa': 1},
+      {'codigo': 'PAJU', 'nombre': 'PAGO JUGADORES', 'tipo': 'EGRESO', 'icono': 'people', 'activa': 1},
+      {'codigo': 'MOAP', 'nombre': 'MOVILIDAD-APORTES Y GASTOS', 'tipo': 'EGRESO', 'icono': 'directions_bus', 'activa': 1},
+      {'codigo': 'SGIN', 'nombre': 'SERVICIO GIMNASIO', 'tipo': 'EGRESO', 'icono': 'fitness_center', 'activa': 1},
+      {'codigo': 'SPFT', 'nombre': 'SERVICIOS P.F. Y TÉCNICO', 'tipo': 'EGRESO', 'icono': 'medical_services', 'activa': 1},
+      {'codigo': 'PALO', 'nombre': 'PAGO JUGADORES LOCALES', 'tipo': 'EGRESO', 'icono': 'home', 'activa': 1},
+      {'codigo': 'GAAJ', 'nombre': 'GASTOS ATENCIÓN JUGADORES', 'tipo': 'EGRESO', 'icono': 'restaurant_menu', 'activa': 1},
+      {'codigo': 'GAMF', 'nombre': 'GASTOS MÉDICOS Y FARMACIA', 'tipo': 'EGRESO', 'icono': 'local_pharmacy', 'activa': 1},
+      {'codigo': 'LAAR', 'nombre': 'LAVADO y ARREGLOS INDUMENT.', 'tipo': 'EGRESO', 'icono': 'local_laundry_service', 'activa': 1},
+      {'codigo': 'SEGU', 'nombre': 'SEGURO', 'tipo': 'EGRESO', 'icono': 'shield', 'activa': 1},
+      {'codigo': 'PUPV', 'nombre': 'PUBLICIDAD - PAGOS VARIOS', 'tipo': 'EGRESO', 'icono': 'attach_money', 'activa': 1},
+      {'codigo': 'GAS', 'nombre': 'GAS', 'tipo': 'EGRESO', 'icono': 'local_fire_department', 'activa': 1},
+      {'codigo': 'ENEL', 'nombre': 'ENERGIA ELECTRICA', 'tipo': 'EGRESO', 'icono': 'bolt', 'activa': 1},
+      {'codigo': 'PEQD', 'nombre': 'PELOTAS-EQUIPO DEPOR.', 'tipo': 'EGRESO', 'icono': 'sports_basketball', 'activa': 1},
+      {'codigo': 'FERR', 'nombre': 'FERRETERIA', 'tipo': 'EGRESO', 'icono': 'hardware', 'activa': 1},
+      {'codigo': 'MACI', 'nombre': 'MANT.CANCHA Y INSTALACIONES', 'tipo': 'EGRESO', 'icono': 'build', 'activa': 1},
+      {'codigo': 'SEGE', 'nombre': 'SERVICIOS GENERALES / M.de Obra', 'tipo': 'EGRESO', 'icono': 'construction', 'activa': 1},
+      {'codigo': 'LISE', 'nombre': 'LIMPIEZA - Servicios', 'tipo': 'EGRESO', 'icono': 'cleaning_services', 'activa': 1},
+      {'codigo': 'OBRA', 'nombre': 'OBRAS', 'tipo': 'EGRESO', 'icono': 'engineering', 'activa': 1},
+      {'codigo': 'BIUS', 'nombre': 'BIENES DE USO', 'tipo': 'EGRESO', 'icono': 'inventory_2', 'activa': 1},
+      {'codigo': 'CEIG', 'nombre': 'CERCO-INGRESOS Y GASTOS', 'tipo': 'AMBOS', 'icono': 'fence', 'activa': 1},
+      {'codigo': 'INDU', 'nombre': 'INDUMENTARIA', 'tipo': 'EGRESO', 'icono': 'checkroom', 'activa': 1},
+      {'codigo': 'SEMA', 'nombre': 'SERVICIO MEDICO Y AMBULANCIA', 'tipo': 'EGRESO', 'icono': 'ambulance', 'activa': 1},
+      {'codigo': 'GARE', 'nombre': 'GASTOS ATENCIÓN REFUERZOS', 'tipo': 'EGRESO', 'icono': 'dinner_dining', 'activa': 1},
+      {'codigo': 'INGE', 'nombre': 'INGRESOS Y GASTOS SOCIOS', 'tipo': 'AMBOS', 'icono': 'card_membership', 'activa': 1},
+      {'codigo': 'BINC', 'nombre': 'BINGO CLUB', 'tipo': 'AMBOS', 'icono': 'casino', 'activa': 1},
+      {'codigo': 'DSAL', 'nombre': 'DIFERENCIA SALDO', 'tipo': 'AMBOS', 'icono': 'account_balance_wallet', 'activa': 1},
+    ];
+    
+    for (final c in categorias) {
+      await db.insert('categoria_movimiento', c,
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
   }
 
   /// Loguea errores de la app en tabla local app_error_log (no falla la app)
@@ -649,6 +1078,74 @@ class AppDatabase {
     }
   }
 
+  /// FASE 13.1: Asegura que existan las tablas de compromisos y frecuencias.
+  /// Útil cuando la app ya estaba instalada y no se ejecuta onUpgrade.
+  static Future<void> ensureCompromisosTablas() async {
+    try {
+      final db = await instance();
+      
+      // Tabla frecuencias
+      await db.execute('CREATE TABLE IF NOT EXISTS frecuencias ('
+          'codigo TEXT PRIMARY KEY, '
+          'descripcion TEXT NOT NULL, '
+          'dias INTEGER'
+          ')');
+      await _seedFrecuencias(db);
+      
+      // FASE 13.5: Asegurar columna modalidad
+      await _ensureCompromisoModalidadColumn(db);
+      
+      // Asegurar columna observacion_cancelacion en compromiso_cuotas
+      await _ensureCompromisoCuotasObservacionColumn(db);
+      
+      // Tabla compromisos
+      await db.execute(
+          "CREATE TABLE IF NOT EXISTS compromisos (id INTEGER PRIMARY KEY AUTOINCREMENT, unidad_gestion_id INTEGER NOT NULL, nombre TEXT NOT NULL, tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')), modalidad TEXT NOT NULL DEFAULT 'RECURRENTE' CHECK (modalidad IN ('PAGO_UNICO','MONTO_TOTAL_CUOTAS','RECURRENTE')), monto REAL NOT NULL CHECK (monto > 0), frecuencia TEXT NOT NULL, frecuencia_dias INTEGER, cuotas INTEGER, cuotas_confirmadas INTEGER DEFAULT 0, fecha_inicio TEXT NOT NULL, fecha_fin TEXT, categoria TEXT NOT NULL, observaciones TEXT, activo INTEGER NOT NULL DEFAULT 1, archivo_local_path TEXT, archivo_remote_url TEXT, archivo_nombre TEXT, archivo_tipo TEXT, archivo_size INTEGER, dispositivo_id TEXT, eliminado INTEGER NOT NULL DEFAULT 0, sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')), created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id), FOREIGN KEY (frecuencia) REFERENCES frecuencias(codigo), CHECK (fecha_fin IS NULL OR fecha_fin >= fecha_inicio))");
+      
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_unidad ON compromisos(unidad_gestion_id, activo)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_tipo ON compromisos(tipo, activo)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_sync ON compromisos(sync_estado)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_compromisos_eliminado ON compromisos(eliminado, activo)');
+      
+      // FASE 13.5: Tabla de cuotas
+      await db.execute(
+          "CREATE TABLE IF NOT EXISTS compromiso_cuotas (id INTEGER PRIMARY KEY AUTOINCREMENT, compromiso_id INTEGER NOT NULL, numero_cuota INTEGER NOT NULL, fecha_programada TEXT NOT NULL, monto_esperado REAL NOT NULL CHECK (monto_esperado > 0), estado TEXT NOT NULL DEFAULT 'ESPERADO' CHECK (estado IN ('ESPERADO','CONFIRMADO','CANCELADO')), monto_real REAL, created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000), FOREIGN KEY (compromiso_id) REFERENCES compromisos(id) ON DELETE CASCADE, UNIQUE(compromiso_id, numero_cuota))");
+      
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_compromiso_cuotas_compromiso ON compromiso_cuotas(compromiso_id, numero_cuota)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_compromiso_cuotas_fecha ON compromiso_cuotas(fecha_programada, estado)');
+    } catch (e, st) {
+      await logLocalError(
+          scope: 'db.ensureCompromisosTablas', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
+  /// FASE 13.1: Asegura columnas de compromisos en evento_movimiento.
+  static Future<void> ensureEventoMovimientoCompromisosColumns() async {
+    try {
+      final db = await instance();
+      final emColumnInfo = await db.rawQuery('PRAGMA table_info(evento_movimiento)');
+      
+      Future<void> ensureCol(String name, String ddl) async {
+        final exists = emColumnInfo.any((c) => (c['name'] as String?) == name);
+        if (!exists) {
+          await db.execute('ALTER TABLE evento_movimiento ADD COLUMN $ddl');
+        }
+      }
+      
+      await ensureCol('compromiso_id', 'compromiso_id INTEGER');
+      await ensureCol('estado', "estado TEXT NOT NULL DEFAULT 'CONFIRMADO' CHECK (estado IN ('ESPERADO','CONFIRMADO','CANCELADO'))");
+      
+      // Índices
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_evento_mov_compromiso ON evento_movimiento(compromiso_id, estado)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_evento_mov_estado ON evento_movimiento(estado, created_ts)');
+    } catch (e, st) {
+      await logLocalError(
+          scope: 'db.ensureEventoMovimientoCompromisosColumns', error: e, stackTrace: st);
+      rethrow;
+    }
+  }
+
   /// Devuelve cantidad total de cajas existentes.
   static Future<int> countCajas() async {
     try {
@@ -714,6 +1211,123 @@ class AppDatabase {
       rethrow;
     }
   }
+
+  // ========================================================================
+  // SALDOS INICIALES - DAO
+  // ========================================================================
+
+  /// Inserta un nuevo saldo inicial.
+  /// Retorna el ID del registro insertado.
+  /// Lanza excepción si ya existe un saldo para esa unidad + período.
+  static Future<int> insertSaldoInicial({
+    required int unidadGestionId,
+    required String periodoTipo, // 'ANIO' | 'MES'
+    required String periodoValor, // '2026' o '2026-01'
+    required double monto,
+    String? observacion,
+  }) async {
+    final db = await instance();
+    final fechaCarga = nowLocalSqlString();
+
+    return await db.insert('saldos_iniciales', {
+      'unidad_gestion_id': unidadGestionId,
+      'periodo_tipo': periodoTipo,
+      'periodo_valor': periodoValor,
+      'monto': monto,
+      'observacion': observacion,
+      'fecha_carga': fechaCarga,
+    });
+  }
+
+  /// Obtiene el saldo inicial para una unidad y período específicos.
+  /// Retorna null si no existe.
+  static Future<Map<String, dynamic>?> obtenerSaldoInicial({
+    required int unidadGestionId,
+    required String periodoTipo,
+    required String periodoValor,
+  }) async {
+    final db = await instance();
+    final result = await db.query(
+      'saldos_iniciales',
+      where: 'unidad_gestion_id = ? AND periodo_tipo = ? AND periodo_valor = ?',
+      whereArgs: [unidadGestionId, periodoTipo, periodoValor],
+      limit: 1,
+    );
+
+    return result.isNotEmpty ? result.first : null;
+  }
+
+  /// Verifica si ya existe un saldo inicial para la unidad y período.
+  static Future<bool> existeSaldoInicial({
+    required int unidadGestionId,
+    required String periodoTipo,
+    required String periodoValor,
+  }) async {
+    final db = await instance();
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM saldos_iniciales '
+      'WHERE unidad_gestion_id = ? AND periodo_tipo = ? AND periodo_valor = ?',
+      [unidadGestionId, periodoTipo, periodoValor],
+    );
+
+    final count = Sqflite.firstIntValue(result) ?? 0;
+    return count > 0;
+  }
+
+  /// Lista todos los saldos iniciales, opcionalmente filtrados por unidad.
+  static Future<List<Map<String, dynamic>>> listarSaldosIniciales({
+    int? unidadGestionId,
+  }) async {
+    final db = await instance();
+    
+    if (unidadGestionId != null) {
+      return await db.query(
+        'saldos_iniciales',
+        where: 'unidad_gestion_id = ?',
+        whereArgs: [unidadGestionId],
+        orderBy: 'periodo_valor DESC',
+      );
+    }
+
+    return await db.query(
+      'saldos_iniciales',
+      orderBy: 'unidad_gestion_id, periodo_valor DESC',
+    );
+  }
+
+  /// Actualiza un saldo inicial existente.
+  /// Retorna el número de filas afectadas (0 si no existe).
+  static Future<int> actualizarSaldoInicial({
+    required int id,
+    required double monto,
+    String? observacion,
+  }) async {
+    final db = await instance();
+    
+    return await db.update(
+      'saldos_iniciales',
+      {
+        'monto': monto,
+        'observacion': observacion,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Elimina un saldo inicial.
+  /// Retorna el número de filas afectadas (0 si no existe).
+  static Future<int> eliminarSaldoInicial(int id) async {
+    final db = await instance();
+    
+    return await db.delete(
+      'saldos_iniciales',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ========================================================================
 
   /// Cierra la conexión actual (si existe). Best-effort.
   static Future<void> close() async {

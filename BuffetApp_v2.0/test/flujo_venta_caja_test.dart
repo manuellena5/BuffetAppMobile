@@ -4,9 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:buffet_app/services/seed_service.dart';
-import 'package:buffet_app/services/caja_service.dart';
-import 'package:buffet_app/services/venta_service.dart';
+import 'package:buffet_app/features/shared/services/seed_service.dart';
+import 'package:buffet_app/features/buffet/services/caja_service.dart';
+import 'package:buffet_app/features/buffet/services/venta_service.dart';
 import 'package:buffet_app/data/dao/db.dart';
 
 void main() {

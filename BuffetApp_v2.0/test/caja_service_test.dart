@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:buffet_app/services/caja_service.dart';
+import 'package:buffet_app/features/buffet/services/caja_service.dart';
 import 'package:buffet_app/data/dao/db.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';

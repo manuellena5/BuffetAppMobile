@@ -2,15 +2,17 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
-import 'ui/pages/pos_main_page.dart';
-import 'ui/pages/home_page.dart';
-import 'ui/state/cart_model.dart';
-import 'services/caja_service.dart';
+import 'features/buffet/pages/buffet_home_page.dart';
+import 'features/home/home_page.dart';
+import 'features/home/mode_selector_page.dart';
+import 'features/tesoreria/pages/tesoreria_home_page.dart';
+import 'features/buffet/state/cart_model.dart';
+import 'features/buffet/services/caja_service.dart';
 import 'data/dao/db.dart';
-import 'ui/state/app_settings.dart';
-import 'services/usb_printer_service.dart';
-import 'services/supabase_sync_service.dart';
-import 'ui/pages/punto_venta_setup_page.dart';
+import 'features/shared/state/app_settings.dart';
+import 'features/shared/state/app_mode.dart';
+import 'features/shared/services/usb_printer_service.dart';
+import 'features/shared/services/supabase_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +37,11 @@ class App extends StatelessWidget {
           final s = AppSettings();
           s.ensureLoaded();
           return s;
+        }),
+        ChangeNotifierProvider(create: (_) {
+          final m = AppModeState();
+          m.loadMode();
+          return m;
         }),
       ],
       child: Consumer<AppSettings>(
@@ -105,8 +112,6 @@ class _SeedGate extends StatefulWidget {
 class _SeedGateState extends State<_SeedGate> {
   late final Future<dynamic> _future;
 
-  static const _kNeedsPvSetup = '__needs_pv_setup__';
-
   @override
   void initState() {
     super.initState();
@@ -114,19 +119,8 @@ class _SeedGateState extends State<_SeedGate> {
   }
 
   Future<dynamic> _load() async {
-    // Asegurar que el Punto de Venta esté configurado antes de seguir
-    try {
-      final settings = context.read<AppSettings>();
-      await settings.ensureLoaded();
-      if (!settings.isPuntoVentaConfigured) {
-        return _kNeedsPvSetup;
-      }
-    } catch (e, st) {
-      await AppDatabase.logLocalError(
-          scope: 'startup.pv_setup_check', error: e, stackTrace: st);
-      return _kNeedsPvSetup;
-    }
-
+    // Solo verificar si hay caja abierta (para ir directo a Buffet)
+    // NO validar punto de venta aquí - cada módulo valida sus propios requisitos
     final isTest = Platform.environment['FLUTTER_TEST'] == 'true';
     // En tests NO usamos timeout para evitar timers pendientes
     final timeout = isTest ? null : const Duration(seconds: 8);
@@ -216,10 +210,36 @@ class _SeedGateState extends State<_SeedGate> {
           );
         }
         final caja = snap.data;
-        if (caja == _kNeedsPvSetup) {
-          return const PuntoVentaSetupPage(initialFlow: true);
-        }
-        return caja == null ? const HomePage() : const PosMainPage();
+        
+        // Determinar pantalla inicial según modo y estado de caja
+        return Consumer<AppModeState>(
+          builder: (context, modeState, _) {
+            // Si no se ha cargado el modo, mostrar loading
+            if (!modeState.isLoaded) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            
+            // Si hay caja abierta, ir directo a Buffet (modo caja)
+            if (caja != null) {
+              return const BuffetHomePage();
+            }
+            
+            // Sin caja abierta: verificar si hay modo configurado
+            // Si es la primera vez (no hay modo configurado), mostrar selector
+            if (!modeState.hasConfiguredMode) {
+              return const ModeSelectorPage();
+            }
+            
+            // Si ya hay modo configurado, ir según el modo seleccionado
+            if (modeState.isBuffetMode) {
+              return const HomePage(); // Home de buffet (antigua)
+            } else {
+              return const TesoreriaHomePage();
+            }
+          },
+        );
       },
     );
   }

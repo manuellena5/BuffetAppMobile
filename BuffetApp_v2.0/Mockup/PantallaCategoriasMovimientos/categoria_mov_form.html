@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Formulario Categoría ABM</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .ios-switch {
+            position: relative;
+            display: inline-block;
+            width: 51px;
+            height: 31px;
+        }
+        .ios-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #e5e7eb;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 27px;
+            width: 27px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input:checked + .slider {
+            background-color: #13ec5b;
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen">
+<div class="max-w-md mx-auto bg-white dark:bg-[#111813] min-h-screen flex flex-col">
+<!-- TopAppBar Component -->
+<header class="sticky top-0 z-10 flex items-center bg-white dark:bg-[#111813] p-4 border-b border-gray-100 dark:border-gray-800 justify-between">
+<div class="text-[#111813] dark:text-white flex size-10 shrink-0 items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back_ios</span>
+</div>
+<h2 class="text-[#111813] dark:text-white text-lg font-bold leading-tight tracking-tight flex-1 text-center">Nueva Categoría</h2>
+<div class="size-10 flex items-center justify-center">
+<!-- Spacer for centering -->
+</div>
+</header>
+<main class="flex-1 overflow-y-auto pb-32">
+<!-- Section Title -->
+<div class="px-4 pt-6">
+<p class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Información General</p>
+</div>
+<!-- TextField: Nombre -->
+<div class="flex flex-wrap items-end gap-4 px-4 py-3">
+<label class="flex flex-col min-w-40 flex-1">
+<p class="text-[#111813] dark:text-white text-base font-medium leading-normal pb-2">Nombre</p>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111813] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary border border-[#dbe6df] dark:border-gray-700 bg-white dark:bg-[#1a2e20] h-14 placeholder:text-[#61896f] p-[15px] text-base font-normal leading-normal" placeholder="Ej. Cuotas Sociales" type="text"/>
+</label>
+</div>
+<!-- TextField: Código -->
+<div class="flex flex-wrap items-end gap-4 px-4 py-3">
+<label class="flex flex-col min-w-40 flex-1">
+<p class="text-[#111813] dark:text-white text-base font-medium leading-normal pb-2">Código</p>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-[#111813] dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary border border-[#dbe6df] dark:border-gray-700 bg-white dark:bg-[#1a2e20] h-14 placeholder:text-[#61896f] p-[15px] text-base font-normal leading-normal" placeholder="Ej. 001" type="text"/>
+</label>
+</div>
+<!-- SectionHeader: Tipo -->
+<div class="px-4 pt-4">
+<h3 class="text-[#111813] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] py-2">Tipo de Categoría</h3>
+</div>
+<!-- SegmentedButtons -->
+<div class="flex px-4 py-3">
+<div class="flex h-12 flex-1 items-center justify-center rounded-xl bg-[#f0f4f2] dark:bg-[#1a2e20] p-1.5">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-lg px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-[#111813] has-[:checked]:shadow-sm has-[:checked]:text-[#111813] dark:has-[:checked]:text-primary text-[#61896f] text-sm font-semibold leading-normal transition-all">
+<span class="truncate">Ingreso</span>
+<input checked="" class="hidden" name="type-toggle" type="radio" value="Ingreso"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-lg px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-[#111813] has-[:checked]:shadow-sm has-[:checked]:text-[#111813] dark:has-[:checked]:text-primary text-[#61896f] text-sm font-semibold leading-normal transition-all">
+<span class="truncate">Egreso</span>
+<input class="hidden" name="type-toggle" type="radio" value="Egreso"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-lg px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-[#111813] has-[:checked]:shadow-sm has-[:checked]:text-[#111813] dark:has-[:checked]:text-primary text-[#61896f] text-sm font-semibold leading-normal transition-all">
+<span class="truncate">Ambos</span>
+<input class="hidden" name="type-toggle" type="radio" value="Ambos"/>
+</label>
+</div>
+</div>
+<!-- Status Section -->
+<div class="px-4 pt-6">
+<p class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Configuración</p>
+</div>
+<div class="flex items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-800">
+<div class="flex flex-col">
+<span class="text-[#111813] dark:text-white text-base font-medium">Estado</span>
+<span class="text-[#61896f] text-sm">Activa / Inactiva</span>
+</div>
+<label class="ios-switch">
+<input checked="" type="checkbox"/>
+<span class="slider"></span>
+</label>
+</div>
+<!-- Decorative Illustration/Background Element (Simulated) -->
+<div class="px-4 py-8 flex justify-center">
+<div class="w-full h-32 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex items-center justify-center overflow-hidden relative">
+<span class="material-symbols-outlined text-primary/40 text-6xl">category</span>
+<div class="absolute bottom-4 left-4">
+<p class="text-xs font-medium text-primary/60">Organiza tus finanzas con claridad</p>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer Action Button -->
+<div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white/80 dark:bg-[#111813]/80 backdrop-blur-md">
+<button class="w-full bg-primary hover:bg-primary/90 text-[#111813] font-bold text-lg py-4 rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-[0.98]">
+                Guardar Categoría
+            </button>
+</div>
+</div>
+</body></html>

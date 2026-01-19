@@ -123,3 +123,50 @@ class Movimiento {
       this.observacion,
       required this.creadoTs});
 }
+
+/// Saldo Inicial: representa el balance disponible al comienzo de un período
+/// (anual o mensual). NO se registra como movimiento.
+/// Se usa como base para el cálculo del saldo del primer mes del período.
+class SaldoInicial {
+  final int id;
+  final int unidadGestionId;
+  final String periodoTipo; // 'ANIO' | 'MES'
+  final String periodoValor; // '2026' o '2026-01'
+  final double monto;
+  final String? observacion;
+  final String fechaCarga; // YYYY-MM-DD HH:MM:SS
+
+  SaldoInicial({
+    required this.id,
+    required this.unidadGestionId,
+    required this.periodoTipo,
+    required this.periodoValor,
+    required this.monto,
+    this.observacion,
+    required this.fechaCarga,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'unidad_gestion_id': unidadGestionId,
+      'periodo_tipo': periodoTipo,
+      'periodo_valor': periodoValor,
+      'monto': monto,
+      'observacion': observacion,
+      'fecha_carga': fechaCarga,
+    };
+  }
+
+  factory SaldoInicial.fromMap(Map<String, dynamic> map) {
+    return SaldoInicial(
+      id: map['id'] as int,
+      unidadGestionId: map['unidad_gestion_id'] as int,
+      periodoTipo: map['periodo_tipo'] as String,
+      periodoValor: map['periodo_valor'] as String,
+      monto: (map['monto'] as num).toDouble(),
+      observacion: map['observacion'] as String?,
+      fechaCarga: map['fecha_carga'] as String,
+    );
+  }
+}

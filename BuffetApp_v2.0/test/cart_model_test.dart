@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buffet_app/ui/state/cart_model.dart';
+import 'package:buffet_app/features/buffet/state/cart_model.dart';
 
 void main() {
   group('CartModel', () {
