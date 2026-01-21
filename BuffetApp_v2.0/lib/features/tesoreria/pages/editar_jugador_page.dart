@@ -33,8 +33,11 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
   final _contactoCtrl = TextEditingController();
   final _dniCtrl = TextEditingController();
   final _observacionesCtrl = TextEditingController();
+  final _aliasCtrl = TextEditingController();
 
   String? _rolSeleccionado;
+  String? _tipoContratacion;
+  String? _posicion;
   DateTime? _fechaNacimiento;
 
   @override
@@ -49,6 +52,7 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
     _contactoCtrl.dispose();
     _dniCtrl.dispose();
     _observacionesCtrl.dispose();
+    _aliasCtrl.dispose();
     super.dispose();
   }
 
@@ -78,6 +82,9 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
         _contactoCtrl.text = entidad['contacto']?.toString() ?? '';
         _dniCtrl.text = entidad['dni']?.toString() ?? '';
         _observacionesCtrl.text = entidad['observaciones']?.toString() ?? '';
+        _aliasCtrl.text = entidad['alias']?.toString() ?? '';
+        _tipoContratacion = entidad['tipo_contratacion']?.toString();
+        _posicion = entidad['posicion']?.toString();
 
         final fechaNacStr = entidad['fecha_nacimiento']?.toString();
         if (fechaNacStr != null && fechaNacStr.isNotEmpty) {
@@ -115,7 +122,6 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
       initialDate: _fechaNacimiento ?? DateTime.now().subtract(const Duration(days: 365 * 20)),
       firstDate: DateTime(1940),
       lastDate: DateTime.now(),
-      locale: const Locale('es'),
       helpText: 'Seleccionar fecha de nacimiento',
       cancelText: 'Cancelar',
       confirmText: 'Aceptar',
@@ -156,6 +162,9 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
         'dni': _dniCtrl.text.trim().isEmpty ? null : _dniCtrl.text.trim(),
         'fecha_nacimiento': _fechaNacimiento?.toIso8601String().split('T')[0],
         'observaciones': _observacionesCtrl.text.trim().isEmpty ? null : _observacionesCtrl.text.trim(),
+        'alias': _aliasCtrl.text.trim().isEmpty ? null : _aliasCtrl.text.trim(),
+        'tipo_contratacion': _tipoContratacion,
+        'posicion': _posicion,
       };
 
       await _plantelSvc.actualizarEntidad(widget.entidadId, cambios);
@@ -297,6 +306,63 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
                       },
                     ),
                     const SizedBox(height: 16),
+
+                    // Campo: Alias
+                    TextFormField(
+                      controller: _aliasCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Alias / Apodo',
+                        hintText: 'Ej: El Toto',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.star),
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Campo: Tipo de Contratación (solo JUGADOR)
+                    if (_rolSeleccionado == 'JUGADOR')
+                      DropdownButtonFormField<String>(
+                        value: _tipoContratacion,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de Contratación',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.assignment),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: null, child: Text('No especificado')),
+                          DropdownMenuItem(value: 'LOCAL', child: Text('Local')),
+                          DropdownMenuItem(value: 'REFUERZO', child: Text('Refuerzo')),
+                          DropdownMenuItem(value: 'OTRO', child: Text('Otro')),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _tipoContratacion = value);
+                        },
+                      ),
+                    if (_rolSeleccionado == 'JUGADOR') const SizedBox(height: 16),
+
+                    // Campo: Posición (solo JUGADOR)
+                    if (_rolSeleccionado == 'JUGADOR')
+                      DropdownButtonFormField<String>(
+                        value: _posicion,
+                        decoration: const InputDecoration(
+                          labelText: 'Posición',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.sports),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: null, child: Text('No especificado')),
+                          DropdownMenuItem(value: 'ARQUERO', child: Text('Arquero')),
+                          DropdownMenuItem(value: 'DEFENSOR', child: Text('Defensor')),
+                          DropdownMenuItem(value: 'MEDIOCAMPISTA', child: Text('Mediocampista')),
+                          DropdownMenuItem(value: 'DELANTERO', child: Text('Delantero')),
+                          DropdownMenuItem(value: 'STAFF_CT', child: Text('Staff Cuerpo Técnico')),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _posicion = value);
+                        },
+                      ),
+                    if (_rolSeleccionado == 'JUGADOR') const SizedBox(height: 16),
 
                     // Campo: Contacto
                     TextFormField(

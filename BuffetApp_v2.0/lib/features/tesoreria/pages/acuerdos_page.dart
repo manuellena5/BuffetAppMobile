@@ -7,6 +7,7 @@ import '../../../features/shared/format.dart';
 import '../../../data/dao/db.dart';
 import 'crear_acuerdo_page.dart';
 import 'detalle_acuerdo_page.dart';
+import 'nuevo_acuerdo_grupal_page.dart';
 
 /// FASE 18.5: Página principal de gestión de acuerdos financieros
 /// 
@@ -30,9 +31,10 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
   int? _entidadPlantelId;
   String? _tipoFiltro; // 'INGRESO', 'EGRESO', null = todos
   bool? _activoFiltro; // true = activos, false = finalizados, null = todos
+  String? _origenFiltro; // 'MANUAL', 'GRUPAL', null = todos
   
   // Vista
-  bool _vistaTabla = false; // false = tarjetas, true = tabla
+  bool _vistaTabla = true; // false = tarjetas, true = tabla
 
   @override
   void initState() {
@@ -50,13 +52,31 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
       final unidades = await db.query('unidades_gestion', where: 'activo = 1', orderBy: 'nombre');
       final entidades = await db.query('entidades_plantel', where: 'estado_activo = 1', orderBy: 'nombre');
       
-      // Cargar acuerdos
-      final acuerdosRaw = await AcuerdosService.listarAcuerdos(
-        unidadGestionId: _unidadGestionId,
-        entidadPlantelId: _entidadPlantelId,
-        tipo: _tipoFiltro,
-        activo: _activoFiltro,
-      );
+      // Cargar acuerdos con filtro de origen
+      List<Map<String, dynamic>> acuerdosRaw;
+      
+      if (_origenFiltro != null) {
+        final soloGrupal = _origenFiltro == 'GRUPAL';
+        acuerdosRaw = await AcuerdosService.listarAcuerdos(
+          unidadGestionId: _unidadGestionId,
+          entidadPlantelId: _entidadPlantelId,
+          tipo: _tipoFiltro,
+          soloActivos: _activoFiltro,
+        );
+        
+        // Filtrar por origen
+        acuerdosRaw = acuerdosRaw.where((a) {
+          final origenGrupal = (a['origen_grupal'] as int?) == 1;
+          return origenGrupal == soloGrupal;
+        }).toList();
+      } else {
+        acuerdosRaw = await AcuerdosService.listarAcuerdos(
+          unidadGestionId: _unidadGestionId,
+          entidadPlantelId: _entidadPlantelId,
+          tipo: _tipoFiltro,
+          soloActivos: _activoFiltro,
+        );
+      }
       
       // Convertir a Maps mutables para poder enriquecerlos
       final acuerdos = acuerdosRaw.map((a) => Map<String, dynamic>.from(a)).toList();
@@ -100,7 +120,12 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         stackTrace: stack,
       );
       
-      setState(() => _isLoading = false);
+      setState(() {
+        _acuerdos = [];
+        _unidadesGestion = [];
+        _entidadesPlantel = [];
+        _isLoading = false;
+      });
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -123,6 +148,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
       _entidadPlantelId = null;
       _tipoFiltro = null;
       _activoFiltro = null;
+      _origenFiltro = null;
     });
     _cargarDatos();
   }
@@ -213,18 +239,65 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _crearNuevoAcuerdo,
+        onPressed: _mostrarMenuCreacion,
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Acuerdo'),
       ),
     );
   }
 
+  Future<void> _mostrarMenuCreacion() async {
+    final opcion = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Crear Acuerdo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Acuerdo Individual'),
+              subtitle: const Text('Para un solo jugador/DT'),
+              onTap: () => Navigator.pop(ctx, 'INDIVIDUAL'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.group),
+              title: const Text('Acuerdo Grupal'),
+              subtitle: const Text('Para múltiples jugadores'),
+              onTap: () => Navigator.pop(ctx, 'GRUPAL'),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    if (opcion == 'INDIVIDUAL') {
+      _crearNuevoAcuerdo();
+    } else if (opcion == 'GRUPAL') {
+      _crearAcuerdoGrupal();
+    }
+  }
+
+  Future<void> _crearAcuerdoGrupal() async {
+    final resultado = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => NuevoAcuerdoGrupalPage(unidadGestionId: _unidadGestionId ?? 1),
+      ),
+    );
+    
+    if (resultado != null) {
+      _cargarDatos();
+    }
+  }
+
   bool _tieneFiltrosActivos() {
     return _unidadGestionId != null ||
         _entidadPlantelId != null ||
         _tipoFiltro != null ||
-        _activoFiltro != null;
+        _activoFiltro != null ||
+        _origenFiltro != null;
   }
 
   Widget _buildFiltrosActivos() {
@@ -352,6 +425,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     final tipo = acuerdo['tipo']?.toString() ?? 'EGRESO';
     final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
     final activo = (acuerdo['activo'] as int?) == 1;
+    final origenGrupal = (acuerdo['origen_grupal'] as int?) == 1; // FASE 19
     final unidadNombre = acuerdo['_unidad_nombre']?.toString() ?? 'Desconocida';
     final entidadNombre = acuerdo['_entidad_nombre']?.toString();
     final stats = acuerdo['_stats'] as Map<String, dynamic>?;
@@ -398,6 +472,17 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                           ),
                     ),
                   ),
+                  if (origenGrupal) // FASE 19: Badge de origen grupal
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Chip(
+                        avatar: const Icon(Icons.group, size: 16, color: Colors.white),
+                        label: const Text('Grupal', style: TextStyle(fontSize: 11, color: Colors.white)),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: Colors.blue,
+                      ),
+                    ),
                   if (!activo)
                     Chip(
                       label: const Text('Finalizado', style: TextStyle(fontSize: 11)),
@@ -516,7 +601,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           columns: const [
             DataColumn(label: Text('Nombre')),
             DataColumn(label: Text('Tipo')),
-            DataColumn(label: Text('Unidad')),
+            DataColumn(label: Text('Entidad')),
             DataColumn(label: Text('Monto')),
             DataColumn(label: Text('Modalidad')),
             DataColumn(label: Text('Progreso')),
@@ -556,7 +641,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     final tipo = acuerdo['tipo']?.toString() ?? 'EGRESO';
     final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
     final activo = (acuerdo['activo'] as int?) == 1;
-    final unidadNombre = acuerdo['_unidad_nombre']?.toString() ?? 'Desconocida';
+    final entidadNombre = acuerdo['_entidad_nombre']?.toString() ?? '-';
     final stats = acuerdo['_stats'] as Map<String, dynamic>?;
     
     final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
@@ -582,7 +667,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
             size: 18,
           ),
         ),
-        DataCell(Text(unidadNombre)),
+        DataCell(Text(entidadNombre)),
         DataCell(Text(Format.money(montoDisplay))),
         DataCell(Text(_modalidadLabel(modalidad))),
         DataCell(Text('$cuotasConfirmadas / $cuotasTotal')),
@@ -701,6 +786,19 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                   ],
                   onChanged: (val) => setModalState(() => _activoFiltro = val),
                 ),
+                const SizedBox(height: 16),
+                
+                // Origen (NUEVO - FASE 19)
+                DropdownButtonFormField<String?>(
+                  value: _origenFiltro,
+                  decoration: const InputDecoration(labelText: 'Origen'),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Todos')),
+                    DropdownMenuItem(value: 'MANUAL', child: Text('Individual')),
+                    DropdownMenuItem(value: 'GRUPAL', child: Text('Grupal')),
+                  ],
+                  onChanged: (val) => setModalState(() => _origenFiltro = val),
+                ),
                 const SizedBox(height: 24),
                 
                 Row(
@@ -713,6 +811,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                           _entidadPlantelId = null;
                           _tipoFiltro = null;
                           _activoFiltro = null;
+                          _origenFiltro = null;
                         });
                       },
                       child: const Text('Limpiar'),

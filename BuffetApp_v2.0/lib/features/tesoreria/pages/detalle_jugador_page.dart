@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
+import '../../../features/shared/services/acuerdos_service.dart';
 import '../../shared/widgets/responsive_container.dart';
 import 'editar_jugador_page.dart';
+import 'detalle_acuerdo_page.dart';
 
 /// FASE 17.5: Pantalla de detalle de un jugador/staff.
 /// Muestra información completa, compromisos asociados, estado económico e historial de pagos.
@@ -27,6 +29,9 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
   Map<String, dynamic> _estadoMensual = {};
   List<Map<String, dynamic>> _historialPagos = [];
   String? _errorCompromisos;
+  
+  // FASE 19: Acuerdos activos de esta entidad
+  List<Map<String, dynamic>> _acuerdosActivos = [];
 
   late int _mesActual;
   late int _anioActual;
@@ -84,6 +89,23 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         desde: hace6Meses,
         hasta: ahora,
       );
+      
+      // FASE 19: Cargar acuerdos activos de esta entidad
+      List<Map<String, dynamic>> acuerdos = [];
+      try {
+        acuerdos = await AcuerdosService.listarAcuerdos(
+          entidadPlantelId: widget.entidadId,
+          soloActivos: true,
+        );
+      } catch (e, stack) {
+        await AppDatabase.logLocalError(
+          scope: 'detalle_jugador.cargar_acuerdos',
+          error: e.toString(),
+          stackTrace: stack,
+          payload: {'entidad_id': widget.entidadId},
+        );
+        // No fallar por esto
+      }
 
       setState(() {
         _entidad = entidad;
@@ -91,6 +113,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         _estadoMensual = estadoMensual;
         _historialPagos = historialPagos;
         _errorCompromisos = errorCompromisos;
+        _acuerdosActivos = acuerdos;
       });
     } catch (e) {
       if (mounted) {
@@ -221,6 +244,12 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                     _buildResumenEconomico(),
 
                     const Divider(height: 1),
+
+                    // FASE 19: Acuerdos activos
+                    if (_acuerdosActivos.isNotEmpty) ...[
+                      _buildAcuerdos(),
+                      const Divider(height: 1),
+                    ],
 
                     // Compromisos asociados
                     _buildCompromisos(),
@@ -628,5 +657,64 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
       default:
         return Colors.grey;
     }
+  }
+  
+  // FASE 19: Widget de sección de acuerdos activos
+  Widget _buildAcuerdos() {
+    return ExpansionTile(
+      leading: const Icon(Icons.handshake),
+      title: const Text('Acuerdos Económicos'),
+      subtitle: Text('${_acuerdosActivos.length} activos'),
+      initiallyExpanded: true,
+      children: _acuerdosActivos.map((acuerdo) {
+        final nombre = acuerdo['nombre']?.toString() ?? 'Sin nombre';
+        final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
+        final origenGrupal = (acuerdo['origen_grupal'] as int?) == 1;
+        
+        final monto = modalidad == 'MONTO_TOTAL_CUOTAS'
+            ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
+            : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
+        
+        final frecuencia = acuerdo['frecuencia']?.toString() ?? '';
+        
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: ListTile(
+            leading: origenGrupal
+                ? const Icon(Icons.group, color: Colors.blue)
+                : const Icon(Icons.person),
+            title: Text(nombre),
+            subtitle: Text(
+              '\$${monto.toStringAsFixed(2)} - $frecuencia',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (origenGrupal)
+                  Chip(
+                    label: const Text('Grupal', style: TextStyle(fontSize: 10)),
+                    padding: const EdgeInsets.all(4),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor: Colors.blue.shade100,
+                  ),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward_ios, size: 16),
+              ],
+            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (ctx) => DetalleAcuerdoPage(
+                    acuerdoId: acuerdo['id'] as int,
+                  ),
+                ),
+              ).then((_) => _cargarDatos());
+            },
+          ),
+        );
+      }).toList(),
+    );
   }
 }

@@ -96,8 +96,9 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             _buildInstruccionItem('2', 'Complete los datos en la hoja "Jugadores"'),
             _buildInstruccionItem('3', 'Columnas REQUERIDAS: Nombre, Rol'),
             _buildInstruccionItem('4', 'Roles válidos: JUGADOR, DT, AYUDANTE, PF, OTRO'),
-            _buildInstruccionItem('5', 'Fecha Nacimiento formato: DD/MM/YYYY (ej: 15/03/1995)'),
-            _buildInstruccionItem('6', 'Nombres duplicados serán ignorados'),
+            _buildInstruccionItem('5', 'Tipo Contratación: LOCAL, REFUERZO, OTRO (solo para jugadores)'),
+            _buildInstruccionItem('6', 'Fecha Nacimiento formato: DD/MM/YYYY (ej: 15/03/1995)'),
+            _buildInstruccionItem('7', 'Nombres duplicados serán ignorados'),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),

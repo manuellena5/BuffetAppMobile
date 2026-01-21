@@ -433,7 +433,60 @@ class _PlantelPageState extends State<PlantelPage> {
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_nombreRol(rol), style: const TextStyle(fontSize: 12)),
+              Row(
+                children: [
+                  Text(_nombreRol(rol), style: const TextStyle(fontSize: 12)),
+                  // Mostrar alias si existe
+                  if (entidad['alias'] != null && (entidad['alias'] as String).isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '"${entidad['alias']}"',
+                      style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ],
+              ),
+              // Mostrar tipo_contratacion y posicion para JUGADOR
+              if (rol == 'JUGADOR') ...[
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    if (entidad['tipo_contratacion'] != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: entidad['tipo_contratacion'] == 'LOCAL'
+                              ? Colors.blue.shade50
+                              : entidad['tipo_contratacion'] == 'REFUERZO'
+                                  ? Colors.purple.shade50
+                                  : Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: entidad['tipo_contratacion'] == 'LOCAL'
+                                ? Colors.blue.shade300
+                                : entidad['tipo_contratacion'] == 'REFUERZO'
+                                    ? Colors.purple.shade300
+                                    : Colors.grey.shade400,
+                          ),
+                        ),
+                        child: Text(
+                          entidad['tipo_contratacion'].toString(),
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (entidad['posicion'] != null) ...[
+                      Icon(_iconPosicion(entidad['posicion'].toString()), size: 12, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        _nombrePosicion(entidad['posicion'].toString()),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -594,6 +647,40 @@ class _PlantelPageState extends State<PlantelPage> {
         return Colors.grey;
       default:
         return Colors.grey;
+    }
+  }
+
+  String _nombrePosicion(String posicion) {
+    switch (posicion) {
+      case 'ARQUERO':
+        return 'Arquero';
+      case 'DEFENSOR':
+        return 'Defensor';
+      case 'MEDIOCAMPISTA':
+        return 'Mediocampista';
+      case 'DELANTERO':
+        return 'Delantero';
+      case 'STAFF_CT':
+        return 'Staff CT';
+      default:
+        return posicion;
+    }
+  }
+
+  IconData _iconPosicion(String posicion) {
+    switch (posicion) {
+      case 'ARQUERO':
+        return Icons.sports_handball;
+      case 'DEFENSOR':
+        return Icons.shield;
+      case 'MEDIOCAMPISTA':
+        return Icons.swap_horiz;
+      case 'DELANTERO':
+        return Icons.flash_on;
+      case 'STAFF_CT':
+        return Icons.person;
+      default:
+        return Icons.sports;
     }
   }
 }

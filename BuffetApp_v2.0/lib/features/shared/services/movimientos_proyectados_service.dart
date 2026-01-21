@@ -62,6 +62,7 @@ class MovimientosProyectadosService {
     final observaciones = compromiso['observaciones'] as String?;
     final unidadGestionId = compromiso['unidad_gestion_id'] as int;
     final totalCuotas = compromiso['cuotas'] as int?;
+    final entidadNombre = compromiso['entidad_nombre'] as String?;
 
     // Leer cuotas desde la tabla compromiso_cuotas
     final cuotas = await db.query(
@@ -94,6 +95,7 @@ class MovimientosProyectadosService {
         nombre: nombre,
         observaciones: observaciones,
         unidadGestionId: unidadGestionId,
+        entidadNombre: entidadNombre,
       ));
     }
 
@@ -202,6 +204,7 @@ class MovimientosProyectadosService {
       final observaciones = compromiso['observaciones'] as String?;
       final unidadGestionIdComp = compromiso['unidad_gestion_id'] as int;
       final totalCuotas = compromiso['cuotas'] as int?;
+      final entidadNombre = compromiso['entidad_nombre'] as String?;
 
       // Leer cuotas CANCELADAS del compromiso
       final cuotas = await db.query(
@@ -232,6 +235,7 @@ class MovimientosProyectadosService {
           observaciones: observaciones,
           unidadGestionId: unidadGestionIdComp,
           estado: 'CANCELADO',
+          entidadNombre: entidadNombre,
         ));
       }
     }
@@ -309,6 +313,7 @@ class MovimientoProyectado {
   final String? observaciones;
   final int unidadGestionId;
   final String estado; // 'ESPERADO' | 'CANCELADO'
+  final String? entidadNombre; // Nombre del jugador/staff asociado
 
   const MovimientoProyectado({
     required this.compromisoId,
@@ -322,6 +327,7 @@ class MovimientoProyectado {
     this.observaciones,
     required this.unidadGestionId,
     this.estado = 'ESPERADO',
+    this.entidadNombre,
   });
 
   /// Convierte a Map para fácil integración con UI.
@@ -338,6 +344,7 @@ class MovimientoProyectado {
       'observaciones': observaciones,
       'unidad_gestion_id': unidadGestionId,
       'estado': estado,
+      'entidad_nombre': entidadNombre,
     };
   }
 

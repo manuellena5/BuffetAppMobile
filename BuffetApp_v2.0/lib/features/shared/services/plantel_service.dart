@@ -23,6 +23,9 @@ class PlantelService {
     String? contacto,
     String? dni,
     String? fechaNacimiento,
+    String? alias,
+    String? tipoContratacion,
+    String? posicion,
   }) async {
     if (nombre.trim().isEmpty) {
       throw Exception('El nombre es requerido');
@@ -56,6 +59,9 @@ class PlantelService {
       'contacto': contacto?.trim(),
       'dni': dni?.trim(),
       'fecha_nacimiento': fechaNacimiento,
+      'alias': alias?.trim(),
+      'tipo_contratacion': tipoContratacion,
+      'posicion': posicion,
       'created_ts': now,
       'updated_ts': now,
     });

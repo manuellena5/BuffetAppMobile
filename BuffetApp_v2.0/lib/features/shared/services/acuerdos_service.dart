@@ -22,6 +22,11 @@ class AcuerdosService {
   /// - Si modalidad = RECURRENTE → monto_periodico requerido
   /// - frecuencia debe existir en tabla frecuencias
   /// 
+  /// Parámetros FASE 19:
+  /// - origenGrupal: si fue creado desde un acuerdo grupal
+  /// - acuerdoGrupalRef: UUID del acuerdo grupal origen
+  /// - generaCompromisos: si debe generar compromisos automáticamente
+  /// 
   /// Retorna: id del acuerdo creado
   static Future<int> crearAcuerdo({
     required int unidadGestionId,
@@ -44,6 +49,9 @@ class AcuerdosService {
     String? archivoTipo,
     int? archivoSize,
     String? dispositivoId,
+    bool origenGrupal = false,
+    String? acuerdoGrupalRef,
+    bool generaCompromisos = true,
   }) async {
     try {
       // Validaciones previas
@@ -139,6 +147,8 @@ class AcuerdosService {
         'archivo_tipo': archivoTipo,
         'archivo_size': archivoSize,
         'dispositivo_id': dispositivoId,
+        'origen_grupal': origenGrupal ? 1 : 0,
+        'acuerdo_grupal_ref': acuerdoGrupalRef,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
         'created_ts': now,
@@ -186,8 +196,10 @@ class AcuerdosService {
     int? unidadGestionId,
     int? entidadPlantelId,
     String? tipo,
-    bool? activo,
+    String? categoria,
+    bool? soloActivos,
     bool incluirEliminados = false,
+    String? acuerdoGrupalRef,
   }) async {
     try {
       final db = await AppDatabase.instance();
@@ -210,9 +222,18 @@ class AcuerdosService {
         whereArgs.add(tipo);
       }
       
-      if (activo != null) {
-        where.add('activo = ?');
-        whereArgs.add(activo ? 1 : 0);
+      if (categoria != null) {
+        where.add('categoria = ?');
+        whereArgs.add(categoria);
+      }
+      
+      if (soloActivos != null && soloActivos) {
+        where.add('activo = 1');
+      }
+      
+      if (acuerdoGrupalRef != null) {
+        where.add('acuerdo_grupal_ref = ?');
+        whereArgs.add(acuerdoGrupalRef);
       }
       
       if (!incluirEliminados) {
@@ -235,7 +256,9 @@ class AcuerdosService {
         payload: {
           'unidad_gestion_id': unidadGestionId,
           'tipo': tipo,
-          'activo': activo,
+          'categoria': categoria,
+          'solo_activos': soloActivos,
+          'acuerdo_grupal_ref': acuerdoGrupalRef,
         },
       );
       rethrow;

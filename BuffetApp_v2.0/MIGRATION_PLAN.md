@@ -1647,6 +1647,7 @@ Incorporar el concepto de **Acuerdo** como entidad separada que representa regla
 | **16** | Sync Compromisos | ⏳ Planificado | Supabase, Storage |
 | **17** | Plantel | ✅ Completado | Entidades, económico |
 | **18** | Acuerdos | 🚧 En Progreso | Reglas, generación automática |
+| **19** | Acuerdos Grupales | ⏳ Planificado | Carga masiva, ajustes individuales |
 
 ---
 
@@ -1671,3 +1672,360 @@ Incorporar el concepto de **Acuerdo** como entidad separada que representa regla
 - ⏳ **18.3-18.12**: Servicios, UI y sync pendientes
 
 **Estimación:** ~4,000 líneas de código nuevo para completar Fase 18
+
+---
+
+## 🚀 FASE 19: Acuerdos Grupales (Carga Masiva de Plantel)
+
+**Objetivo:** Crear múltiples acuerdos individuales con las mismas cláusulas desde una sola carga, con ajustes por jugador.
+
+### 🎯 Concepto Central
+
+**Acuerdo Grupal = Herramienta de carga, NO entidad operativa**
+- NO se persiste como acuerdo activo
+- Genera N acuerdos individuales independientes
+- Cada acuerdo individual es autónomo (editar/cancelar uno NO afecta a los demás)
+- Auditable vía tabla de histórico
+
+### 📊 Cambios en Base de Datos
+
+#### 19.1: Extender `entidades_plantel` (Jugadores)
+
+**Nuevas columnas contractuales:**
+```sql
+ALTER TABLE entidades_plantel ADD COLUMN tipo_contratacion TEXT 
+  CHECK (tipo_contratacion IS NULL OR tipo_contratacion IN ('LOCAL','REFUERZO','OTRO'));
+
+ALTER TABLE entidades_plantel ADD COLUMN posicion TEXT 
+  CHECK (posicion IS NULL OR posicion IN ('ARQUERO','DEFENSOR','MEDIOCAMPISTA','DELANTERO','STAFF_CT'));
+
+ALTER TABLE entidades_plantel ADD COLUMN alias TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_entidades_plantel_tipo_contratacion 
+  ON entidades_plantel(tipo_contratacion, estado_activo) 
+  WHERE tipo_contratacion IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_entidades_plantel_posicion 
+  ON entidades_plantel(posicion) 
+  WHERE posicion IS NOT NULL;
+```
+
+**Aplicabilidad:**
+- `tipo_contratacion`: Solo para `rol='JUGADOR'`
+- `posicion`: Solo para `rol='JUGADOR'`
+- `alias`: Para cualquier rol (uso general)
+- `observaciones`: Ya existe, sirve para contractual y general
+
+#### 19.2: Crear tabla `acuerdos_grupales_historico`
+
+**Propósito:** Auditoría de creaciones grupales (NO operativa)
+
+```sql
+CREATE TABLE acuerdos_grupales_historico (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uuid_ref TEXT UNIQUE NOT NULL,              -- UUID para referenciar desde acuerdos
+  nombre TEXT NOT NULL,                        -- "Plantel Local - Apertura 2026"
+  unidad_gestion_id INTEGER NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')),
+  modalidad TEXT NOT NULL,                     -- RECURRENTE / MONTO_TOTAL_CUOTAS
+  monto_base REAL NOT NULL,                    -- Monto base configurado
+  frecuencia TEXT NOT NULL,
+  fecha_inicio TEXT NOT NULL,
+  fecha_fin TEXT,
+  categoria TEXT NOT NULL,
+  observaciones_comunes TEXT,                  -- Se copian a cada acuerdo individual
+  genera_compromisos INTEGER NOT NULL DEFAULT 1, -- 1=Sí, 0=No
+  cantidad_acuerdos_generados INTEGER NOT NULL,
+  payload_filtros TEXT,                        -- JSON con filtros aplicados
+  payload_jugadores TEXT NOT NULL,             -- JSON con [{id, nombre, monto_ajustado}, ...]
+  dispositivo_id TEXT,
+  created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
+  FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_acuerdos_grupales_uuid ON acuerdos_grupales_historico(uuid_ref);
+CREATE INDEX IF NOT EXISTS idx_acuerdos_grupales_unidad ON acuerdos_grupales_historico(unidad_gestion_id, created_ts);
+```
+
+#### 19.3: Extender tabla `acuerdos`
+
+**Nuevas columnas para rastreo de origen grupal:**
+```sql
+ALTER TABLE acuerdos ADD COLUMN origen_grupal INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE acuerdos ADD COLUMN acuerdo_grupal_ref TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_acuerdos_grupal_ref 
+  ON acuerdos(acuerdo_grupal_ref) 
+  WHERE acuerdo_grupal_ref IS NOT NULL;
+```
+
+**Reglas:**
+- Si `origen_grupal=1` → acuerdo creado desde carga grupal
+- `acuerdo_grupal_ref` apunta a `acuerdos_grupales_historico.uuid_ref`
+- Permite queries: "ver todos los acuerdos del plantel 2026"
+
+#### 19.4: Extender `frecuencias` con SEMANAL
+
+**Seed actualizado:**
+```dart
+const frecuencias = [
+  {'codigo': 'SEMANAL', 'descripcion': 'Semanal', 'dias': 7},  // NUEVO
+  {'codigo': 'MENSUAL', 'descripcion': 'Mensual', 'dias': 30},
+  // ... resto
+];
+```
+
+### 🎨 Pantallas y Flujo
+
+#### 19.5: `nuevo_acuerdo_grupal_page.dart`
+
+**Wizard multi-step:**
+
+**Paso 1 - Tipo de Acuerdo:**
+```
+[●] Acuerdo Grupal (genera acuerdos individuales)
+( ) Acuerdo Individual  → redirect a crear_acuerdo_page
+```
+
+**Paso 2 - Datos Generales:**
+```
+Nombre del acuerdo (*)     [ Plantel Local - Apertura 2026 ]
+Unidad de gestión (*)      [ Fútbol Mayor ▼ ]
+Tipo                       [ EGRESO ] (readonly)
+Categoría contable (*)     [ PAJU - Pago jugadores ▼ ]
+Observaciones generales    [ Se copian a cada acuerdo... ]
+```
+
+**Paso 3 - Cláusulas Económicas:**
+```
+Modalidad de pago (*)      [ RECURRENTE ▼ ]
+Monto base (*)             [ 80.000 ]
+Frecuencia (*)             [ SEMANAL ▼ ]
+Fecha inicio (*)           [ 01/03/2026 ]
+Fecha fin                  [ 30/07/2026 ]
+☑ Generar compromisos automáticamente
+```
+
+**Paso 4 - Selección de Jugadores:**
+```
+Filtros:
+  Rol:                [ JUGADOR ▼ ]
+  Estado:             [ Activo ▼ ]
+  Tipo contratación:  [ LOCAL ▼ ]
+
+Lista (multiselección con ajuste de monto):
+☑ Juan Pérez       | Local     | $80.000  [Editar]
+☑ Lucas Gómez      | Local     | $80.000  [Editar]
+☑ Martín López     | Refuerzo  | $120.000 [Editar]  ← ajustado manualmente
+
+Jugadores seleccionados: 15
+```
+
+**Paso 5 - Preview Detallado:**
+```
+Se crearán 15 acuerdos individuales:
+
+┌─────────────────┬──────────┬────────────┬─────────────┬────────────┐
+│ Jugador         │ Monto    │ Frecuencia │ Vigencia    │ Compromisos│
+├─────────────────┼──────────┼────────────┼─────────────┼────────────┤
+│ Juan Pérez      │ $80.000  │ Semanal    │ Mar-Jul 26  │ 18 cuotas  │
+│ Lucas Gómez     │ $80.000  │ Semanal    │ Mar-Jul 26  │ 18 cuotas  │
+│ Martín López    │ $120.000 │ Semanal    │ Mar-Jul 26  │ 18 cuotas  │
+│ ...             │          │            │             │            │
+└─────────────────┴──────────┴────────────┴─────────────┴────────────┘
+
+TOTAL: 270 compromisos | $1.440.000 comprometidos
+
+⚠️ Advertencias:
+  • Juan Pérez ya tiene un acuerdo PAJU activo desde Feb 2026
+  • Lucas Gómez tiene compromisos pendientes de otro acuerdo
+
+[ Cancelar ]  [ Confirmar y Crear ]
+```
+
+**Paso 6 - Confirmación Final:**
+```
+Si hay advertencias:
+  ⚠️ Algunos jugadores ya tienen acuerdos activos.
+     ¿Desea crear los nuevos acuerdos de todas formas?
+  
+  [ Cancelar ]  [ Sí, crear acuerdos ]
+```
+
+#### 19.6: Integración con pantallas existentes
+
+**`acuerdos_page.dart`:**
+- Botón "+ Nuevo Acuerdo" → menú:
+  - Acuerdo Individual
+  - Acuerdo Grupal (para plantel)
+- Filtro "Origen": Todos / Manual / Grupal
+- Columna "Origen" en tabla: badge "Grupal - Plantel 2026" (linkeable)
+
+**`detalle_acuerdo_page.dart`:**
+- Si `origen_grupal=1`:
+  - Mostrar badge "Creado desde acuerdo grupal"
+  - Link "Ver acuerdo grupal origen" → modal con info del histórico
+  - Listado de "Acuerdos hermanos" (mismo `acuerdo_grupal_ref`)
+
+**`plantel_page.dart` (existente):**
+- En detalle de jugador, sección "Acuerdos económicos":
+  - Mostrar acuerdos activos
+  - Indicar si provienen de grupal
+
+### ⚙️ Servicios
+
+#### 19.7: `acuerdos_grupales_service.dart`
+
+**Métodos principales:**
+
+```dart
+class AcuerdosGrupalesService {
+  /// Valida jugadores seleccionados (retorna warnings, NO bloquea)
+  Future<List<ValidacionJugador>> validarJugadores({
+    required List<int> jugadoresIds,
+    required String categoria,
+    required String fechaInicio,
+    required String? fechaFin,
+  });
+
+  /// Genera preview de compromisos por jugador
+  Future<PreviewAcuerdoGrupal> generarPreview({
+    required AcuerdoGrupalFormData formData,
+    required List<JugadorConMonto> jugadores,
+  });
+
+  /// Crea acuerdos individuales + histórico + compromisos (si aplica)
+  /// Retorna mapa: {creados: [...], errores: [...]}
+  Future<ResultadoCreacionGrupal> crearAcuerdosGrupales({
+    required AcuerdoGrupalFormData formData,
+    required List<JugadorConMonto> jugadores,
+    required bool generarCompromisos,
+  });
+
+  /// Lista histórico de acuerdos grupales
+  Future<List<AcuerdoGrupalHistorico>> listarHistorico({
+    int? unidadGestionId,
+  });
+
+  /// Obtiene detalle de un acuerdo grupal histórico + acuerdos generados
+  Future<DetalleAcuerdoGrupal> obtenerDetalle(String uuidRef);
+}
+```
+
+**Lógica de creación (transaccional):**
+1. Generar `uuid_ref` único
+2. Insertar en `acuerdos_grupales_historico`
+3. Por cada jugador:
+   - Crear acuerdo individual con `entidad_plantel_id`, `origen_grupal=1`, `acuerdo_grupal_ref=uuid_ref`
+   - Si `generarCompromisos=true`: generar compromisos/cuotas
+4. Si alguno falla: rollback completo (all-or-nothing)
+
+### 📋 Reglas de Negocio (NO NEGOCIABLES)
+
+**RG-AG-01 - Naturaleza:**
+- Un acuerdo grupal NO se persiste como entidad activa
+- Es solo un origen lógico de creación
+
+**RG-AG-02 - Generación:**
+- Al confirmar, para cada `entidad_plantel_id` seleccionada:
+  - Crear registro en `acuerdos`
+  - Copiar: nombre, unidad, tipo, modalidad, frecuencia, fechas, categoría, observaciones
+  - Setear: `entidad_plantel_id`, `origen_grupal=1`, `acuerdo_grupal_ref=<uuid>`
+  - Monto: usar `monto_ajustado` si fue editado, sino `monto_base`
+
+**RG-AG-03 - Independencia:**
+- Los acuerdos creados NO dependen entre sí
+- Editar uno no impacta en los demás
+- Cancelar uno no cancela el grupo
+
+**RG-AG-04 - Compromisos:**
+- Si `genera_compromisos=true`: cada acuerdo individual genera sus compromisos/cuotas
+- Si `false`: no se crean cuotas automáticamente (útil para premios/ajustes)
+
+**RG-AG-05 - Auditoría:**
+- Debe quedar rastro: fecha creación, dispositivo, jugadores, montos ajustados
+- `payload_jugadores`: JSON con `[{id, nombre, monto_ajustado}, ...]`
+
+**RG-AG-06 - Validación NO bloqueante:**
+- Si un jugador ya tiene acuerdo activo del mismo tipo: WARNING, no error
+- Usuario decide si procede o no
+
+**RG-AG-07 - Ajuste individual obligatorio:**
+- UI debe permitir editar monto de cada jugador antes de confirmar
+- Caso de uso: refuerzos cobran más que locales
+
+**RG-AG-08 - Aplicabilidad:**
+- Solo aplica a `rol='JUGADOR'`
+- Filtro de selección debe respetar `estado_activo=1` por defecto
+
+### 🧪 Tests
+
+#### 19.8: `test/acuerdos_grupales_service_test.dart`
+
+**Casos a cubrir:**
+- ✅ Crear acuerdo grupal con 3 jugadores, montos distintos
+- ✅ Verificar que se crean 3 acuerdos individuales independientes
+- ✅ Verificar `acuerdos_grupales_historico` tiene registro correcto
+- ✅ Validación: jugador ya tiene acuerdo activo (retorna warning)
+- ✅ Preview: calcular correctamente cantidad de compromisos
+- ✅ Rollback: si falla un acuerdo, ninguno se crea
+- ✅ Editar acuerdo individual NO afecta hermanos
+- ✅ Listar acuerdos por `acuerdo_grupal_ref`
+
+**Archivos a crear:**
+- `test/acuerdos_grupales_service_test.dart` (~500 líneas)
+
+### 📦 Entregables - FASE 19
+
+**Base de Datos:**
+- ✅ Columnas en `entidades_plantel`: `tipo_contratacion`, `posicion`, `alias`
+- ✅ Tabla `acuerdos_grupales_historico`
+- ✅ Columnas en `acuerdos`: `origen_grupal`, `acuerdo_grupal_ref`
+- ✅ Seed `frecuencias`: agregar `SEMANAL`
+- ✅ Índices optimizados
+
+**Servicios:**
+- [ ] `lib/features/tesoreria/services/acuerdos_grupales_service.dart`
+- [ ] Extender `AcuerdosService` para soportar filtro por origen
+
+**Pantallas:**
+- [ ] `lib/features/tesoreria/pages/nuevo_acuerdo_grupal_page.dart` (~800 líneas)
+- [ ] Actualizar `acuerdos_page.dart`: botón, filtro origen
+- [ ] Actualizar `detalle_acuerdo_page.dart`: mostrar origen grupal
+- [ ] Actualizar `plantel_page.dart`: sección acuerdos en detalle jugador
+
+**Models:**
+- [ ] `AcuerdoGrupalFormData`
+- [ ] `JugadorConMonto`
+- [ ] `ValidacionJugador`
+- [ ] `PreviewAcuerdoGrupal`
+- [ ] `ResultadoCreacionGrupal`
+- [ ] `AcuerdoGrupalHistorico`
+- [ ] `DetalleAcuerdoGrupal`
+
+**Tests:**
+- [ ] `test/acuerdos_grupales_service_test.dart`
+
+**Documentación:**
+- [ ] Actualizar `SUPABASE_TESORERIA_SETUP.md` con nuevas tablas
+
+**Estimación total:** ~2,500 líneas nuevas + ~800 líneas de modificaciones
+
+### 🚫 Fuera de Alcance (NO Implementar en F19)
+
+- ❌ Modificación masiva de acuerdos creados
+- ❌ "Deshacer" acuerdo grupal (eliminar todos los acuerdos de golpe)
+- ❌ Compartir acuerdo grupal entre múltiples unidades de gestión
+- ❌ Plantillas de acuerdos grupales guardadas
+- ❌ Importación desde Excel/CSV
+- ❌ Cálculo automático de monto por categoría de jugador
+
+---
+
+### Progreso de Fase 19:
+- ✅ **19.1-19.4**: Cambios en DB (tablas, columnas, seeds)
+- ⏳ **19.5-19.6**: Pantallas y flujo
+- ⏳ **19.7**: Servicios
+- ⏳ **19.8**: Tests
+
+**Estado:** 🚧 En preparación (DB actualizada, servicios pendientes)

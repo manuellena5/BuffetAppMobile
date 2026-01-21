@@ -39,6 +39,8 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
   String? _error;
   String? _categoriaNombre;
   Map<int, String> _movimientosCategoriasNombres = {};
+  List<Map<String, dynamic>> _cuotas = [];
+  bool _cuotasExpanded = true;
 
   @override
   void initState() {
@@ -70,6 +72,14 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
         where: 'compromiso_id = ? AND eliminado = 0',
         whereArgs: [widget.compromisoId],
         orderBy: 'created_ts DESC',
+      );
+      
+      // Cargar cuotas si existen
+      final cuotas = await db.query(
+        'compromiso_cuotas',
+        where: 'compromiso_id = ?',
+        whereArgs: [widget.compromisoId],
+        orderBy: 'numero_cuota ASC',
       );
       
       // Calcular próximo vencimiento y cuotas restantes
@@ -110,6 +120,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
         _cuotasRestantes = cuotasRest;
         _categoriaNombre = catNombre;
         _movimientosCategoriasNombres = movCategoriasNombres;
+        _cuotas = cuotas;
         _isLoading = false;
       });
     } catch (e, st) {
@@ -299,6 +310,10 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
             const SizedBox(height: 16),
             _buildEstadoCard(),
             const SizedBox(height: 16),
+            if (_cuotas.isNotEmpty) ...[
+              _buildCuotasCard(),
+              const SizedBox(height: 16),
+            ],
             _buildMovimientosCard(),
           ],
         ),
@@ -461,6 +476,158 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCuotasCard() {
+    final comp = _compromiso!;
+    final activo = comp['activo'] == 1;
+    final eliminado = comp['eliminado'] == 1;
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _cuotasExpanded = !_cuotasExpanded;
+                });
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Cuotas Generadas',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        '${_cuotas.length} total',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        _cuotasExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: Colors.grey,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (_cuotasExpanded) ...[
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
+                columnSpacing: 24,
+                columns: const [
+                  DataColumn(label: Text('Nro', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Fecha', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Monto', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Estado', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: _cuotas.map((cuota) {
+                  final estado = cuota['estado'] as String;
+                  final numeroCuota = cuota['numero_cuota'] as int;
+                  final fechaProgramada = cuota['fecha_programada'] as String;
+                  final montoEsperado = (cuota['monto_esperado'] as num).toDouble();
+                  
+                  return DataRow(
+                    cells: [
+                      DataCell(Text('$numeroCuota')),
+                      DataCell(Text(
+                        DateFormat('dd/MM/yyyy').format(DateTime.parse(fechaProgramada)),
+                      )),
+                      DataCell(Text(
+                        '\$${NumberFormat('#,##0.00', 'es_AR').format(montoEsperado)}',
+                      )),
+                      DataCell(_buildEstadoBadge(estado)),
+                      DataCell(
+                        estado == 'ESPERADO' && activo && !eliminado
+                            ? IconButton(
+                                icon: const Icon(Icons.payment, size: 20),
+                                tooltip: 'Registrar pago',
+                                onPressed: () async {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ConfirmarMovimientoPage(
+                                        compromisoId: widget.compromisoId,
+                                        fechaVencimiento: DateTime.parse(fechaProgramada),
+                                        montoSugerido: montoEsperado,
+                                        tipo: comp['tipo'] as String,
+                                        categoria: comp['categoria'] as String? ?? '',
+                                      ),
+                                    ),
+                                  );
+                                  if (result == true) {
+                                    await _cargarDatos();
+                                  }
+                                },
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEstadoBadge(String estado) {
+    Color color;
+    IconData icon;
+    
+    switch (estado) {
+      case 'CONFIRMADO':
+        color = Colors.green;
+        icon = Icons.check_circle;
+        break;
+      case 'CANCELADO':
+        color = Colors.red;
+        icon = Icons.cancel;
+        break;
+      case 'ESPERADO':
+      default:
+        color = Colors.orange;
+        icon = Icons.schedule;
+        break;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            estado,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }

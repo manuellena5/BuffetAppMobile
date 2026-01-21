@@ -7,6 +7,7 @@ import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/format.dart';
 import '../../../data/dao/db.dart';
 import '../services/categoria_movimiento_service.dart';
+import '../services/acuerdos_grupales_service.dart';
 import 'editar_acuerdo_page.dart';
 import 'detalle_compromiso_page.dart';
 
@@ -28,12 +29,17 @@ class DetalleAcuerdoPage extends StatefulWidget {
 
 class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
   final _compromisosService = CompromisosService.instance;
+  final _grupalSvc = AcuerdosGrupalesService.instance;
   
   Map<String, dynamic>? _acuerdo;
   Map<String, dynamic>? _stats;
   List<Map<String, dynamic>> _compromisos = [];
   bool _isLoading = true;
   String? _categoriaNombre;
+  
+  // FASE 19: Datos de origen grupal
+  Map<String, dynamic>? _historico;
+  List<Map<String, dynamic>> _acuerdosHermanos = [];
 
   @override
   void initState() {
@@ -108,11 +114,47 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
         catNombre = await CategoriaMovimientoService.obtenerNombrePorCodigo(codigoCat);
       }
       
+      // FASE 19: Cargar datos de origen grupal si aplica
+      Map<String, dynamic>? historico;
+      List<Map<String, dynamic>> hermanos = [];
+      
+      final acuerdoGrupalRef = acuerdo['acuerdo_grupal_ref']?.toString();
+      if (acuerdoGrupalRef != null && acuerdoGrupalRef.isNotEmpty) {
+        try {
+          historico = await _grupalSvc.obtenerHistorico(acuerdoGrupalRef);
+          final hermanosRaw = await _grupalSvc.listarAcuerdosHermanos(acuerdoGrupalRef);
+          
+          // Convertir a Maps mutables
+          hermanos = hermanosRaw.map((h) => Map<String, dynamic>.from(h)).toList();
+          
+          // Enriquecer hermanos con nombres
+          for (final hermano in hermanos) {
+            final entidadId = hermano['entidad_plantel_id'] as int?;
+            if (entidadId != null) {
+              final entidad = await db.query('entidades_plantel', where: 'id = ?', whereArgs: [entidadId]);
+              if (entidad.isNotEmpty) {
+                hermano['_entidad_nombre'] = entidad.first['nombre'];
+              }
+            }
+          }
+        } catch (e, stack) {
+          await AppDatabase.logLocalError(
+            scope: 'detalle_acuerdo_page.cargar_origen_grupal',
+            error: e.toString(),
+            stackTrace: stack,
+            payload: {'acuerdo_grupal_ref': acuerdoGrupalRef},
+          );
+          // No fallar por esto, solo no mostrar la sección
+        }
+      }
+      
       setState(() {
         _acuerdo = acuerdo;
         _stats = stats;
         _compromisos = compromisos;
         _categoriaNombre = catNombre;
+        _historico = historico;
+        _acuerdosHermanos = hermanos;
         _isLoading = false;
       });
     } catch (e, stack) {
@@ -278,6 +320,15 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
                   children: [
                   _buildInfoCard(),
                   const SizedBox(height: 16),
+                  // FASE 19: Mostrar info de origen grupal si aplica
+                  if (_historico != null) ...[
+                    _buildOrigenGrupalCard(),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_acuerdosHermanos.isNotEmpty) ...[
+                    _buildAcuerdosHermanosCard(),
+                    const SizedBox(height: 16),
+                  ],
                   _buildEstadisticasCard(),
                   const SizedBox(height: 16),
                   _buildCompromisosCard(),
@@ -615,5 +666,138 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
       default:
         return modalidad;
     }
+  }
+  
+  // FASE 19: Card de información de origen grupal
+  Widget _buildOrigenGrupalCard() {
+    if (_historico == null) return const SizedBox.shrink();
+    
+    final nombreGrupal = _historico!['nombre']?.toString() ?? 'Sin nombre';
+    final fechaCreacion = _historico!['created_ts'] as int?;
+    final totalAcuerdos = _historico!['total_acuerdos'] as int? ?? 0;
+    final totalCompromisos = _historico!['total_compromisos'] as int? ?? 0;
+    
+    return Card(
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.group, color: Colors.blue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Acuerdo Grupal',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            Text(
+              'Este acuerdo fue creado como parte de "$nombreGrupal"',
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 8),
+            if (fechaCreacion != null)
+              Text(
+                'Creado: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(fechaCreacion))}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            Text(
+              'Total de acuerdos generados: $totalAcuerdos',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Total de compromisos generados: $totalCompromisos',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // FASE 19: Card de acuerdos hermanos (del mismo grupo)
+  Widget _buildAcuerdosHermanosCard() {
+    if (_acuerdosHermanos.isEmpty) return const SizedBox.shrink();
+    
+    // Filtrar el acuerdo actual
+    final hermanos = _acuerdosHermanos
+        .where((a) => (a['id'] as int) != widget.acuerdoId)
+        .toList();
+    
+    if (hermanos.isEmpty) return const SizedBox.shrink();
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.people_outline),
+                const SizedBox(width: 8),
+                Text(
+                  'Acuerdos del mismo grupo (${hermanos.length})',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+            const Divider(),
+            SizedBox(
+              height: hermanos.length > 3 ? 200 : null,
+              child: ListView.separated(
+                shrinkWrap: hermanos.length <= 3,
+                itemCount: hermanos.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final hermano = hermanos[index];
+                  final entidadNombre = hermano['_entidad_nombre']?.toString() ?? 'Desconocido';
+                  final activo = (hermano['activo'] as int?) == 1;
+                  final monto = hermano['modalidad'] == 'MONTO_TOTAL_CUOTAS'
+                      ? (hermano['monto_total'] as num?)?.toDouble() ?? 0.0
+                      : (hermano['monto_periodico'] as num?)?.toDouble() ?? 0.0;
+                  
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(
+                      activo ? Icons.check_circle : Icons.cancel,
+                      color: activo ? Colors.green : Colors.grey,
+                      size: 20,
+                    ),
+                    title: Text(
+                      entidadNombre,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(Format.money(monto)),
+                    trailing: const Icon(Icons.arrow_forward, size: 16),
+                    onTap: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (ctx) => DetalleAcuerdoPage(
+                            acuerdoId: hermano['id'] as int,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

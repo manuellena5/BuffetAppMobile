@@ -14,7 +14,10 @@ import 'plantel_service.dart';
 /// - Columna C: Contacto (opcional)
 /// - Columna D: DNI (opcional)
 /// - Columna E: Fecha Nacimiento (opcional, formato DD/MM/YYYY)
-/// - Columna F: Observaciones (opcional)
+/// - Columna F: Alias (opcional)
+/// - Columna G: Tipo Contratación (opcional, LOCAL/REFUERZO/OTRO, solo JUGADOR)
+/// - Columna H: Posición (opcional, ARQUERO/DEFENSOR/MEDIOCAMPISTA/DELANTERO/STAFF_CT, solo JUGADOR)
+/// - Columna I: Observaciones (opcional)
 class PlantelImportExportService {
   PlantelImportExportService._();
   static final PlantelImportExportService instance = PlantelImportExportService._();
@@ -47,8 +50,9 @@ class PlantelImportExportService {
       sheet.cell(CellIndex.indexByString('A3')).value = '1. Complete la hoja "Jugadores" con los datos';
       sheet.cell(CellIndex.indexByString('A4')).value = '2. Columnas requeridas: Nombre, Rol';
       sheet.cell(CellIndex.indexByString('A5')).value = '3. Roles válidos: JUGADOR, DT, AYUDANTE, PF, OTRO';
-      sheet.cell(CellIndex.indexByString('A6')).value = '4. Fecha Nacimiento formato: DD/MM/YYYY (ejemplo: 15/03/1995)';
-      sheet.cell(CellIndex.indexByString('A7')).value = '5. Nombres duplicados serán ignorados';
+      sheet.cell(CellIndex.indexByString('A6')).value = '4. Tipo Contratación: LOCAL, REFUERZO, OTRO (solo para jugadores)';
+      sheet.cell(CellIndex.indexByString('A7')).value = '5. Fecha Nacimiento formato: DD/MM/YYYY (ejemplo: 15/03/1995)';
+      sheet.cell(CellIndex.indexByString('A8')).value = '6. Nombres duplicados serán ignorados';
 
       // Hoja de jugadores con ejemplos
       final jugadoresSheet = excel['Jugadores'];
@@ -59,9 +63,12 @@ class PlantelImportExportService {
       jugadoresSheet.cell(CellIndex.indexByString('C1')).value = 'Contacto';
       jugadoresSheet.cell(CellIndex.indexByString('D1')).value = 'DNI';
       jugadoresSheet.cell(CellIndex.indexByString('E1')).value = 'Fecha Nacimiento';
-      jugadoresSheet.cell(CellIndex.indexByString('F1')).value = 'Observaciones';
+      jugadoresSheet.cell(CellIndex.indexByString('F1')).value = 'Alias';
+      jugadoresSheet.cell(CellIndex.indexByString('G1')).value = 'Tipo Contratación';
+      jugadoresSheet.cell(CellIndex.indexByString('H1')).value = 'Posición';
+      jugadoresSheet.cell(CellIndex.indexByString('I1')).value = 'Observaciones';
 
-      for (var col in ['A', 'B', 'C', 'D', 'E', 'F']) {
+      for (var col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']) {
         jugadoresSheet.cell(CellIndex.indexByString('${col}1')).cellStyle = headerStyle;
       }
 
@@ -71,14 +78,20 @@ class PlantelImportExportService {
       jugadoresSheet.cell(CellIndex.indexByString('C2')).value = '3512345678';
       jugadoresSheet.cell(CellIndex.indexByString('D2')).value = '12345678';
       jugadoresSheet.cell(CellIndex.indexByString('E2')).value = '15/03/1995';
-      jugadoresSheet.cell(CellIndex.indexByString('F2')).value = 'Delantero';
+      jugadoresSheet.cell(CellIndex.indexByString('F2')).value = 'El Toto';
+      jugadoresSheet.cell(CellIndex.indexByString('G2')).value = 'LOCAL';
+      jugadoresSheet.cell(CellIndex.indexByString('H2')).value = 'DELANTERO';
+      jugadoresSheet.cell(CellIndex.indexByString('I2')).value = 'Goleador del equipo';
 
       jugadoresSheet.cell(CellIndex.indexByString('A3')).value = 'Carlos Díaz';
       jugadoresSheet.cell(CellIndex.indexByString('B3')).value = 'DT';
       jugadoresSheet.cell(CellIndex.indexByString('C3')).value = '3519876543';
       jugadoresSheet.cell(CellIndex.indexByString('D3')).value = '87654321';
       jugadoresSheet.cell(CellIndex.indexByString('E3')).value = '20/08/1975';
-      jugadoresSheet.cell(CellIndex.indexByString('F3')).value = 'Director Técnico';
+      jugadoresSheet.cell(CellIndex.indexByString('F3')).value = '';
+      jugadoresSheet.cell(CellIndex.indexByString('G3')).value = '';
+      jugadoresSheet.cell(CellIndex.indexByString('H3')).value = '';
+      jugadoresSheet.cell(CellIndex.indexByString('I3')).value = 'Director Técnico';
 
       // Guardar
       final dir = await getTemporaryDirectory();
@@ -141,7 +154,10 @@ class PlantelImportExportService {
           final contacto = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: i)).value?.toString().trim();
           final dni = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: i)).value?.toString().trim();
           final fechaNacStr = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: i)).value?.toString().trim();
-          final observaciones = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: i)).value?.toString().trim();
+          final alias = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: i)).value?.toString().trim();
+          final tipoContratacion = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: i)).value?.toString().trim().toUpperCase();
+          final posicion = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: i)).value?.toString().trim().toUpperCase();
+          final observaciones = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: i)).value?.toString().trim();
 
           // Saltar filas vacías
           if (nombre == null || nombre.isEmpty) continue;
@@ -177,6 +193,9 @@ class PlantelImportExportService {
             'contacto': contacto,
             'dni': dni,
             'fecha_nacimiento': fechaNacimiento,
+            'alias': alias,
+            'tipo_contratacion': (tipoContratacion != null && tipoContratacion.isNotEmpty) ? tipoContratacion : null,
+            'posicion': (posicion != null && posicion.isNotEmpty) ? posicion : null,
             'observaciones': observaciones,
             'fila_excel': i + 1, // Para referencia en errores
           });
@@ -218,6 +237,9 @@ class PlantelImportExportService {
           contacto: jugador['contacto'],
           dni: jugador['dni'],
           fechaNacimiento: jugador['fecha_nacimiento'],
+          alias: jugador['alias'],
+          tipoContratacion: jugador['tipo_contratacion'],
+          posicion: jugador['posicion'],
           observaciones: jugador['observaciones'],
         );
         creados++;
@@ -267,7 +289,7 @@ class PlantelImportExportService {
       );
 
       // Encabezados
-      final headers = ['Nombre', 'Rol', 'Estado', 'Contacto', 'DNI', 'Fecha Nacimiento', 'Observaciones'];
+      final headers = ['Nombre', 'Rol', 'Estado', 'Contacto', 'DNI', 'Fecha Nacimiento', 'Alias', 'Tipo Contratación', 'Posición', 'Observaciones'];
       for (var i = 0; i < headers.length; i++) {
         final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
         cell.value = headers[i];
@@ -308,6 +330,15 @@ class PlantelImportExportService {
         }
         
         sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row)).value = 
+            jugador['alias']?.toString() ?? '';
+        
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: row)).value = 
+            jugador['tipo_contratacion']?.toString() ?? '';
+        
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row)).value = 
+            jugador['posicion']?.toString() ?? '';
+        
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row)).value = 
             jugador['observaciones']?.toString() ?? '';
       }
 

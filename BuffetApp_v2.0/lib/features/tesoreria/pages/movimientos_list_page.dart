@@ -1185,6 +1185,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             DataColumn(label: Text('Categoría', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             DataColumn(label: Text('Monto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)), numeric: true),
             DataColumn(label: Text('M. Pago', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            DataColumn(label: Text('Entidad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             DataColumn(label: Text('Compromiso', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             DataColumn(label: Text('Obs.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             DataColumn(label: Text('Adj.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -1308,6 +1309,21 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 ),
               ),
               const DataCell(Text('-', style: TextStyle(fontSize: 12))),
+              DataCell(
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 100),
+                  child: Text(
+                    item.entidadNombre ?? '-',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: esCancelado ? Colors.red.shade400 : Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+              ),
               DataCell(
                 Container(
                   constraints: const BoxConstraints(maxWidth: 120),
@@ -1488,6 +1504,19 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],
+              ),
+            ),
+            DataCell(
+              Container(
+                constraints: const BoxConstraints(maxWidth: 100),
+                child: Text(
+                  (mov['entidad_plantel_nombre'] ?? '').toString().isEmpty
+                      ? '-'
+                      : (mov['entidad_plantel_nombre'] ?? '').toString(),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ),
             DataCell(

@@ -138,12 +138,13 @@ class CompromisosService {
   /// Retorna null si no existe o está eliminado.
   Future<Map<String, dynamic>?> obtenerCompromiso(int id) async {
     final db = await AppDatabase.instance();
-    final rows = await db.query(
-      'compromisos',
-      where: 'id = ? AND eliminado = 0',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final rows = await db.rawQuery('''
+      SELECT c.*, ep.nombre as entidad_nombre
+      FROM compromisos c
+      LEFT JOIN entidades_plantel ep ON ep.id = c.entidad_plantel_id
+      WHERE c.id = ? AND c.eliminado = 0
+      LIMIT 1
+    ''', [id]);
     return rows.isEmpty ? null : rows.first;
   }
 
@@ -158,7 +159,9 @@ class CompromisosService {
   /// Retorna lista ordenada por fecha_inicio DESC.
   Future<List<Map<String, dynamic>>> listarCompromisos({
     int? unidadGestionId,
+    int? entidadPlantelId,
     String? tipo,
+    String? estado,
     bool? activo,
     bool incluirEliminados = false,
   }) async {
@@ -176,9 +179,19 @@ class CompromisosService {
       whereArgs.add(unidadGestionId);
     }
 
+    if (entidadPlantelId != null) {
+      whereConditions.add('entidad_plantel_id = ?');
+      whereArgs.add(entidadPlantelId);
+    }
+
     if (tipo != null) {
       whereConditions.add('tipo = ?');
       whereArgs.add(tipo);
+    }
+
+    if (estado != null) {
+      whereConditions.add('estado = ?');
+      whereArgs.add(estado);
     }
 
     if (activo != null) {
@@ -186,16 +199,17 @@ class CompromisosService {
       whereArgs.add(activo ? 1 : 0);
     }
 
-    final where = whereConditions.isEmpty ? null : whereConditions.join(' AND ');
+    final where = whereConditions.isEmpty ? '' : 'WHERE ' + whereConditions.join(' AND ');
 
-    final rows = await db.query(
-      'compromisos',
-      where: where,
-      whereArgs: whereArgs.isEmpty ? null : whereArgs,
-      orderBy: 'fecha_inicio DESC, created_ts DESC',
-    );
+    final rows = await db.rawQuery('''
+      SELECT c.*, ep.nombre as entidad_nombre
+      FROM compromisos c
+      LEFT JOIN entidades_plantel ep ON ep.id = c.entidad_plantel_id
+      $where
+      ORDER BY c.fecha_inicio DESC, c.created_ts DESC
+    ''', whereArgs.isEmpty ? null : whereArgs);
 
-    return rows;
+    return rows.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   /// Actualiza un compromiso existente.

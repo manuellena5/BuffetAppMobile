@@ -28,6 +28,7 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
   bool _cargando = true;
   String _filtroRol = 'TODOS';
   String _filtroEstado = 'ACTIVOS';
+  String _filtroTipoContratacion = 'TODOS'; // TODOS, LOCAL, REFUERZO, OTRO
   bool _vistaTabla = false; // false = tarjetas, true = tabla
 
   @override
@@ -35,6 +36,8 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
     super.initState();
     _cargarEntidades();
   }
+
+  List<Map<String, dynamic>> _entidadesOriginales = [];
 
   Future<void> _cargarEntidades() async {
     setState(() => _cargando = true);
@@ -44,7 +47,10 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
         rol: _filtroRol == 'TODOS' ? null : _filtroRol,
         soloActivos: soloActivos,
       );
-      setState(() => _entidades = entidades);
+      setState(() {
+        _entidadesOriginales = entidades;
+        _aplicarFiltros();
+      });
     } catch (e, stack) {
       await AppDatabase.logLocalError(
         scope: 'gestionar_jugadores.cargar_entidades',
@@ -63,6 +69,17 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
       }
     } finally {
       setState(() => _cargando = false);
+    }
+  }
+
+  void _aplicarFiltros() {
+    if (_filtroTipoContratacion == 'TODOS') {
+      _entidades = _entidadesOriginales;
+    } else {
+      _entidades = _entidadesOriginales.where((e) {
+        final tipo = (e['tipo_contratacion'] as String?) ?? '';
+        return tipo.toUpperCase() == _filtroTipoContratacion;
+      }).toList();
     }
   }
 
@@ -222,6 +239,29 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  // Filtro por tipo de contratación
+                  Row(
+                    children: [
+                      const Text('Tipo Contratación:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'TODOS', label: Text('Todos')),
+                            ButtonSegment(value: 'LOCAL', label: Text('Local')),
+                            ButtonSegment(value: 'REFUERZO', label: Text('Refuerzo')),
+                            ButtonSegment(value: 'OTRO', label: Text('Otro')),
+                          ],
+                          selected: {_filtroTipoContratacion},
+                          onSelectionChanged: (Set<String> selected) {
+                            setState(() => _filtroTipoContratacion = selected.first);
+                            _aplicarFiltros();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -345,7 +385,8 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
           columns: const [
             DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Contacto', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Posición', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Tipo Contratación', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Estado', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
@@ -354,7 +395,8 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
             final nombre = entidad['nombre'] as String;
             final rol = entidad['rol'] as String;
             final activo = (entidad['estado_activo'] as int) == 1;
-            final contacto = entidad['contacto'] as String? ?? '-';
+            final posicion = entidad['posicion'] as String? ?? '-';
+            final tipoContratacion = entidad['tipo_contratacion'] as String? ?? '-';
 
             return DataRow(
               color: MaterialStateProperty.all(
@@ -368,7 +410,8 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
                   ),
                 )),
                 DataCell(Text(_nombreRol(rol))),
-                DataCell(Text(contacto)),
+                DataCell(Text(posicion)),
+                DataCell(Text(tipoContratacion)),
                 DataCell(
                   Chip(
                     label: Text(

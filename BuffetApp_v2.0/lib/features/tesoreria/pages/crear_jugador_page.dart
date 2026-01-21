@@ -19,8 +19,11 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
   final _contactoController = TextEditingController();
   final _dniController = TextEditingController();
   final _observacionesController = TextEditingController();
+  final _aliasController = TextEditingController();
 
   String _rolSeleccionado = 'JUGADOR';
+  String? _tipoContratacion;
+  String? _posicion;
   DateTime? _fechaNacimiento;
   bool _guardando = false;
 
@@ -30,6 +33,7 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
     _contactoController.dispose();
     _dniController.dispose();
     _observacionesController.dispose();
+    _aliasController.dispose();
     super.dispose();
   }
 
@@ -40,7 +44,6 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
       initialDate: _fechaNacimiento ?? DateTime(hoy.year - 25),
       firstDate: DateTime(1950),
       lastDate: hoy,
-      locale: const Locale('es'),
       helpText: 'Fecha de nacimiento',
     );
 
@@ -72,6 +75,9 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
         observaciones: _observacionesController.text.trim().isEmpty
             ? null
             : _observacionesController.text.trim(),
+        tipoContratacion: _tipoContratacion,
+        posicion: _posicion,
+        alias: _aliasController.text.trim().isEmpty ? null : _aliasController.text.trim(),
       );
 
       if (mounted) {
@@ -186,6 +192,71 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
             ),
 
             const SizedBox(height: 16),
+
+            // Alias (opcional)
+            TextFormField(
+              controller: _aliasController,
+              decoration: const InputDecoration(
+                labelText: 'Alias / Apodo',
+                hintText: 'Ej: El Toto',
+                prefixIcon: Icon(Icons.star),
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.words,
+              enabled: !_guardando,
+            ),
+
+            const SizedBox(height: 16),
+
+            // Tipo de Contratación (solo para JUGADOR)
+            if (_rolSeleccionado == 'JUGADOR')
+              DropdownButtonFormField<String>(
+                value: _tipoContratacion,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de Contratación',
+                  prefixIcon: Icon(Icons.assignment),
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('No especificado')),
+                  DropdownMenuItem(value: 'LOCAL', child: Text('Local')),
+                  DropdownMenuItem(value: 'REFUERZO', child: Text('Refuerzo')),
+                  DropdownMenuItem(value: 'OTRO', child: Text('Otro')),
+                ],
+                onChanged: _guardando
+                    ? null
+                    : (value) {
+                        setState(() => _tipoContratacion = value);
+                      },
+              ),
+
+            if (_rolSeleccionado == 'JUGADOR') const SizedBox(height: 16),
+
+            // Posición (solo para JUGADOR)
+            if (_rolSeleccionado == 'JUGADOR')
+              DropdownButtonFormField<String>(
+                value: _posicion,
+                decoration: const InputDecoration(
+                  labelText: 'Posición',
+                  prefixIcon: Icon(Icons.sports_soccer),
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('No especificado')),
+                  DropdownMenuItem(value: 'ARQUERO', child: Text('Arquero')),
+                  DropdownMenuItem(value: 'DEFENSOR', child: Text('Defensor')),
+                  DropdownMenuItem(value: 'MEDIOCAMPISTA', child: Text('Mediocampista')),
+                  DropdownMenuItem(value: 'DELANTERO', child: Text('Delantero')),
+                  DropdownMenuItem(value: 'STAFF_CT', child: Text('Staff Cuerpo Técnico')),
+                ],
+                onChanged: _guardando
+                    ? null
+                    : (value) {
+                        setState(() => _posicion = value);
+                      },
+              ),
+
+            if (_rolSeleccionado == 'JUGADOR') const SizedBox(height: 16),
 
             // Contacto (opcional)
             TextFormField(

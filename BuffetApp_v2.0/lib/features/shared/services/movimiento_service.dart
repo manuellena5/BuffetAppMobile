@@ -136,10 +136,12 @@ class EventoMovimientoService {
         SELECT
           em.*,
           mp.descripcion as medio_pago_desc,
-          c.nombre as compromiso_nombre
+          c.nombre as compromiso_nombre,
+          ep.nombre as entidad_plantel_nombre
         FROM evento_movimiento em
         LEFT JOIN metodos_pago mp ON mp.id = em.medio_pago_id
         LEFT JOIN compromisos c ON c.id = em.compromiso_id
+        LEFT JOIN entidades_plantel ep ON ep.id = c.entidad_plantel_id
         WHERE em.id = ?
         LIMIT 1
       ''', [id]);
