@@ -191,7 +191,7 @@ class ExportService {
         'Estado',
         'Fecha',
         'Hora apertura',
-        'Disciplina',
+        'Unidad de gestión',
         'Desc Evento',
         'Caj Apertura',
         'Caj cierre',
@@ -308,7 +308,7 @@ class ExportService {
         'Estado',
         'Fecha',
         'Hora apertura',
-        'Disciplina',
+        'Unidad de gestión',
         'Desc Evento',
         'Caj Apertura',
         'Caj cierre',
@@ -492,7 +492,7 @@ class ExportService {
         'Estado',
         'Fecha',
         'Hora apertura',
-        'Disciplina',
+        'Unidad de gestión',
         'Desc Evento',
         'Caj Apertura',
         'Caj cierre',
@@ -612,7 +612,7 @@ class ExportService {
         'Estado',
         'Fecha',
         'Hora apertura',
-        'Disciplina',
+        'Unidad de gestión',
         'Desc Evento',
         'Caj Apertura',
         'Caj cierre',
@@ -1471,7 +1471,7 @@ class ExportService {
       _labelValue('Código de Caja', codigo);
       _labelValue('Fecha', fecha);
       _labelValue('Hora Apertura', horaApertura);
-      _labelValue('Disciplina', disciplina.isEmpty ? '—' : disciplina);
+      _labelValue('Unidad de gestión', disciplina.isEmpty ? '—' : disciplina);
       _labelValue('Descripción Evento',
           descripcionEvento.isEmpty ? '—' : descripcionEvento);
       _labelValue(

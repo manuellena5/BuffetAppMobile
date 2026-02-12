@@ -207,7 +207,7 @@ class PrintService {
               pw.Text(
                   line('Cajero apertura:', c['cajero_apertura']?.toString()),
                   style: s()),
-              pw.Text(line('Disciplina:', c['disciplina']?.toString()),
+              pw.Text(line('Unidad de gestión:', c['disciplina']?.toString()),
                   style: s()),
               if (descripcionEvento.isNotEmpty)
                 pw.Text(line('Descripción del evento:', descripcionEvento),
@@ -549,7 +549,7 @@ class PrintService {
               ));
               widgets.add(pw.SizedBox(height: 4));
 
-              widgets.add(pw.Text('Disciplina: $disciplina', style: s()));
+              widgets.add(pw.Text('Unidad de gestión: $disciplina', style: s()));
               widgets.add(pw.Text('Fecha: $fecha', style: s()));
               if (pvs.isNotEmpty) {
                 widgets.add(pw.Text('PV(s): ${pvs.join(' · ')}', style: s()));
@@ -710,7 +710,7 @@ class PrintService {
                     style: s(true)));
                 widgets.add(pw.SizedBox(height: 6));
 
-                widgets.add(pw.Text('Disciplina: $disciplina', style: s()));
+                widgets.add(pw.Text('Unidad de gestión: $disciplina', style: s()));
                 widgets.add(pw.Text('Fecha: $fecha', style: s()));
                 widgets.add(pw.SizedBox(height: 6));
 
@@ -790,7 +790,7 @@ class PrintService {
               style: s(true)));
           widgets.add(pw.SizedBox(height: 6));
 
-          widgets.add(pw.Text('Disciplina: $disciplina', style: s()));
+          widgets.add(pw.Text('Unidad de gestión: $disciplina', style: s()));
           widgets.add(pw.Text('Fecha: $fecha', style: s()));
           if (pvs.isNotEmpty) {
             widgets.add(pw.Text('PV(s): ${pvs.join(' · ')}', style: s()));
@@ -1201,7 +1201,7 @@ class PrintService {
     text('Estado: Cerrada');
     text('Fecha apertura: $fecha $hora');
     text('Cajero apertura: Demo User');
-    text('Disciplina: General');
+    text('Unidad de gestión: General');
     feed();
     boldOn();
     text('TOTALES POR MEDIO DE PAGO');
@@ -1370,7 +1370,7 @@ class PrintService {
     }
     text('Fecha apertura: ${(c['fecha'] ?? '')} ${(c['hora_apertura'] ?? '')}');
     text('Cajero apertura: ${c['cajero_apertura'] ?? ''}');
-    text('Disciplina: ${c['disciplina'] ?? ''}');
+    text('Unidad de gestión: ${c['disciplina'] ?? ''}');
     if (descripcionEvento.isNotEmpty) {
       writeWrapped('Descripcion evento: ', descripcionEvento);
     }
@@ -1735,7 +1735,7 @@ class PrintService {
     boldOff();
     alignLeft();
 
-    writeWrapped('Disciplina: $disciplina');
+    writeWrapped('Unidad de gestión: $disciplina');
     text('Fecha: $fecha');
     text('Cajas incluidas: ${cajaIds.length}');
     feed();

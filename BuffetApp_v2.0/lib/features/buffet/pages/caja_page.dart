@@ -207,7 +207,7 @@ class _CajaPageState extends State<CajaPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _kv('Disciplina', disciplina.isEmpty ? '—' : disciplina),
+                    _kv('Unidad de gestión', disciplina.isEmpty ? '—' : disciplina),
                     const SizedBox(height: 10),
                     FutureBuilder<String?>(
                       future: _buildPvLabelFromCajaCodigo(codigoCaja),

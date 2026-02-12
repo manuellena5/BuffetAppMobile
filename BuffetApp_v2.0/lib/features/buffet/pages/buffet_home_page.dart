@@ -37,6 +37,8 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
   double? _cajaTotal;
   String? _cajaCodigo;
   bool _useList = false;
+  /// Modo de agrupación en lista: 'vertical' (apiladas) o 'columnas' (lado a lado)
+  String _listGroupMode = 'vertical';
   String? _appVersion;
   static const String _lowStockPrefsKey = 'low_stock_alerted_ids';
   bool _usbConnected = false;
@@ -81,6 +83,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
       final sp = await SharedPreferences.getInstance();
       final v = sp.getString('productos_layout');
       _useList = (v == 'list');
+      _listGroupMode = sp.getString('list_group_mode') ?? 'vertical';
       _showAdvanced = sp.getBool('show_advanced_options') ?? false;
     } catch (e, st) {
       AppDatabase.logLocalError(
@@ -732,32 +735,28 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
         return (order[a] ?? 99).compareTo(order[b] ?? 99);
       });
 
-    return OrientationBuilder(
-      builder: (context, orientation) {
-        if (orientation == Orientation.landscape) {
-          // Landscape: 3 columnas lado a lado
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (int i = 0; i < sortedKeys.length; i++) ...[
-                if (i > 0) const SizedBox(width: 4),
-                Expanded(
-                  child: _buildCategoryColumn(
-                      sortedKeys[i], grouped[sortedKeys[i]]!),
-                ),
-              ],
-            ],
-          );
-        }
-        // Portrait: categorías apiladas verticalmente
-        return ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-          children: [
-            for (final catId in sortedKeys)
-              _buildCategorySection(catId, grouped[catId]!),
+    if (_listGroupMode == 'columnas') {
+      // Columnas: categorías lado a lado
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < sortedKeys.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              child: _buildCategoryColumn(
+                  sortedKeys[i], grouped[sortedKeys[i]]!),
+            ),
           ],
-        );
-      },
+        ],
+      );
+    }
+    // Vertical: categorías apiladas
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      children: [
+        for (final catId in sortedKeys)
+          _buildCategorySection(catId, grouped[catId]!),
+      ],
     );
   }
 
@@ -877,30 +876,11 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Zona de imagen siempre en gris; el color de categoría solo va en la barra del nombre
         if (img != null && img.isNotEmpty)
           Image.file(File(img), fit: BoxFit.cover)
         else
-          Container(color: _categoryBgColor(catId)),
-        // chip de stock (arriba-izquierda), oculto si 999 (ilimitado)
-        if (stock != 999)
-          Positioned(
-            top: 6,
-            left: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Stock: $stock',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
+          Container(color: Colors.grey.shade300),
         // chip de precio (arriba-derecha)
         if (price != null)
           Positioned(
@@ -921,22 +901,44 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
               ),
             ),
           ),
-        // overlay con nombre siempre visible
+        // Barra inferior: nombre con color de categoría + stock debajo
         Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          child: Container(
-            color: catColor.withValues(alpha: 0.80),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Text(
-              name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w600),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Nombre del producto con color de categoría
+              Container(
+                width: double.infinity,
+                color: catColor.withValues(alpha: 0.80),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600),
+                ),
+              ),
+              // Stock debajo del nombre (oculto si 999 = ilimitado)
+              if (stock != 999)
+                Container(
+                  width: double.infinity,
+                  color: Colors.black87,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  child: Text(
+                    'Stock: $stock',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
