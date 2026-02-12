@@ -1,9 +1,11 @@
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../data/dao/db.dart';
 import '../../buffet/services/caja_service.dart';
-import '../../shared/services/supabase_sync_service.dart';
+import '../../shared/state/app_settings.dart';
+import '../../tesoreria/pages/unidad_gestion_selector_page.dart';
 import 'detalle_evento_page.dart';
 
 enum _EventosModo { delDia, historicos }
@@ -29,10 +31,122 @@ class _EventosPageState extends State<EventosPage> {
   bool _loading = true;
   List<_EventoRow> _eventos = const [];
 
+  // Unidad de Gestión activa
+  // ignore: unused_field
+  int? _unidadGestionId;
+  String? _unidadGestionNombre;
+
   @override
   void initState() {
     super.initState();
-    _load();
+    _initUgAndLoad();
+  }
+
+  Future<void> _initUgAndLoad() async {
+    final settings = context.read<AppSettings>();
+    await settings.ensureLoaded();
+
+    if (settings.isUnidadGestionConfigured) {
+      _unidadGestionId = settings.unidadGestionActivaId;
+      // Cargar el nombre de la UG desde la DB
+      try {
+        final db = await AppDatabase.instance();
+        final rows = await db.query(
+          'unidades_gestion',
+          columns: ['nombre'],
+          where: 'id = ?',
+          whereArgs: [settings.unidadGestionActivaId],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) {
+          _unidadGestionNombre = rows.first['nombre']?.toString();
+        }
+      } catch (e, stack) {
+        await AppDatabase.logLocalError(
+          scope: 'eventos_page.init_ug',
+          error: e,
+          stackTrace: stack,
+        );
+      }
+      await _load();
+    } else {
+      setState(() => _loading = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _promptSeleccionarUg();
+      });
+    }
+  }
+
+  Future<void> _promptSeleccionarUg() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.business, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Unidad de Gestión')),
+          ],
+        ),
+        content: const Text(
+          'Para ver los eventos registrados, necesitás seleccionar una Unidad de Gestión.\n\n¿Querés seleccionar una ahora?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Seleccionar'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _abrirSelectorUg();
+    }
+    // Si cancela, se queda en la página sin UG (estado vacío)
+  }
+
+  Future<void> _abrirSelectorUg() async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const UnidadGestionSelectorPage(),
+      ),
+    );
+
+    if (changed == true && mounted) {
+      final settings = context.read<AppSettings>();
+      await settings.ensureLoaded();
+      if (settings.isUnidadGestionConfigured) {
+        _unidadGestionId = settings.unidadGestionActivaId;
+        try {
+          final db = await AppDatabase.instance();
+          final rows = await db.query(
+            'unidades_gestion',
+            columns: ['nombre'],
+            where: 'id = ?',
+            whereArgs: [settings.unidadGestionActivaId],
+            limit: 1,
+          );
+          if (rows.isNotEmpty) {
+            _unidadGestionNombre = rows.first['nombre']?.toString();
+          }
+        } catch (e, stack) {
+          await AppDatabase.logLocalError(
+            scope: 'eventos_page.abrir_selector_ug',
+            error: e,
+            stackTrace: stack,
+          );
+        }
+        await _load();
+      }
+    }
+    // Si no cambió, se queda en la página con el estado actual
   }
 
   Future<void> _load() async {
@@ -50,6 +164,7 @@ class _EventosPageState extends State<EventosPage> {
         modo: _modo,
         desde: range == null ? null : _yyyyMmDd(range.start),
         hasta: range == null ? null : _yyyyMmDd(range.end),
+        disciplinaFiltro: _unidadGestionNombre,
       );
       if (!mounted) return;
       setState(() {
@@ -77,6 +192,7 @@ class _EventosPageState extends State<EventosPage> {
     required _EventosModo modo,
     String? desde,
     String? hasta,
+    String? disciplinaFiltro,
   }) {
     final now = DateTime.now();
     final hoy =
@@ -98,6 +214,15 @@ class _EventosPageState extends State<EventosPage> {
       } else {
         filtered = cajas;
       }
+    }
+
+    // Filtrar por Unidad de Gestión (disciplina) si está definida
+    if (disciplinaFiltro != null && disciplinaFiltro.isNotEmpty) {
+      final filtroLower = disciplinaFiltro.toLowerCase();
+      filtered = filtered
+          .where((c) =>
+              (c['disciplina'] ?? '').toString().toLowerCase() == filtroLower)
+          .toList();
     }
 
     final byKey = <String, _EventoRow>{};
@@ -143,11 +268,12 @@ class _EventosPageState extends State<EventosPage> {
   }
 
   String _subtitle() {
+    final ug = _unidadGestionNombre ?? '';
     switch (_modo) {
       case _EventosModo.delDia:
-        return 'Eventos del día';
+        return ug.isEmpty ? 'Eventos del día' : 'Eventos del día · $ug';
       case _EventosModo.historicos:
-        return 'Eventos históricos';
+        return ug.isEmpty ? 'Históricos' : 'Históricos · $ug';
     }
   }
 
@@ -409,383 +535,44 @@ class _EventosPageState extends State<EventosPage> {
     await _load();
   }
 
-  Future<String?> _pickFechaParaSync() async {
-    if (_modo == _EventosModo.delDia) {
-      return _yyyyMmDd(DateTime.now());
-    }
+  // --- Métodos de Supabase deshabilitados ---
+  // _syncEventosDesdeSupabase, _pickFechaParaSync, _pickRangoParaSync,
+  // _cajaLabelRemote, _showNoCajasHoyModal, _seleccionarCajasParaDescarga
+  // fueron removidos. Solo se manejan eventos locales.
 
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(now.year + 1, 12, 31),
-      helpText: 'Seleccionar fecha a descargar',
-    );
-    if (picked == null) return null;
-    return _yyyyMmDd(picked);
-  }
-
-  Future<DateTimeRange?> _pickRangoParaSync() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(now.year + 1, 12, 31),
-      initialDateRange: _historicosRango ?? _mesActualRange(),
-      helpText: 'Seleccionar rango a descargar',
-    );
-    return picked;
-  }
-
-  String _cajaLabelRemote(Map<String, dynamic> caja) {
-    final codigo = (caja['codigo_caja'] ?? '').toString().trim();
-    final fecha = (caja['fecha'] ?? '').toString().trim();
-    final disciplina = (caja['disciplina'] ?? '').toString().trim();
-    final parts = <String>[];
-    if (fecha.isNotEmpty) parts.add(fecha);
-    if (disciplina.isNotEmpty) parts.add(disciplina);
-    return '${codigo.isEmpty ? '(sin código)' : codigo} — ${parts.join(' · ')}';
-  }
-
-  Future<void> _showNoCajasHoyModal() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Sin cajas para descargar'),
-        content: const Text(
-          'No existen cajas en la nube para descargar, pruebe desde la pantalla de históricos filtrando por fechas.\n Si quiere sincronizar y subir la caja actual, ingrese a la pantalla de detalle del evento.',
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Aceptar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<List<Map<String, dynamic>>?> _seleccionarCajasParaDescarga({
-    required String titulo,
-    required List<Map<String, dynamic>> cajas,
-  }) async {
-    if (cajas.isEmpty) return null;
-
-    final theme = Theme.of(context);
-    final seleccion = <String, bool>{
-      for (final c in cajas) (c['codigo_caja'] ?? '').toString().trim(): true,
-    };
-    // Limpiar claves inválidas (sin código)
-    seleccion.removeWhere((k, _) => k.trim().isEmpty);
-
-    final codigosSeleccionados = await showDialog<Set<String>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          final codigos = cajas
-              .map((c) => (c['codigo_caja'] ?? '').toString().trim())
-              .where((c) => c.isNotEmpty)
-              .toList(growable: false);
-
-          final selectedCount = seleccion.values.where((v) => v).length;
-
-          return AlertDialog(
-            title: Text(titulo),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Se encontraron ${codigos.length} caja(s). Seleccioná cuáles descargar.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: cajas.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final c = cajas[i];
-                        final codigo =
-                            (c['codigo_caja'] ?? '').toString().trim();
-                        if (codigo.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        final fecha = (c['fecha'] ?? '').toString().trim();
-                        final disciplina =
-                            (c['disciplina'] ?? '').toString().trim();
-                        final checked = seleccion[codigo] ?? true;
-
-                        return CheckboxListTile(
-                          value: checked,
-                          onChanged: (v) {
-                            setLocal(() {
-                              seleccion[codigo] = v ?? false;
-                            });
-                          },
-                          controlAffinity: ListTileControlAffinity.leading,
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            codigo,
-                            style: theme.textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: Text(
-                            [
-                              if (fecha.isNotEmpty) fecha,
-                              if (disciplina.isNotEmpty) disciplina,
-                            ].join(' · '),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+  Widget _buildSinUgBody(ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.business_outlined,
+                size: 64, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              'Sin Unidad de Gestión',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+              textAlign: TextAlign.center,
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, null),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: selectedCount == 0
-                    ? null
-                    : () {
-                        Navigator.pop(
-                          ctx,
-                          seleccion.entries
-                              .where((e) => e.value)
-                              .map((e) => e.key)
-                              .toSet(),
-                        );
-                      },
-                child: Text('Descargar ($selectedCount)'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (codigosSeleccionados == null) return null;
-
-    final selected = cajas.where((c) {
-      final codigo = (c['codigo_caja'] ?? '').toString().trim();
-      return codigo.isNotEmpty && codigosSeleccionados.contains(codigo);
-    }).toList(growable: false);
-
-    return selected;
-  }
-
-  Future<void> _syncEventosDesdeSupabase() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final nav = Navigator.of(context);
-    final supa = SupaSyncService.I;
-
-    String? fecha;
-    DateTimeRange? rango;
-    if (_modo == _EventosModo.delDia) {
-      fecha = _yyyyMmDd(DateTime.now());
-    } else {
-      rango = await _pickRangoParaSync();
-      if (rango == null) return;
-    }
-
-    final online = await supa.hasInternet();
-    if (!online) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Sin conectividad. Intentá más tarde.')));
-      return;
-    }
-
-    List<Map<String, dynamic>> cajas;
-    try {
-      if (_modo == _EventosModo.delDia) {
-        cajas = await supa.fetchCajasByFecha(fecha!);
-      } else {
-        final desde = _yyyyMmDd(rango!.start);
-        final hasta = _yyyyMmDd(rango.end);
-        cajas = await supa.fetchCajasByRango(desde: desde, hasta: hasta);
-      }
-    } catch (e, st) {
-      String userMessage =
-          'No se pudo descargar datos desde la nube. Revisá “Logs de errores”.';
-      final em = e.toString().toLowerCase();
-      if (em.contains('could not find the table') ||
-          em.contains('does not exist') ||
-          em.contains('schema cache') ||
-          em.contains('pgrst')) {
-        userMessage =
-            'No se pudo descargar desde la Nube (tabla no disponible). Revisá “Logs de errores”.';
-      }
-
-      await AppDatabase.logLocalError(
-        scope: 'eventos_page.supabase_fetch_cajas_por_fecha',
-        error: e,
-        stackTrace: st,
-        payload: {
-          'modo': _modo.name,
-          'fecha': fecha,
-          'desde': rango == null ? null : _yyyyMmDd(rango.start),
-          'hasta': rango == null ? null : _yyyyMmDd(rango.end),
-          'exception_type': e.runtimeType.toString(),
-          'exception_message': e.toString(),
-        },
-      );
-      await supa.tryInsertRemoteSyncErrorLog(
-        scope: 'eventos_page.supabase_fetch_cajas_por_fecha',
-        error: e,
-        stackTrace: st,
-        payload: {
-          'modo': _modo.name,
-          'fecha': fecha,
-          'desde': rango == null ? null : _yyyyMmDd(rango.start),
-          'hasta': rango == null ? null : _yyyyMmDd(rango.end),
-        },
-      );
-      messenger.showSnackBar(SnackBar(content: Text(userMessage)));
-      return;
-    }
-
-    if (cajas.isEmpty) {
-      if (_modo == _EventosModo.delDia) {
-        await _showNoCajasHoyModal();
-      } else {
-        final d = _yyyyMmDd(rango!.start);
-        final h = _yyyyMmDd(rango.end);
-        messenger.showSnackBar(
-          SnackBar(content: Text('No hay cajas en la Nube para $d a $h')),
-        );
-      }
-      return;
-    }
-
-    // Dedupe por codigo_caja (por si el backend devuelve duplicados)
-    final byCodigo = <String, Map<String, dynamic>>{};
-    for (final c in cajas) {
-      final codigo = (c['codigo_caja'] ?? '').toString().trim();
-      if (codigo.isEmpty) continue;
-      byCodigo[codigo] = c;
-    }
-    final cajasUnicas = byCodigo.isEmpty ? cajas : byCodigo.values.toList();
-    cajasUnicas
-        .sort((a, b) => _cajaLabelRemote(a).compareTo(_cajaLabelRemote(b)));
-
-    // Solo trabajamos con cajas que tienen codigo_caja válido.
-    final cajasConCodigo = cajasUnicas
-        .where((c) => (c['codigo_caja'] ?? '').toString().trim().isNotEmpty)
-        .toList(growable: false);
-    if (cajasConCodigo.isEmpty) {
-      if (_modo == _EventosModo.delDia) {
-        await _showNoCajasHoyModal();
-      } else {
-        final d = _yyyyMmDd(rango!.start);
-        final h = _yyyyMmDd(rango.end);
-        messenger.showSnackBar(
-          SnackBar(content: Text('No hay cajas en la Nube para $d a $h')),
-        );
-      }
-      return;
-    }
-
-    final titulo = _modo == _EventosModo.delDia
-        ? 'Descargar desde la Nube (Hoy)'
-        : 'Descargar desde la Nube (Rango)';
-    final seleccionadas = await _seleccionarCajasParaDescarga(
-      titulo: titulo,
-      cajas: cajasConCodigo,
-    );
-    if (seleccionadas == null || seleccionadas.isEmpty) return;
-
-    int importadas = 0;
-    int existentes = 0;
-    int errores = 0;
-
-    // Modal de progreso simple
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        title: Text('Descargando…'),
-        content: SizedBox(
-          height: 64,
-          child: Center(child: CircularProgressIndicator()),
+            const SizedBox(height: 8),
+            Text(
+              'Seleccioná una Unidad de Gestión para ver los eventos registrados.',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _abrirSelectorUg,
+              icon: const Icon(Icons.search),
+              label: const Text('Seleccionar Unidad de Gestión'),
+            ),
+          ],
         ),
       ),
     );
-
-    try {
-      final db = await AppDatabase.instance();
-
-      for (final caja in seleccionadas) {
-        final codigo = (caja['codigo_caja'] ?? '').toString().trim();
-        if (codigo.isEmpty) continue;
-
-        final exists = await db.query(
-          'caja_diaria',
-          columns: ['id'],
-          where: 'codigo_caja=?',
-          whereArgs: [codigo],
-          limit: 1,
-        );
-        if (exists.isNotEmpty) {
-          existentes++;
-          continue;
-        }
-
-        try {
-          await supa.importRemoteCajaDiariaFullToLocal(cajaRemote: caja);
-          importadas++;
-        } catch (e, st) {
-          errores++;
-          await AppDatabase.logLocalError(
-            scope: 'eventos_page.import_remote_caja',
-            error: e,
-            stackTrace: st,
-            payload: {
-              'codigo_caja': codigo,
-              'fecha': (caja['fecha'] ?? fecha)?.toString(),
-              'exception_type': e.runtimeType.toString(),
-              'exception_message': e.toString(),
-            },
-          );
-          await supa.tryInsertRemoteSyncErrorLog(
-            scope: 'eventos_page.import_remote_caja',
-            error: e,
-            stackTrace: st,
-            payload: {
-              'codigo_caja': codigo,
-              'fecha': (caja['fecha'] ?? fecha)?.toString(),
-            },
-          );
-        }
-      }
-    } finally {
-      if (mounted) nav.pop(); // cerrar modal
-    }
-
-    if (!mounted) return;
-    await _load();
-
-    if (errores > 0) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          'Descarga con errores. Nuevas: $importadas · Ya estaban: $existentes · Errores: $errores. Revisá “Logs de errores”.',
-        ),
-      ));
-    } else {
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-            'Descarga OK. Nuevas: $importadas · Ya estaban: $existentes · Errores: $errores'),
-      ));
-    }
   }
 
   @override
@@ -840,17 +627,25 @@ class _EventosPageState extends State<EventosPage> {
               label: Text(_modo == _EventosModo.delDia ? 'Históricos' : 'Hoy'),
             ),
           ),
+          IconButton(
+            onPressed: _abrirSelectorUg,
+            icon: const Icon(Icons.business),
+            tooltip: 'Cambiar Unidad de Gestión',
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: _eventos.isEmpty
-                  ? ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
-                      children: [
+          : _unidadGestionId == null
+              ? _buildSinUgBody(theme)
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: _eventos.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                  children: [
                         const SizedBox(height: 32),
                         Icon(Icons.event_busy,
                             size: 48,
@@ -865,25 +660,32 @@ class _EventosPageState extends State<EventosPage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Abrí una caja para que aparezca el evento. \nO prueba descargando desde la Nube.',
+                          'Abrí una caja para que aparezca el evento.',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     )
-                  : ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                      itemCount: _eventos.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (ctx, i) {
-                        final e = _eventos[i];
-                        final sync = _syncEstadoGeneral(e);
-                        final chip = _chipFor(sync, theme);
-                        final icon = _iconForDisciplina(e.disciplina);
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isLandscape = constraints.maxWidth > 600;
+                        final maxCardWidth = isLandscape ? 600.0 : constraints.maxWidth;
+                        return ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                          itemCount: _eventos.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (ctx, i) {
+                            final e = _eventos[i];
+                            final sync = _syncEstadoGeneral(e);
+                            final chip = _chipFor(sync, theme);
+                            final icon = _iconForDisciplina(e.disciplina);
 
-                        return Card(
+                            return Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: maxCardWidth),
+                                child: Card(
                           elevation: 1,
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
@@ -1177,14 +979,14 @@ class _EventosPageState extends State<EventosPage> {
                               ],
                             ),
                           ),
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
                     ),
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _syncEventosDesdeSupabase,
-        child: const Icon(Icons.cloud_download_rounded),
-      ),
+                ),
     );
   }
 }

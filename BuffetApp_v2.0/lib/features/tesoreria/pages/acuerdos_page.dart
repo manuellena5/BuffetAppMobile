@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 
 import '../../../features/shared/services/acuerdos_service.dart';
 import '../../../features/shared/format.dart';
@@ -154,33 +154,122 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
   }
 
   Future<void> _finalizarAcuerdo(int id, String nombre) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Finalizar Acuerdo'),
-        content: Text('¿Finalizar el acuerdo "$nombre"?\n\nEsto marcará el acuerdo como inactivo.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Finalizar'),
-          ),
-        ],
-      ),
-    );
-    
-    if (confirm != true) return;
-    
     try {
+      // FASE 22.6: Consultar cuotas esperadas antes de finalizar
+      final db = await AppDatabase.instance();
+      
+      // Obtener IDs de compromisos asociados al acuerdo
+      final compromisosAsociados = await db.query(
+        'compromisos',
+        columns: ['id'],
+        where: 'acuerdo_id = ? AND eliminado = 0',
+        whereArgs: [id],
+      );
+      
+      final compromisoIds = compromisosAsociados.map((c) => c['id'] as int).toList();
+      
+      // Consultar cuotas ESPERADO de esos compromisos
+      final cuotasEsperadas = compromisoIds.isEmpty ? <Map<String, dynamic>>[] : await db.query(
+        'compromiso_cuotas',
+        where: 'compromiso_id IN (${List.filled(compromisoIds.length, '?').join(',')}) AND estado = ?',
+        whereArgs: [...compromisoIds, 'ESPERADO'],
+      );
+      
+      // Mostrar diálogo con opciones
+      String? accion;
+      if (cuotasEsperadas.isNotEmpty) {
+        accion = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Finalizar Acuerdo'),
+            content: Text(
+              '¿Desea finalizar el acuerdo \"$nombre\"?\n\n'
+              'Este acuerdo tiene ${cuotasEsperadas.length} cuota${cuotasEsperadas.length > 1 ? 's' : ''} en estado ESPERADO.\n\n'
+              '¿Qué desea hacer con ellas?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'SOLO_FINALIZAR'),
+                child: const Text('Solo finalizar acuerdo'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, 'FINALIZAR_Y_CANCELAR'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                child: const Text('Finalizar y cancelar cuotas'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        // No hay cuotas ESPERADO, solo confirmar
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Finalizar Acuerdo'),
+            content: Text('¿Finalizar el acuerdo \"$nombre\"?\n\nEsto marcará el acuerdo como inactivo.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Finalizar'),
+              ),
+            ],
+          ),
+        );
+        accion = confirm == true ? 'SOLO_FINALIZAR' : null;
+      }
+      
+      if (accion == null) return; // Usuario canceló
+      
+      // Finalizar acuerdo
       await AcuerdosService.finalizarAcuerdo(id);
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Acuerdo finalizado correctamente')),
-        );
+      // Si eligió cancelar cuotas, hacerlo
+      if (accion == 'FINALIZAR_Y_CANCELAR') {
+        int cancelados = 0;
+        
+        for (final cuota in cuotasEsperadas) {
+          final cuotaId = cuota['id'] as int;
+          
+          try {
+            await db.update(
+              'compromiso_cuotas',
+              {
+                'estado': 'CANCELADO',
+                'observacion_cancelacion': 'Cancelada por finalización de acuerdo',
+                'updated_ts': DateTime.now().millisecondsSinceEpoch,
+              },
+              where: 'id = ?',
+              whereArgs: [cuotaId],
+            );
+            cancelados++;
+          } catch (e) {
+            await AppDatabase.logLocalError(
+              scope: 'acuerdos_page.cancelar_cuotas',
+              error: e.toString(),
+              payload: {'cuota_id': cuotaId},
+            );
+          }
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Acuerdo finalizado. $cancelados cuota${cancelados > 1 ? 's' : ''} cancelada${cancelados > 1 ? 's' : ''}.')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Acuerdo finalizado correctamente')),
+          );
+        }
       }
       
       _cargarDatos();
@@ -205,28 +294,40 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Acuerdos'),
-        actions: [
-          IconButton(
-            icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
-            tooltip: _vistaTabla ? 'Vista tarjetas' : 'Vista tabla',
-            onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
-          ),
-          IconButton(
-            icon: const Icon(Icons.filter_alt),
-            tooltip: 'Filtros',
-            onPressed: _mostrarFiltros,
-          ),
-        ],
+    return TesoreriaScaffold(
+      title: 'Acuerdos',
+      currentRouteName: '/acuerdos',
+      actions: [
+        IconButton(
+          icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
+          tooltip: _vistaTabla ? 'Vista tarjetas' : 'Vista tabla',
+          onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
+        ),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refrescar',
+          onPressed: _cargarDatos,
+        ),
+      ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _mostrarMenuCreacion,
+        backgroundColor: Colors.purple,
+        icon: const Icon(Icons.add),
+        label: const Text('Nuevo Acuerdo'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ResponsiveContainer(
-              maxWidth: _vistaTabla ? 1400 : 1000,
-              child: Column(
-                children: [
+          : Column(
+              children: [
+                // FASE 22.5: Filtros visibles
+                _buildFiltrosVisibles(),
+                const Divider(height: 1),
+                
+                Expanded(
+                  child: ResponsiveContainer(
+                    maxWidth: _vistaTabla ? 1400 : 1000,
+                    child: Column(
+                      children: [
                   if (_tieneFiltrosActivos()) _buildFiltrosActivos(),
                   Expanded(
                     child: _acuerdos.isEmpty
@@ -234,15 +335,13 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                         : _vistaTabla
                             ? _buildVistaTabla()
                             : _buildVistaTarjetas(),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _mostrarMenuCreacion,
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo Acuerdo'),
-      ),
+            ],
+          ),
     );
   }
 
@@ -386,6 +485,156 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                   ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// FASE 22.5: Filtros visibles (similar a compromisos_page)
+  Widget _buildFiltrosVisibles() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.grey.shade100,
+      child: ResponsiveContainer(
+        maxWidth: 1400,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                // Unidad de Gestión
+                SizedBox(
+                  width: 200,
+                  child: DropdownButtonFormField<int?>(
+                    value: _unidadGestionId,
+                    decoration: const InputDecoration(
+                      labelText: 'Unidad de Gestión',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(value: null, child: Text('Todas')),
+                      ..._unidadesGestion.map((u) => DropdownMenuItem<int?>(
+                        value: u['id'] as int,
+                        child: Text(u['nombre'] as String),
+                      )),
+                    ],
+                    onChanged: (val) => setState(() => _unidadGestionId = val),
+                  ),
+                ),
+                
+                // Entidad
+                SizedBox(
+                  width: 200,
+                  child: DropdownButtonFormField<int?>(
+                    value: _entidadPlantelId,
+                    decoration: const InputDecoration(
+                      labelText: 'Entidad',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(value: null, child: Text('Todas')),
+                      ..._entidadesPlantel.map((e) => DropdownMenuItem<int?>(
+                        value: e['id'] as int,
+                        child: Text(e['nombre'] as String),
+                      )),
+                    ],
+                    onChanged: (val) => setState(() => _entidadPlantelId = val),
+                  ),
+                ),
+                
+                // Tipo
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<String?>(
+                    value: _tipoFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
+                      DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
+                    ],
+                    onChanged: (val) => setState(() => _tipoFiltro = val),
+                  ),
+                ),
+                
+                // Estado (activo/finalizado)
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<bool?>(
+                    value: _activoFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Estado',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: true, child: Text('Activos')),
+                      DropdownMenuItem(value: false, child: Text('Finalizados')),
+                    ],
+                    onChanged: (val) => setState(() => _activoFiltro = val),
+                  ),
+                ),
+                
+                // Origen
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<String?>(
+                    value: _origenFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Origen',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: 'MANUAL', child: Text('Manual')),
+                      DropdownMenuItem(value: 'GRUPAL', child: Text('Grupal')),
+                    ],
+                    onChanged: (val) => setState(() => _origenFiltro = val),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Botones de acción
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _aplicarFiltros,
+                  icon: const Icon(Icons.filter_alt, size: 18),
+                  label: const Text('Aplicar Filtros'),
+                ),
+                const SizedBox(width: 8),
+                if (_tieneFiltrosActivos())
+                  OutlinedButton.icon(
+                    onPressed: _limpiarFiltros,
+                    icon: const Icon(Icons.clear, size: 18),
+                    label: const Text('Limpiar'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -594,32 +843,34 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
   }
 
   Widget _buildVistaTabla() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return RefreshIndicator(
+      onRefresh: _cargarDatos,
       child: SingleChildScrollView(
-        child: DataTable(
-          columns: const [
-            DataColumn(label: Text('Nombre')),
-            DataColumn(label: Text('Tipo')),
-            DataColumn(label: Text('Entidad')),
-            DataColumn(label: Text('Monto')),
-            DataColumn(label: Text('Modalidad')),
-            DataColumn(label: Text('Progreso')),
-            DataColumn(label: Text('Estado')),
-            DataColumn(label: Text('Acciones')),
-          ],
-          rows: _acuerdos.map((acuerdo) {
-            try {
-              return _buildFilaTabla(acuerdo);
-            } catch (e, stack) {
-              AppDatabase.logLocalError(
-                scope: 'acuerdos_page.render_fila_tabla',
-                error: e.toString(),
-                stackTrace: stack,
-                payload: {'acuerdo_id': acuerdo['id']},
-              );
-              return DataRow(cells: [
-                DataCell(const Text('Error')),
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          child: DataTable(
+            columns: const [
+              DataColumn(label: Text('Nombre')),
+              DataColumn(label: Text('Tipo')),
+              DataColumn(label: Text('Entidad')),
+              DataColumn(label: Text('Monto')),
+              DataColumn(label: Text('Modalidad')),
+              DataColumn(label: Text('Progreso')),
+              DataColumn(label: Text('Estado')),
+              DataColumn(label: Text('Acciones')),
+            ],
+            rows: _acuerdos.map((acuerdo) {
+              try {
+                return _buildFilaTabla(acuerdo);
+              } catch (e, stack) {
+                AppDatabase.logLocalError(
+                  scope: 'acuerdos_page.render_fila_tabla',
+                  error: e.toString(),
+                  stackTrace: stack,
+                  payload: {'acuerdo_id': acuerdo['id']},
+                );
+                return DataRow(cells: [
+                  DataCell(const Text('Error')),
                 DataCell(Container()),
                 DataCell(Container()),
                 DataCell(Container()),
@@ -631,6 +882,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
             }
           }).toList(),
         ),
+      ),
       ),
     );
   }
@@ -708,130 +960,6 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           ),
         ),
       ],
-    );
-  }
-
-  void _mostrarFiltros() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, scrollController) => StatefulBuilder(
-          builder: (ctx, setModalState) => Padding(
-            padding: const EdgeInsets.all(16),
-            child: ListView(
-              controller: scrollController,
-              children: [
-                Text(
-                  'Filtros',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const Divider(),
-                
-                // Unidad de gestión
-                DropdownButtonFormField<int?>(
-                  value: _unidadGestionId,
-                  decoration: const InputDecoration(labelText: 'Unidad de Gestión'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Todas')),
-                    ..._unidadesGestion.map((u) => DropdownMenuItem(
-                          value: u['id'] as int,
-                          child: Text(u['nombre'].toString()),
-                        )),
-                  ],
-                  onChanged: (val) => setModalState(() => _unidadGestionId = val),
-                ),
-                const SizedBox(height: 16),
-                
-                // Entidad del plantel
-                DropdownButtonFormField<int?>(
-                  value: _entidadPlantelId,
-                  decoration: const InputDecoration(labelText: 'Jugador / Técnico'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Todos')),
-                    ..._entidadesPlantel.map((e) => DropdownMenuItem(
-                          value: e['id'] as int,
-                          child: Text(e['nombre'].toString()),
-                        )),
-                  ],
-                  onChanged: (val) => setModalState(() => _entidadPlantelId = val),
-                ),
-                const SizedBox(height: 16),
-                
-                // Tipo
-                DropdownButtonFormField<String?>(
-                  value: _tipoFiltro,
-                  decoration: const InputDecoration(labelText: 'Tipo'),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Todos')),
-                    DropdownMenuItem(value: 'INGRESO', child: Text('Ingresos')),
-                    DropdownMenuItem(value: 'EGRESO', child: Text('Egresos')),
-                  ],
-                  onChanged: (val) => setModalState(() => _tipoFiltro = val),
-                ),
-                const SizedBox(height: 16),
-                
-                // Estado
-                DropdownButtonFormField<bool?>(
-                  value: _activoFiltro,
-                  decoration: const InputDecoration(labelText: 'Estado'),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Todos')),
-                    DropdownMenuItem(value: true, child: Text('Activos')),
-                    DropdownMenuItem(value: false, child: Text('Finalizados')),
-                  ],
-                  onChanged: (val) => setModalState(() => _activoFiltro = val),
-                ),
-                const SizedBox(height: 16),
-                
-                // Origen (NUEVO - FASE 19)
-                DropdownButtonFormField<String?>(
-                  value: _origenFiltro,
-                  decoration: const InputDecoration(labelText: 'Origen'),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Todos')),
-                    DropdownMenuItem(value: 'MANUAL', child: Text('Individual')),
-                    DropdownMenuItem(value: 'GRUPAL', child: Text('Grupal')),
-                  ],
-                  onChanged: (val) => setModalState(() => _origenFiltro = val),
-                ),
-                const SizedBox(height: 24),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        setModalState(() {
-                          _unidadGestionId = null;
-                          _entidadPlantelId = null;
-                          _tipoFiltro = null;
-                          _activoFiltro = null;
-                          _origenFiltro = null;
-                        });
-                      },
-                      child: const Text('Limpiar'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        setState(() {}); // Actualizar estado principal
-                        _aplicarFiltros();
-                      },
-                      child: const Text('Aplicar'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 

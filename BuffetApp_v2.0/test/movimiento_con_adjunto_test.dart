@@ -37,6 +37,7 @@ void main() {
     // Crear movimiento con todos los campos de archivo
     final movId = await svc.crear(
       disciplinaId: 1,
+      cuentaId: 1,
       eventoId: 'test-evento-123',
       tipo: 'INGRESO',
       categoria: 'Prueba',
@@ -82,6 +83,7 @@ void main() {
     // Crear movimiento sin campos de archivo (deben ser null)
     final movId = await svc.crear(
       disciplinaId: 1,
+      cuentaId: 1,
       eventoId: null,
       tipo: 'EGRESO',
       categoria: 'Sin adjunto',

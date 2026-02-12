@@ -22,6 +22,7 @@ class ExportService {
     var s = v.replaceAll('"', '""');
     return needsQuotes ? '"$s"' : s;
   }
+
   String _rowsToCsv(List<List<String>> rows) {
     return rows.map((r) => r.map(_csvEscape).join(',')).join('\n') + '\n';
   }
@@ -41,7 +42,8 @@ class ExportService {
     // Si no existe, intentar con path_provider (puede devolver carpeta privada de app)
     if (base == null) {
       try {
-        final dirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+        final dirs = await getExternalStorageDirectories(
+            type: StorageDirectory.downloads);
         if (dirs != null && dirs.isNotEmpty) {
           base = dirs.first;
         } else {
@@ -51,14 +53,16 @@ class ExportService {
         base = null;
       }
     }
-    base ??= Directory(p.join((await getApplicationDocumentsDirectory()).path, 'exports'));
+    base ??= Directory(
+        p.join((await getApplicationDocumentsDirectory()).path, 'exports'));
     if (!await base.exists()) await base.create(recursive: true);
     return base;
   }
 
   Future<Map<String, dynamic>> _buildPayload(Database db, int cajaId) async {
     try {
-      final caja = await db.query('caja_diaria', where: 'id=?', whereArgs: [cajaId], limit: 1);
+      final caja = await db.query('caja_diaria',
+          where: 'id=?', whereArgs: [cajaId], limit: 1);
       if (caja.isEmpty) throw Exception('Caja no encontrada');
 
       final resumen = await CajaService().resumenCaja(cajaId);
@@ -102,7 +106,8 @@ class ExportService {
         'fecha_export': nowIso,
       };
 
-      final movimientos = await db.query('caja_movimiento', where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+      final movimientos = await db.query('caja_movimiento',
+          where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
 
       return {
         'metadata': metadata,
@@ -115,7 +120,11 @@ class ExportService {
         'catalogo': catalogo,
       };
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.buildPayload', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      await AppDatabase.logLocalError(
+          scope: 'export.buildPayload',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': cajaId});
       rethrow;
     }
   }
@@ -125,12 +134,19 @@ class ExportService {
       final exportDir = await _ensureExportDir();
       final db = await AppDatabase.instance();
       final payload = await _buildPayload(db, cajaId);
-      final codigo = (payload['caja'] as Map)['codigo_caja']?.toString() ?? 'CAJA';
+      final codigo =
+          (payload['caja'] as Map)['codigo_caja']?.toString() ?? 'CAJA';
       final file = File(p.join(exportDir.path, 'caja_$codigo.json'));
-      await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload), flush: true);
+      await file.writeAsString(
+          const JsonEncoder.withIndent('  ').convert(payload),
+          flush: true);
       return file;
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.cajaJson', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      await AppDatabase.logLocalError(
+          scope: 'export.cajaJson',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': cajaId});
       rethrow;
     }
   }
@@ -139,39 +155,67 @@ class ExportService {
     try {
       final file = await exportCajaToJson(cajaId);
       final base = p.basename(file.path);
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Caja $base', title: 'Caja $base'));
+      await SharePlus.instance.share(ShareParams(
+          files: [XFile(file.path)],
+          subject: 'Caja $base',
+          title: 'Caja $base'));
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.shareCaja', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      await AppDatabase.logLocalError(
+          scope: 'export.shareCaja',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': cajaId});
       rethrow;
     }
   }
 
   Future<File> exportCajaToCsv(int cajaId, {String? directoryPath}) async {
     try {
-      final exportDir = directoryPath != null ? Directory(directoryPath) : await _ensureExportDir();
+      final exportDir = directoryPath != null
+          ? Directory(directoryPath)
+          : await _ensureExportDir();
       final db = await AppDatabase.instance();
       final payload = await _buildPayload(db, cajaId);
       final caja = Map<String, Object?>.from(payload['caja'] as Map);
       final resumen = Map<String, Object?>.from(payload['resumen'] as Map);
-      final totalesMp = List<Map<String, Object?>>.from(payload['totales_por_mp'] as List);
-      final porProducto = List<Map<String, Object?>>.from(payload['ventas_por_producto'] as List);
-      final movimientos = List<Map<String, Object?>>.from(payload['movimientos'] as List);
+      final totalesMp =
+          List<Map<String, Object?>>.from(payload['totales_por_mp'] as List);
+      final porProducto = List<Map<String, Object?>>.from(
+          payload['ventas_por_producto'] as List);
+      final movimientos =
+          List<Map<String, Object?>>.from(payload['movimientos'] as List);
       final codigo = caja['codigo_caja']?.toString() ?? 'CAJA';
 
       final headers = [
-        'Codigo de caja', 'Estado', 'Fecha', 'Hora apertura', 'Disciplina',
-        'Desc Evento', 'Caj Apertura', 'Caj cierre', 'Total Ventas',
-        'Fondo Inicial', 'Efectivo declarado en caja', 'Diferencia',
-        'Entradas vendidas', 'Tickets emitidos', 'Tickets anulados',
-        'Ventas Efectivo', 'Ventas Transferencia', 'Ventas por producto',
-        'Ingresos', 'Retiros', 'Ticket promedio'
+        'Codigo de caja',
+        'Estado',
+        'Fecha',
+        'Hora apertura',
+        'Disciplina',
+        'Desc Evento',
+        'Caj Apertura',
+        'Caj cierre',
+        'Total Ventas',
+        'Fondo Inicial',
+        'Efectivo declarado en caja',
+        'Diferencia',
+        'Entradas vendidas',
+        'Tickets emitidos',
+        'Tickets anulados',
+        'Ventas Efectivo',
+        'Ventas Transferencia',
+        'Ventas por producto',
+        'Ingresos',
+        'Retiros',
+        'Ticket promedio'
       ];
 
       double ventasEfec = 0.0, ventasTransf = 0.0;
       for (final m in totalesMp) {
         final desc = (m['mp_desc'] as String?)?.toLowerCase() ?? '';
         final monto = ((m['total'] as num?) ?? 0).toDouble();
-        if (desc.contains('efectivo')) ventasEfec += monto;
+        if (desc.contains('efectivo'))
+          ventasEfec += monto;
         else if (desc.contains('transfer')) ventasTransf += monto;
       }
 
@@ -186,7 +230,9 @@ class ExportService {
       for (final m in movimientos) {
         final tipo = (m['tipo'] ?? '').toString().toUpperCase();
         final monto = ((m['monto'] as num?) ?? 0).toDouble();
-        if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+        if (tipo == 'INGRESO')
+          ing += monto;
+        else if (tipo == 'RETIRO') ret += monto;
       }
 
       final avgRows = await db.rawQuery('''
@@ -199,9 +245,10 @@ class ExportService {
           GROUP BY v.id
         )
       ''', [cajaId]);
-      final avgTicket = (avgRows.isNotEmpty && (avgRows.first['avg_ticket'] as num?) != null)
-          ? ((avgRows.first['avg_ticket'] as num).toDouble())
-          : 0.0;
+      final avgTicket =
+          (avgRows.isNotEmpty && (avgRows.first['avg_ticket'] as num?) != null)
+              ? ((avgRows.first['avg_ticket'] as num).toDouble())
+              : 0.0;
 
       final tks = Map<String, Object?>.from(resumen['tickets'] as Map);
       final values = [
@@ -233,7 +280,11 @@ class ExportService {
       await file.writeAsString(csv, flush: true);
       return file;
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.cajaCsv', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      await AppDatabase.logLocalError(
+          scope: 'export.cajaCsv',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': cajaId});
       rethrow;
     }
   }
@@ -244,25 +295,44 @@ class ExportService {
       final payload = await _buildPayload(db, cajaId);
       final caja = Map<String, Object?>.from(payload['caja'] as Map);
       final resumen = Map<String, Object?>.from(payload['resumen'] as Map);
-      final totalesMp = List<Map<String, Object?>>.from(payload['totales_por_mp'] as List);
-      final porProducto = List<Map<String, Object?>>.from(payload['ventas_por_producto'] as List);
-      final movimientos = List<Map<String, Object?>>.from(payload['movimientos'] as List);
+      final totalesMp =
+          List<Map<String, Object?>>.from(payload['totales_por_mp'] as List);
+      final porProducto = List<Map<String, Object?>>.from(
+          payload['ventas_por_producto'] as List);
+      final movimientos =
+          List<Map<String, Object?>>.from(payload['movimientos'] as List);
       final codigo = caja['codigo_caja']?.toString() ?? 'CAJA';
 
       final headers = [
-        'Codigo de caja', 'Estado', 'Fecha', 'Hora apertura', 'Disciplina',
-        'Desc Evento', 'Caj Apertura', 'Caj cierre', 'Total Ventas',
-        'Fondo Inicial', 'Efectivo declarado en caja', 'Diferencia',
-        'Entradas vendidas', 'Tickets emitidos', 'Tickets anulados',
-        'Ventas Efectivo', 'Ventas Transferencia', 'Ventas por producto',
-        'Ingresos', 'Retiros', 'Ticket promedio'
+        'Codigo de caja',
+        'Estado',
+        'Fecha',
+        'Hora apertura',
+        'Disciplina',
+        'Desc Evento',
+        'Caj Apertura',
+        'Caj cierre',
+        'Total Ventas',
+        'Fondo Inicial',
+        'Efectivo declarado en caja',
+        'Diferencia',
+        'Entradas vendidas',
+        'Tickets emitidos',
+        'Tickets anulados',
+        'Ventas Efectivo',
+        'Ventas Transferencia',
+        'Ventas por producto',
+        'Ingresos',
+        'Retiros',
+        'Ticket promedio'
       ];
 
       double ventasEfec = 0.0, ventasTransf = 0.0;
       for (final m in totalesMp) {
         final desc = (m['mp_desc'] as String?)?.toLowerCase() ?? '';
         final monto = ((m['total'] as num?) ?? 0).toDouble();
-        if (desc.contains('efectivo')) ventasEfec += monto;
+        if (desc.contains('efectivo'))
+          ventasEfec += monto;
         else if (desc.contains('transfer')) ventasTransf += monto;
       }
 
@@ -277,7 +347,9 @@ class ExportService {
       for (final m in movimientos) {
         final tipo = (m['tipo'] ?? '').toString().toUpperCase();
         final monto = ((m['monto'] as num?) ?? 0).toDouble();
-        if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+        if (tipo == 'INGRESO')
+          ing += monto;
+        else if (tipo == 'RETIRO') ret += monto;
       }
 
       final avgRows = await db.rawQuery('''
@@ -290,9 +362,10 @@ class ExportService {
           GROUP BY v.id
         )
       ''', [cajaId]);
-      final avgTicket = (avgRows.isNotEmpty && (avgRows.first['avg_ticket'] as num?) != null)
-          ? ((avgRows.first['avg_ticket'] as num).toDouble())
-          : 0.0;
+      final avgTicket =
+          (avgRows.isNotEmpty && (avgRows.first['avg_ticket'] as num?) != null)
+              ? ((avgRows.first['avg_ticket'] as num).toDouble())
+              : 0.0;
 
       final tks = Map<String, Object?>.from(resumen['tickets'] as Map);
       final values = [
@@ -330,7 +403,11 @@ class ExportService {
       );
       return savedPath;
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.cajaCsvMediaStore', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      await AppDatabase.logLocalError(
+          scope: 'export.cajaCsvMediaStore',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': cajaId});
       rethrow;
     }
   }
@@ -354,7 +431,8 @@ class ExportService {
       // Si no existe, usar path_provider como alternativa
       if (exportDir == null) {
         try {
-          final dirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+          final dirs = await getExternalStorageDirectories(
+              type: StorageDirectory.downloads);
           if (dirs != null && dirs.isNotEmpty) {
             exportDir = dirs.first;
           }
@@ -365,7 +443,11 @@ class ExportService {
       exportDir ??= await _ensureExportDir();
       return exportCajaToCsv(cajaId, directoryPath: exportDir.path);
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.cajaCsvDownloads', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      await AppDatabase.logLocalError(
+          scope: 'export.cajaCsvDownloads',
+          error: e,
+          stackTrace: st,
+          payload: {'cajaId': cajaId});
       rethrow;
     }
   }
@@ -373,7 +455,8 @@ class ExportService {
   Future<void> shareCajaCsv(int cajaId) async {
     final file = await exportCajaToCsv(cajaId);
     final base = p.basename(file.path);
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Caja $base', title: 'Caja $base'));
+    await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)], subject: 'Caja $base', title: 'Caja $base'));
   }
 
   Future<File> exportVisibleCajasToCsvInDownloads() async {
@@ -389,7 +472,8 @@ class ExportService {
       }
       if (exportDir == null) {
         try {
-          final dirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+          final dirs = await getExternalStorageDirectories(
+              type: StorageDirectory.downloads);
           if (dirs != null && dirs.isNotEmpty) {
             exportDir = dirs.first;
           }
@@ -400,31 +484,52 @@ class ExportService {
       exportDir ??= await _ensureExportDir();
 
       final db = await AppDatabase.instance();
-      final cajas = await db.query('caja_diaria', where: 'visible = 1', orderBy: 'fecha DESC, id DESC');
+      final cajas = await db.query('caja_diaria',
+          where: 'visible = 1', orderBy: 'fecha DESC, id DESC');
 
       final headers = [
-        'Codigo de caja', 'Estado', 'Fecha', 'Hora apertura', 'Disciplina',
-        'Desc Evento', 'Caj Apertura', 'Caj cierre', 'Total Ventas',
-        'Fondo Inicial', 'Efectivo declarado en caja', 'Diferencia',
-        'Entradas vendidas', 'Tickets emitidos', 'Tickets anulados',
-        'Ventas Efectivo', 'Ventas Transferencia', 'Ventas por producto',
-        'Ingresos', 'Retiros', 'Ticket promedio'
+        'Codigo de caja',
+        'Estado',
+        'Fecha',
+        'Hora apertura',
+        'Disciplina',
+        'Desc Evento',
+        'Caj Apertura',
+        'Caj cierre',
+        'Total Ventas',
+        'Fondo Inicial',
+        'Efectivo declarado en caja',
+        'Diferencia',
+        'Entradas vendidas',
+        'Tickets emitidos',
+        'Tickets anulados',
+        'Ventas Efectivo',
+        'Ventas Transferencia',
+        'Ventas por producto',
+        'Ingresos',
+        'Retiros',
+        'Ticket promedio'
       ];
 
       final rows = <List<String>>[headers];
       for (final caja in cajas) {
         final cajaId = (caja['id'] as num).toInt();
         final payloadResumen = await _buildPayload(db, cajaId);
-        final resumen = Map<String, Object?>.from(payloadResumen['resumen'] as Map);
-        final totalesMp = List<Map<String, Object?>>.from(payloadResumen['totales_por_mp'] as List);
-        final porProducto = List<Map<String, Object?>>.from(payloadResumen['ventas_por_producto'] as List);
-        final movimientos = List<Map<String, Object?>>.from(payloadResumen['movimientos'] as List);
+        final resumen =
+            Map<String, Object?>.from(payloadResumen['resumen'] as Map);
+        final totalesMp = List<Map<String, Object?>>.from(
+            payloadResumen['totales_por_mp'] as List);
+        final porProducto = List<Map<String, Object?>>.from(
+            payloadResumen['ventas_por_producto'] as List);
+        final movimientos = List<Map<String, Object?>>.from(
+            payloadResumen['movimientos'] as List);
 
         double ventasEfec = 0.0, ventasTransf = 0.0;
         for (final m in totalesMp) {
           final desc = (m['mp_desc'] as String?)?.toLowerCase() ?? '';
           final monto = ((m['total'] as num?) ?? 0).toDouble();
-          if (desc.contains('efectivo')) ventasEfec += monto;
+          if (desc.contains('efectivo'))
+            ventasEfec += monto;
           else if (desc.contains('transfer')) ventasTransf += monto;
         }
 
@@ -439,7 +544,9 @@ class ExportService {
         for (final m in movimientos) {
           final tipo = (m['tipo'] ?? '').toString().toUpperCase();
           final monto = ((m['monto'] as num?) ?? 0).toDouble();
-          if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+          if (tipo == 'INGRESO')
+            ing += monto;
+          else if (tipo == 'RETIRO') ret += monto;
         }
 
         final avgRows = await db.rawQuery('''
@@ -452,7 +559,8 @@ class ExportService {
             GROUP BY v.id
           )
         ''', [cajaId]);
-        final avgTicket = (avgRows.isNotEmpty && (avgRows.first['avg_ticket'] as num?) != null)
+        final avgTicket = (avgRows.isNotEmpty &&
+                (avgRows.first['avg_ticket'] as num?) != null)
             ? ((avgRows.first['avg_ticket'] as num).toDouble())
             : 0.0;
 
@@ -487,7 +595,8 @@ class ExportService {
       await file.writeAsString(csv, flush: true);
       return file;
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.cajasCsvDownloads', error: e, stackTrace: st);
+      await AppDatabase.logLocalError(
+          scope: 'export.cajasCsvDownloads', error: e, stackTrace: st);
       rethrow;
     }
   }
@@ -495,31 +604,52 @@ class ExportService {
   Future<String> saveVisibleCajasCsvToDownloadsViaMediaStore() async {
     try {
       final db = await AppDatabase.instance();
-      final cajas = await db.query('caja_diaria', where: 'visible = 1', orderBy: 'fecha DESC, id DESC');
+      final cajas = await db.query('caja_diaria',
+          where: 'visible = 1', orderBy: 'fecha DESC, id DESC');
 
       final headers = [
-        'Codigo de caja', 'Estado', 'Fecha', 'Hora apertura', 'Disciplina',
-        'Desc Evento', 'Caj Apertura', 'Caj cierre', 'Total Ventas',
-        'Fondo Inicial', 'Efectivo declarado en caja', 'Diferencia',
-        'Entradas vendidas', 'Tickets emitidos', 'Tickets anulados',
-        'Ventas Efectivo', 'Ventas Transferencia', 'Ventas por producto',
-        'Ingresos', 'Retiros', 'Ticket promedio'
+        'Codigo de caja',
+        'Estado',
+        'Fecha',
+        'Hora apertura',
+        'Disciplina',
+        'Desc Evento',
+        'Caj Apertura',
+        'Caj cierre',
+        'Total Ventas',
+        'Fondo Inicial',
+        'Efectivo declarado en caja',
+        'Diferencia',
+        'Entradas vendidas',
+        'Tickets emitidos',
+        'Tickets anulados',
+        'Ventas Efectivo',
+        'Ventas Transferencia',
+        'Ventas por producto',
+        'Ingresos',
+        'Retiros',
+        'Ticket promedio'
       ];
       final rows = <List<String>>[headers];
 
       for (final caja in cajas) {
         final cajaId = (caja['id'] as num).toInt();
         final payloadResumen = await _buildPayload(db, cajaId);
-        final resumen = Map<String, Object?>.from(payloadResumen['resumen'] as Map);
-        final totalesMp = List<Map<String, Object?>>.from(payloadResumen['totales_por_mp'] as List);
-        final porProducto = List<Map<String, Object?>>.from(payloadResumen['ventas_por_producto'] as List);
-        final movimientos = List<Map<String, Object?>>.from(payloadResumen['movimientos'] as List);
+        final resumen =
+            Map<String, Object?>.from(payloadResumen['resumen'] as Map);
+        final totalesMp = List<Map<String, Object?>>.from(
+            payloadResumen['totales_por_mp'] as List);
+        final porProducto = List<Map<String, Object?>>.from(
+            payloadResumen['ventas_por_producto'] as List);
+        final movimientos = List<Map<String, Object?>>.from(
+            payloadResumen['movimientos'] as List);
 
         double ventasEfec = 0.0, ventasTransf = 0.0;
         for (final m in totalesMp) {
           final desc = (m['mp_desc'] as String?)?.toLowerCase() ?? '';
           final monto = ((m['total'] as num?) ?? 0).toDouble();
-          if (desc.contains('efectivo')) ventasEfec += monto;
+          if (desc.contains('efectivo'))
+            ventasEfec += monto;
           else if (desc.contains('transfer')) ventasTransf += monto;
         }
         final productosConcat = porProducto.map((p) {
@@ -532,7 +662,9 @@ class ExportService {
         for (final m in movimientos) {
           final tipo = (m['tipo'] ?? '').toString().toUpperCase();
           final monto = ((m['monto'] as num?) ?? 0).toDouble();
-          if (tipo == 'INGRESO') ing += monto; else if (tipo == 'RETIRO') ret += monto;
+          if (tipo == 'INGRESO')
+            ing += monto;
+          else if (tipo == 'RETIRO') ret += monto;
         }
         final avgRows = await db.rawQuery('''
           SELECT AVG(total_venta_no_anulados) AS avg_ticket
@@ -544,7 +676,8 @@ class ExportService {
             GROUP BY v.id
           )
         ''', [cajaId]);
-        final avgTicket = (avgRows.isNotEmpty && (avgRows.first['avg_ticket'] as num?) != null)
+        final avgTicket = (avgRows.isNotEmpty &&
+                (avgRows.first['avg_ticket'] as num?) != null)
             ? ((avgRows.first['avg_ticket'] as num).toDouble())
             : 0.0;
         final tks = Map<String, Object?>.from(resumen['tickets'] as Map);
@@ -583,7 +716,8 @@ class ExportService {
       );
       return savedPath;
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'export.cajasCsvMediaStore', error: e, stackTrace: st);
+      await AppDatabase.logLocalError(
+          scope: 'export.cajasCsvMediaStore', error: e, stackTrace: st);
       rethrow;
     }
   }
@@ -620,7 +754,7 @@ class ExportService {
         } else if (ts is String) {
           fecha = DateTime.tryParse(ts);
         }
-        
+
         final updTs = mov['updated_ts'];
         DateTime? fechaMod;
         if (updTs is int) {
@@ -638,25 +772,27 @@ class ExportService {
           (mov['estado']?.toString() ?? 'CONFIRMADO'),
           (mov['observacion']?.toString() ?? ''),
           (mov['sync_estado']?.toString() ?? ''),
-          (fechaMod != null ? DateFormat('dd/MM/yyyy HH:mm').format(fechaMod) : ''),
+          (fechaMod != null
+              ? DateFormat('dd/MM/yyyy HH:mm').format(fechaMod)
+              : ''),
         ]);
       }
 
       final csvString = _rowsToCsv(rows);
       final bytes = Uint8List.fromList(utf8.encode(csvString));
-      
+
       // Limpiar nombre de archivo
       final cleanFilename = filename
           .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
           .replaceAll(' ', '_');
-      
+
       final savedPath = await FileSaver.instance.saveFile(
         name: cleanFilename.replaceAll('.csv', ''),
         bytes: bytes,
         ext: 'csv',
         mimeType: MimeType.text,
       );
-      
+
       return savedPath;
     } catch (e, st) {
       await AppDatabase.logLocalError(
@@ -668,7 +804,7 @@ class ExportService {
       rethrow;
     }
   }
-  
+
   /// Exporta movimientos de tesorería a Excel con 2 hojas:
   /// - Hoja 1: Movimientos detallados
   /// - Hoja 2: Resumen del mes
@@ -685,20 +821,20 @@ class ExportService {
   }) async {
     try {
       final excel = Excel.createExcel();
-      
+
       // Eliminar hoja por defecto
       excel.delete('Sheet1');
-      
+
       // === HOJA 1: MOVIMIENTOS ===
       final sheetMovimientos = excel['Movimientos'];
-      
+
       // Estilos para headers
       final headerStyle = CellStyle(
         bold: true,
         backgroundColorHex: '#2E7D32',
         fontColorHex: '#FFFFFF',
       );
-      
+
       // Headers
       final headers = [
         'Fecha',
@@ -709,13 +845,14 @@ class ExportService {
         'Compromiso',
         'Observación',
       ];
-      
+
       for (var i = 0; i < headers.length; i++) {
-        final cell = sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        final cell = sheetMovimientos
+            .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
         cell.value = headers[i];
         cell.cellStyle = headerStyle;
       }
-      
+
       // Datos
       var rowIndex = 1;
       for (final mov in movimientos) {
@@ -726,113 +863,139 @@ class ExportService {
         } else if (ts is String) {
           fecha = DateTime.tryParse(ts);
         }
-        
+
         final tipo = (mov['tipo'] ?? '').toString();
         final monto = (mov['monto'] as num?)?.toDouble() ?? 0.0;
-        
+
         // Fila
-        sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex)).value = 
+        sheetMovimientos
+                .cell(CellIndex.indexByColumnRow(
+                    columnIndex: 0, rowIndex: rowIndex))
+                .value =
             fecha != null ? DateFormat('dd/MM/yyyy HH:mm').format(fecha) : '';
-        
-        sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex)).value = tipo;
-        sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIndex)).value = 
-            (mov['categoria']?.toString() ?? '');
-        
-        final cellMonto = sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex));
+
+        sheetMovimientos
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex))
+            .value = tipo;
+        sheetMovimientos
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIndex))
+            .value = (mov['categoria']?.toString() ?? '');
+
+        final cellMonto = sheetMovimientos.cell(
+            CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex));
         cellMonto.value = monto;
         cellMonto.cellStyle = CellStyle(
           fontColorHex: tipo == 'INGRESO' ? '#2E7D32' : '#C62828',
           bold: true,
         );
-        
-        sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIndex)).value = 
-            (mov['estado']?.toString() ?? 'CONFIRMADO');
-        sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIndex)).value = 
-            (mov['compromiso_nombre']?.toString() ?? '');
-        sheetMovimientos.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: rowIndex)).value = 
-            (mov['observacion']?.toString() ?? '');
-        
+
+        sheetMovimientos
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIndex))
+            .value = (mov['estado']?.toString() ?? 'CONFIRMADO');
+        sheetMovimientos
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIndex))
+            .value = (mov['compromiso_nombre']?.toString() ?? '');
+        sheetMovimientos
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: rowIndex))
+            .value = (mov['observacion']?.toString() ?? '');
+
         rowIndex++;
       }
-      
+
       // Ajustar ancho de columnas
       for (var i = 0; i < headers.length; i++) {
         sheetMovimientos.setColWidth(i, i == 6 ? 40.0 : 20.0);
       }
-      
+
       // === HOJA 2: RESUMEN DEL MES ===
       final sheetResumen = excel['Resumen del Mes'];
-      
+
       // Título
-      final tituloCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0));
-      tituloCell.value = 'Resumen Mensual - ${DateFormat('MMMM yyyy', 'es_AR').format(mes)}';
+      final tituloCell = sheetResumen
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0));
+      tituloCell.value =
+          'Resumen Mensual - ${DateFormat('MMMM yyyy', 'es_AR').format(mes)}';
       tituloCell.cellStyle = CellStyle(
         bold: true,
         fontSize: 16,
         fontColorHex: '#2E7D32',
       );
-      
+
       if (unidadGestionNombre != null) {
-        final unidadCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1));
+        final unidadCell = sheetResumen
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1));
         unidadCell.value = 'Unidad de Gestión: $unidadGestionNombre';
         unidadCell.cellStyle = CellStyle(italic: true);
       }
-      
+
       var resumenRow = 3;
-      
+
       // Saldo Inicial
-      final labelSaldoInicialCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
+      final labelSaldoInicialCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
       labelSaldoInicialCell.value = 'Saldo Inicial (arrastre):';
       labelSaldoInicialCell.cellStyle = CellStyle(bold: true);
-      
-      final valorSaldoInicialCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
+
+      final valorSaldoInicialCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
       valorSaldoInicialCell.value = saldoInicial;
       valorSaldoInicialCell.cellStyle = CellStyle(
         fontColorHex: '#424242',
         bold: true,
       );
-      
+
       resumenRow++;
-      
+
       // Ingresos del mes
-      final labelIngresosCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
+      final labelIngresosCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
       labelIngresosCell.value = 'Ingresos del mes:';
       labelIngresosCell.cellStyle = CellStyle(bold: true);
-      
-      final valorIngresosCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
+
+      final valorIngresosCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
       valorIngresosCell.value = totalIngresos;
       valorIngresosCell.cellStyle = CellStyle(
         fontColorHex: '#2E7D32',
         bold: true,
       );
-      
+
       resumenRow++;
-      
+
       // Egresos del mes
-      final labelEgresosCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
+      final labelEgresosCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
       labelEgresosCell.value = 'Egresos del mes:';
       labelEgresosCell.cellStyle = CellStyle(bold: true);
-      
-      final valorEgresosCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
+
+      final valorEgresosCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
       valorEgresosCell.value = -totalEgresos;
       valorEgresosCell.cellStyle = CellStyle(
         fontColorHex: '#C62828',
         bold: true,
       );
-      
+
       resumenRow++;
       resumenRow++; // Línea en blanco
-      
+
       // Saldo Final
-      final labelSaldoFinalCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
+      final labelSaldoFinalCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
       labelSaldoFinalCell.value = 'Saldo Final del mes:';
       labelSaldoFinalCell.cellStyle = CellStyle(
         bold: true,
         fontSize: 14,
         backgroundColorHex: '#F5F5F5',
       );
-      
-      final valorSaldoFinalCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
+
+      final valorSaldoFinalCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
       valorSaldoFinalCell.value = saldoFinal;
       valorSaldoFinalCell.cellStyle = CellStyle(
         bold: true,
@@ -840,50 +1003,52 @@ class ExportService {
         fontColorHex: saldoFinal >= 0 ? '#2E7D32' : '#C62828',
         backgroundColorHex: '#F5F5F5',
       );
-      
+
       resumenRow++;
       resumenRow++; // Línea en blanco
-      
+
       // Proyección Pendiente
-      final labelProyeccionCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
+      final labelProyeccionCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: resumenRow));
       labelProyeccionCell.value = 'Proyección pendiente:';
       labelProyeccionCell.cellStyle = CellStyle(
         bold: true,
         italic: true,
       );
-      
-      final valorProyeccionCell = sheetResumen.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
+
+      final valorProyeccionCell = sheetResumen.cell(
+          CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: resumenRow));
       valorProyeccionCell.value = proyeccionPendiente;
       valorProyeccionCell.cellStyle = CellStyle(
         bold: true,
         italic: true,
         fontColorHex: proyeccionPendiente >= 0 ? '#2E7D32' : '#C62828',
       );
-      
+
       // Ajustar ancho de columnas en resumen
       sheetResumen.setColWidth(0, 30.0);
       sheetResumen.setColWidth(1, 25.0);
-      
+
       // Guardar archivo
       final excelBytes = excel.encode();
       if (excelBytes == null) {
         throw Exception('Error al generar archivo Excel');
       }
-      
+
       // Limpiar nombre de archivo
       final cleanFilename = filename
           .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
           .replaceAll(' ', '_')
           .replaceAll('.csv', '')
           .replaceAll('.xlsx', '');
-      
+
       final savedPath = await FileSaver.instance.saveFile(
         name: cleanFilename,
         bytes: Uint8List.fromList(excelBytes),
         ext: 'xlsx',
         mimeType: MimeType.microsoftExcel,
       );
-      
+
       return savedPath;
     } catch (e, st) {
       await AppDatabase.logLocalError(
@@ -891,6 +1056,518 @@ class ExportService {
         error: e,
         stackTrace: st,
         payload: {'count': movimientos.length, 'unidad': unidadGestionNombre},
+      );
+      rethrow;
+    }
+  }
+
+  /// FASE 35: Exportar reporte mensual de plantel a Excel
+  /// Genera archivo con hoja "Resumen" (tabla de entidades) y hoja "Totales"
+  Future<String> exportPlantelMensualExcel({
+    required List<Map<String, dynamic>> entidades,
+    required int mes,
+    required int anio,
+    required double totalComprometido,
+    required double totalPagado,
+    required double totalPendiente,
+    required String filename,
+  }) async {
+    try {
+      final excel = Excel.createExcel();
+
+      // Eliminar hoja por defecto
+      if (excel.tables.containsKey('Sheet1')) {
+        excel.delete('Sheet1');
+      }
+
+      // ===== HOJA 1: RESUMEN (Tabla de entidades) =====
+      final sheetResumen = excel['Resumen'];
+
+      // Cabeceras
+      final headers = [
+        'Nombre',
+        'Rol',
+        'Total Mensual',
+        'Pagado',
+        'Pendiente',
+        'Total'
+      ];
+      for (var i = 0; i < headers.length; i++) {
+        final cell = sheetResumen
+            .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = headers[i];
+        cell.cellStyle = CellStyle(
+          bold: true,
+          backgroundColorHex: '#1976D2',
+          fontColorHex: '#FFFFFF',
+        );
+      }
+
+      // Datos de entidades
+      for (var i = 0; i < entidades.length; i++) {
+        final entidad = entidades[i];
+        final nombre = entidad['nombre']?.toString() ?? '';
+        final rol = _nombreRolCorto(entidad['rol']?.toString() ?? '');
+        final totalComprometidoEntidad =
+            (entidad['totalComprometido'] as num?)?.toDouble() ?? 0.0;
+        final pagado = (entidad['pagado'] as num?)?.toDouble() ?? 0.0;
+        final esperado = (entidad['esperado'] as num?)?.toDouble() ?? 0.0;
+        final total = pagado + esperado;
+
+        final rowIndex = i + 1;
+
+        sheetResumen
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex))
+            .value = nombre;
+        sheetResumen
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex))
+            .value = rol;
+        sheetResumen
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIndex))
+            .value = totalComprometidoEntidad;
+        sheetResumen
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex))
+            .value = pagado;
+        sheetResumen
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIndex))
+            .value = esperado;
+        sheetResumen
+            .cell(
+                CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIndex))
+            .value = total;
+
+        // Colores para valores monetarios
+        if (pagado > 0) {
+          sheetResumen
+              .cell(CellIndex.indexByColumnRow(
+                  columnIndex: 3, rowIndex: rowIndex))
+              .cellStyle = CellStyle(
+            fontColorHex: '#2E7D32', // Verde
+            bold: true,
+          );
+        }
+
+        if (esperado > 0) {
+          sheetResumen
+              .cell(CellIndex.indexByColumnRow(
+                  columnIndex: 4, rowIndex: rowIndex))
+              .cellStyle = CellStyle(
+            fontColorHex: '#F57C00', // Naranja
+            bold: true,
+          );
+        }
+      }
+
+      // Ajustar anchos de columnas
+      sheetResumen.setColWidth(0, 30.0);
+      sheetResumen.setColWidth(1, 20.0);
+      sheetResumen.setColWidth(2, 18.0);
+      sheetResumen.setColWidth(3, 18.0);
+      sheetResumen.setColWidth(4, 18.0);
+      sheetResumen.setColWidth(5, 18.0);
+
+      // ===== HOJA 2: TOTALES =====
+      final sheetTotales = excel['Totales'];
+
+      // Título
+      final mesNombre = _nombreMes(mes);
+      final tituloCell = sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0));
+      tituloCell.value = 'Resumen General - $mesNombre $anio';
+      tituloCell.cellStyle = CellStyle(
+        bold: true,
+        fontSize: 14,
+      );
+
+      // Espacio
+      var row = 2;
+
+      // Total Comprometido
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .value = 'Total Comprometido:';
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .cellStyle = CellStyle(bold: true);
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .value = totalComprometido;
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .cellStyle = CellStyle(
+        fontColorHex: '#1976D2',
+        bold: true,
+      );
+      row++;
+
+      // Total Pagado
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .value = 'Total Pagado:';
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .cellStyle = CellStyle(bold: true);
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .value = totalPagado;
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .cellStyle = CellStyle(
+        fontColorHex: '#2E7D32',
+        bold: true,
+      );
+      row++;
+
+      // Total Pendiente
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .value = 'Total Pendiente:';
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .cellStyle = CellStyle(bold: true);
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .value = totalPendiente;
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .cellStyle = CellStyle(
+        fontColorHex: '#F57C00',
+        bold: true,
+      );
+      row++;
+
+      // Espacio
+      row++;
+
+      // Cantidad de Entidades
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .value = 'Cantidad de Entidades:';
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          .cellStyle = CellStyle(bold: true);
+      sheetTotales
+          .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+          .value = entidades.length;
+
+      // Ajustar anchos
+      sheetTotales.setColWidth(0, 30.0);
+      sheetTotales.setColWidth(1, 25.0);
+
+      // Guardar archivo
+      final excelBytes = excel.encode();
+      if (excelBytes == null) {
+        throw Exception('Error al generar archivo Excel');
+      }
+
+      // Limpiar nombre de archivo
+      final cleanFilename = filename
+          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+          .replaceAll(' ', '_')
+          .replaceAll('.xlsx', '');
+
+      final savedPath = await FileSaver.instance.saveFile(
+        name: cleanFilename,
+        bytes: Uint8List.fromList(excelBytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+
+      return savedPath;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'export.plantelMensualExcel',
+        error: e,
+        stackTrace: st,
+        payload: {'count': entidades.length, 'mes': mes, 'anio': anio},
+      );
+      rethrow;
+    }
+  }
+
+  String _nombreRolCorto(String rol) {
+    switch (rol) {
+      case 'JUGADOR':
+        return 'Jugador';
+      case 'DT':
+        return 'DT';
+      case 'AYUDANTE':
+        return 'Ayudante';
+      case 'PF':
+        return 'PF';
+      case 'OTRO':
+        return 'Otro';
+      default:
+        return rol;
+    }
+  }
+
+  String _nombreMes(int mes) {
+    const meses = [
+      'Enero',
+      'Febrero',
+      'Marzo',
+      'Abril',
+      'Mayo',
+      'Junio',
+      'Julio',
+      'Agosto',
+      'Septiembre',
+      'Octubre',
+      'Noviembre',
+      'Diciembre'
+    ];
+    return meses[mes - 1];
+  }
+
+  // ─── EXPORTAR CAJA A EXCEL ────────────────────────────────────────
+
+  /// Exporta el detalle completo de una caja cerrada a Excel (.xlsx).
+  ///
+  /// Genera un archivo con una sola hoja que contiene:
+  /// - Detalle del evento (disciplina, fecha, cajeros, etc.)
+  /// - Totales de ventas (global, efectivo, transferencia)
+  /// - Movimientos de caja (fondo, ingresos, retiros)
+  /// - Ventas por producto (tabla con nombre, cantidad, total)
+  /// - Datos de cierre (efectivo declarado, transferencias, diferencia)
+  Future<String> exportCajaExcel(int cajaId) async {
+    try {
+      final db = await AppDatabase.instance();
+      final payload = await _buildPayload(db, cajaId);
+      final caja = Map<String, Object?>.from(payload['caja'] as Map);
+      final resumen = Map<String, Object?>.from(payload['resumen'] as Map);
+      final totalesMp =
+          List<Map<String, Object?>>.from(payload['totales_por_mp'] as List);
+      final porProducto = List<Map<String, Object?>>.from(
+          payload['ventas_por_producto'] as List);
+      final movimientos =
+          List<Map<String, Object?>>.from(payload['movimientos'] as List);
+
+      final codigo = caja['codigo_caja']?.toString() ?? 'CAJA';
+      final fecha = caja['fecha']?.toString() ?? '';
+      final disciplina = caja['disciplina']?.toString() ?? '';
+      final horaApertura = caja['hora_apertura']?.toString() ?? '';
+      final cajeroApertura = caja['cajero_apertura']?.toString() ?? '';
+      final cajeroCierre = caja['cajero_cierre']?.toString() ?? '';
+      final descripcionEvento =
+          (caja['descripcion_evento'] as String?)?.trim() ?? '';
+      final obsApertura =
+          (caja['observaciones_apertura'] as String?)?.trim() ?? '';
+      final obsCierre = (caja['obs_cierre'] as String?)?.trim() ?? '';
+      final estado = caja['estado']?.toString() ?? '';
+
+      final fondo = ((caja['fondo_inicial'] as num?) ?? 0).toDouble();
+      final efectivoDeclarado =
+          ((caja['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+      final transferenciasFinal =
+          (((caja['conteo_transferencias_final'] as num?) ??
+                      (caja['transferencias_final'] as num?)) ??
+                  0)
+              .toDouble();
+      final diferencia = ((caja['diferencia'] as num?) ?? 0).toDouble();
+      final entradasVendidas = ((caja['entradas'] as num?) ?? 0).toInt();
+
+      final totalVentas = ((resumen['total'] as num?) ?? 0).toDouble();
+      final ticketsEmitidos =
+          ((resumen['tickets'] as Map?)?['emitidos'] as num?)?.toInt() ?? 0;
+      final ticketsAnulados =
+          ((resumen['tickets'] as Map?)?['anulados'] as num?)?.toInt() ?? 0;
+
+      double ventasEfec = 0.0;
+      double ventasTransf = 0.0;
+      for (final m in totalesMp) {
+        final desc = (m['mp_desc'] as String?)?.toLowerCase() ?? '';
+        final monto = ((m['total'] as num?) ?? 0).toDouble();
+        if (desc.contains('efectivo')) ventasEfec += monto;
+        if (desc.contains('transfer')) ventasTransf += monto;
+      }
+
+      double movIngresos = 0.0;
+      double movRetiros = 0.0;
+      for (final m in movimientos) {
+        final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+        final monto = ((m['monto'] as num?) ?? 0).toDouble();
+        if (tipo == 'INGRESO') movIngresos += monto;
+        if (tipo == 'RETIRO') movRetiros += monto;
+      }
+
+      // Ordenar productos por cantidad desc
+      porProducto.sort((a, b) {
+        final an = (a['cantidad'] as num?) ?? 0;
+        final bn = (b['cantidad'] as num?) ?? 0;
+        return bn.compareTo(an);
+      });
+
+      // ─── CREAR EXCEL ───
+      final excel = Excel.createExcel();
+      excel.delete('Sheet1');
+      final sheet = excel['Resumen de Caja'];
+
+      final headerStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: '#2E7D32',
+        fontColorHex: '#FFFFFF',
+      );
+      final sectionStyle = CellStyle(
+        bold: true,
+        fontSize: 13,
+        fontColorHex: '#2E7D32',
+      );
+      final labelStyle = CellStyle(bold: true);
+      final moneyGreenStyle = CellStyle(bold: true, fontColorHex: '#2E7D32');
+      final moneyRedStyle = CellStyle(bold: true, fontColorHex: '#C62828');
+
+      var row = 0;
+
+      // ─── TÍTULO ───
+      void _title(String text) {
+        final c = sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row));
+        c.value = text;
+        c.cellStyle =
+            CellStyle(bold: true, fontSize: 16, fontColorHex: '#1B5E20');
+        row++;
+      }
+
+      void _section(String text) {
+        row++; // línea en blanco
+        final c = sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row));
+        c.value = text;
+        c.cellStyle = sectionStyle;
+        row++;
+      }
+
+      void _labelValue(String label, String value) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = label
+          ..cellStyle = labelStyle;
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+            .value = value;
+        row++;
+      }
+
+      void _labelMoney(String label, double value, {bool negative = false}) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = label
+          ..cellStyle = labelStyle;
+        final c = sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row));
+        c.value = value;
+        c.cellStyle = negative ? moneyRedStyle : moneyGreenStyle;
+        row++;
+      }
+
+      // ─── DETALLE DEL EVENTO ───
+      _title('Resumen de Caja - $codigo');
+      row++;
+      _section('DETALLE DEL EVENTO');
+      _labelValue('Código de Caja', codigo);
+      _labelValue('Fecha', fecha);
+      _labelValue('Hora Apertura', horaApertura);
+      _labelValue('Disciplina', disciplina.isEmpty ? '—' : disciplina);
+      _labelValue('Descripción Evento',
+          descripcionEvento.isEmpty ? '—' : descripcionEvento);
+      _labelValue(
+          'Cajero Apertura', cajeroApertura.isEmpty ? '—' : cajeroApertura);
+      _labelValue('Cajero Cierre', cajeroCierre.isEmpty ? '—' : cajeroCierre);
+      if (obsApertura.isNotEmpty) _labelValue('Obs. Apertura', obsApertura);
+      _labelValue('Estado', estado);
+
+      // ─── TOTAL DE VENTAS ───
+      _section('TOTAL DE VENTAS');
+      _labelMoney('Total Ventas', totalVentas);
+      _labelMoney('Ventas Efectivo', ventasEfec);
+      _labelMoney('Ventas Transferencia', ventasTransf);
+      _labelValue('Tickets Emitidos', '$ticketsEmitidos');
+      _labelValue('Tickets Anulados', '$ticketsAnulados');
+
+      // ─── MOVIMIENTOS DE CAJA ───
+      _section('MOVIMIENTOS DE CAJA');
+      _labelMoney('Fondo Inicial', fondo);
+      _labelMoney('Ingresos', movIngresos);
+      _labelMoney('Retiros', movRetiros, negative: true);
+
+      // ─── VENTAS POR PRODUCTO ───
+      _section('VENTAS POR PRODUCTO');
+
+      // Header de tabla
+      final prodHeaders = ['Producto', 'Cantidad', 'Total'];
+      for (var i = 0; i < prodHeaders.length; i++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row))
+          ..value = prodHeaders[i]
+          ..cellStyle = headerStyle;
+      }
+      row++;
+
+      for (final p in porProducto) {
+        final nom = (p['producto_nombre'] ?? p['nombre'] ?? '').toString();
+        final cant = ((p['cantidad'] as num?) ?? 0).toInt();
+        final tot = ((p['total'] as num?) ?? 0).toDouble();
+
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+            .value = nom;
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
+            .value = cant;
+        final totCell = sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row));
+        totCell.value = tot;
+        totCell.cellStyle = CellStyle(bold: true);
+        row++;
+      }
+
+      if (porProducto.isEmpty) {
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+            .value = 'Sin ventas registradas';
+        row++;
+      }
+
+      // ─── CIERRE DE CAJA ───
+      _section('CIERRE DE CAJA');
+      _labelMoney('Efectivo Declarado', efectivoDeclarado);
+      _labelMoney('Transferencias Declaradas', transferenciasFinal);
+      _labelMoney('Diferencia', diferencia, negative: diferencia < 0);
+      _labelValue('Entradas Vendidas',
+          entradasVendidas == 0 ? '—' : '$entradasVendidas');
+      if (obsCierre.isNotEmpty) _labelValue('Obs. Cierre', obsCierre);
+
+      // ─── ANCHOS DE COLUMNAS ───
+      sheet.setColWidth(0, 30.0);
+      sheet.setColWidth(1, 25.0);
+      sheet.setColWidth(2, 20.0);
+
+      // ─── GUARDAR ───
+      final excelBytes = excel.encode();
+      if (excelBytes == null) {
+        throw Exception('Error al generar archivo Excel');
+      }
+
+      final cleanCodigo =
+          codigo.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').replaceAll(' ', '_');
+
+      final savedPath = await FileSaver.instance.saveFile(
+        name: 'caja_$cleanCodigo',
+        bytes: Uint8List.fromList(excelBytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+
+      return savedPath;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'export.cajaExcel',
+        error: e,
+        stackTrace: st,
+        payload: {'cajaId': cajaId},
       );
       rethrow;
     }

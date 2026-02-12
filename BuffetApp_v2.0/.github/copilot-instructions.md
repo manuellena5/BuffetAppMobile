@@ -409,12 +409,84 @@ try {
 - ✅ BIEN: `"Error al cargar datos. Por favor, intente nuevamente."`
 - ✅ MEJOR: `"No se pudieron cargar los jugadores. Verifique su conexión e intente nuevamente."`
 
-**4. Null-safety en datos de UI:**
+**4. Modales de confirmación para transacciones (OBLIGATORIO):**
+- TODA operación crítica (crear, editar, eliminar, transferir, confirmar pago) DEBE mostrar un modal final
+- El modal debe informar el resultado completo de la operación
+- Usar `showDialog()` con `AlertDialog` para confirmaciones
+
+**Ejemplo de modal de éxito:**
+```dart
+await showDialog(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: Row(
+      children: [
+        Icon(Icons.check_circle, color: Colors.green, size: 32),
+        SizedBox(width: 12),
+        Text('Operación Exitosa'),
+      ],
+    ),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Compromiso creado correctamente'),
+        SizedBox(height: 8),
+        Text('ID: $compromisoId', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text('Monto: ${Format.money(monto)}'),
+        Text('Vencimiento: ${Format.fecha(fecha)}'),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text('Aceptar'),
+      ),
+    ],
+  ),
+);
+```
+
+**Ejemplo de modal de error:**
+```dart
+await showDialog(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: Row(
+      children: [
+        Icon(Icons.error, color: Colors.red, size: 32),
+        SizedBox(width: 12),
+        Text('Error'),
+      ],
+    ),
+    content: Text('No se pudo completar la operación. Por favor, intente nuevamente.'),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text('Cerrar'),
+      ),
+    ],
+  ),
+);
+```
+
+**5. Operaciones que REQUIEREN modal final:**
+- ✅ Crear compromiso, acuerdo, movimiento, transferencia
+- ✅ Editar cualquier registro financiero
+- ✅ Confirmar pago de cuota
+- ✅ Cancelar/anular movimiento
+- ✅ Eliminar (soft delete) cualquier entidad
+- ✅ Importar datos masivos (jugadores, acuerdos grupales)
+- ✅ Sincronizar datos a Supabase
+- ✅ Abrir/cerrar caja
+- ✅ Generar compromisos desde acuerdo
+
+**6. Null-safety en datos de UI:**
 - NUNCA asumir que un campo existe o no es null
 - Usar operadores seguros: `campo?.toString() ?? 'valor_por_defecto'`
 - Casteos seguros: `(valor as num?)?.toDouble() ?? 0.0`
 
-**5. Scope naming (granular):**
+**7. Scope naming (granular):**
 - Formato: `pantalla.operacion`
 - Ejemplos válidos:
   - `detalle_jugador.cargar_datos`
@@ -423,7 +495,7 @@ try {
   - `sync.enviar_caja`
   - `buffet.abrir_caja`
 
-**6. Try-catch individual en renderizado:**
+**8. Try-catch individual en renderizado:**
 Para listas/iteraciones, wrap cada item:
 ```dart
 itemBuilder: (context, index) {
@@ -448,7 +520,7 @@ itemBuilder: (context, index) {
 }
 ```
 
-**7. Estados de error en la UI:**
+**9. Estados de error en la UI:**
 - Agregar variables de estado: `String? _errorMessage;`
 - Mostrar widgets de error condicionalmente: `if (_errorMessage != null) _buildError()`
 - Permitir reintentos: botón "Reintentar" que llama nuevamente a `_cargarDatos()`
@@ -463,6 +535,8 @@ Antes de dar por completa una pantalla, verificar:
 - [ ] Los scopes de error son específicos y descriptivos
 - [ ] El stackTrace se pasa como `StackTrace`, no como `String`
 - [ ] La app NO crashea si hay datos malformados o nulls inesperados
+- [ ] **TODA transacción muestra un modal final con resultado detallado**
+- [ ] El usuario siempre sabe qué pasó (éxito o error) sin ambigüedades
 
 ## Convenciones de Código
 - Nombres de archivos: snake_case; pantallas terminan en `_page.dart`.

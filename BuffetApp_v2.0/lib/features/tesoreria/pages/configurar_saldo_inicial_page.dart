@@ -44,8 +44,6 @@ class _ConfigurarSaldoInicialPageState
   int _anio = DateTime.now().year;
   int _mes = DateTime.now().month;
 
-  SaldoInicial? _saldoExistente;
-
   @override
   void initState() {
     super.initState();
@@ -124,7 +122,6 @@ class _ConfigurarSaldoInicialPageState
       }
 
       final saldo = SaldoInicial.fromMap(rows.first);
-      _saldoExistente = saldo;
 
       // Prellenar el formulario
       _unidadSeleccionada = saldo.unidadGestionId;

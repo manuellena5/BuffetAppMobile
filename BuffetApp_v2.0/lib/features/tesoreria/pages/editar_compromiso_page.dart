@@ -7,6 +7,7 @@ import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/state/app_settings.dart';
 import '../../../data/dao/db.dart';
+import '../services/categoria_movimiento_service.dart';
 import '../../shared/widgets/responsive_container.dart';
 
 /// Página para editar un compromiso financiero existente.
@@ -43,6 +44,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
   DateTime _fechaInicio = DateTime.now();
   DateTime? _fechaFin;
   int _unidadGestionId = 1;
+  String? _codigoCategoria; // Código de categoría seleccionada
   
   // Vista previa de cuotas
   List<Map<String, dynamic>> _cuotasGeneradas = [];
@@ -55,8 +57,8 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
   String? _error;
   List<Map<String, dynamic>> _frecuencias = [];
   List<Map<String, dynamic>> _entidadesPlantel = [];
+  List<Map<String, dynamic>> _categorias = [];
   int? _entidadPlantelId;
-  Map<String, dynamic>? _compromisoOriginal;
 
   @override
   void initState() {
@@ -108,12 +110,17 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       // Cargar frecuencias
       final frecuencias = await db.query('frecuencias', orderBy: 'descripcion');
       
+      // Cargar categorías
+      final categorias = await CategoriaMovimientoService.obtenerCategoriasPorTipo(
+        tipo: compromiso['tipo'] as String? ?? 'INGRESO',
+      );
+      
       // Llenar campos con datos existentes
       _nombreController.text = compromiso['nombre'] as String? ?? '';
       _montoController.text = (compromiso['monto'] as double?)?.toString() ?? '';
       _cuotasController.text = (compromiso['cuotas'] as int?)?.toString() ?? '';
       _frecuenciaDiasController.text = (compromiso['frecuencia_dias'] as int?)?.toString() ?? '';
-      _categoriaController.text = compromiso['categoria'] as String? ?? '';
+      _codigoCategoria = compromiso['categoria'] as String?; // Usar código
       _observacionesController.text = compromiso['observaciones'] as String? ?? '';
       
       _tipo = compromiso['tipo'] as String? ?? 'INGRESO';
@@ -137,8 +144,8 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       
       setState(() {
         _frecuencias = frecuencias;
+        _categorias = categorias;
         _entidadesPlantel = entidades;
-        _compromisoOriginal = compromiso;
         _cuotasExistentes = cuotasExistentes;
         _isLoading = false;
       });
@@ -159,6 +166,25 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         _error = 'Error al cargar datos: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// Recarga categorías cuando cambia el tipo (INGRESO/EGRESO)
+  Future<void> _cargarCategorias() async {
+    try {
+      final cats = await CategoriaMovimientoService.obtenerCategoriasPorTipo(tipo: _tipo);
+      setState(() {
+        _categorias = cats;
+        // Validar que la categoría actual sea válida para el nuevo tipo
+        if (_codigoCategoria != null) {
+          final esValida = _categorias.any((cat) => cat['codigo'] == _codigoCategoria);
+          if (!esValida) {
+            _codigoCategoria = null; // Limpiar si no es válida
+          }
+        }
+      });
+    } catch (e) {
+      // No hacer nada, mantener lista vacía
     }
   }
 
@@ -318,9 +344,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         frecuenciaDias: frecuenciaDias,
         cuotas: cuotas,
         fechaFin: _fechaFin != null ? DateFormat('yyyy-MM-dd').format(_fechaFin!) : null,
-        categoria: _categoriaController.text.trim().isEmpty 
-            ? '' 
-            : _categoriaController.text.trim(),
+        categoria: _codigoCategoria ?? '',
         observaciones: _observacionesController.text.trim().isNotEmpty 
             ? _observacionesController.text.trim() 
             : null,
@@ -346,10 +370,50 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       }
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Compromiso actualizado exitosamente')),
+        // Modal de confirmación exitosa
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                SizedBox(width: 12),
+                Text('Compromiso Actualizado'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'El compromiso se actualizó correctamente:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                SizedBox(height: 16),
+                _buildInfoRow('Nombre', _nombreController.text.trim()),
+                _buildInfoRow('Tipo', _tipo),
+                _buildInfoRow('Modalidad', _modalidad),
+                _buildInfoRow('Monto', '\$${double.parse(_montoController.text).toStringAsFixed(2)}'),
+                _buildInfoRow('Frecuencia', _frecuencia),
+                if (cuotas != null)
+                  _buildInfoRow('Cuotas', cuotas.toString()),
+                _buildInfoRow('Fecha Inicio', DateFormat('dd/MM/yyyy').format(_fechaInicio)),
+                if (_fechaFin != null)
+                  _buildInfoRow('Fecha Fin', DateFormat('dd/MM/yyyy').format(_fechaFin!)),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Cierra el dialog
+                  Navigator.pop(context, true); // Retorna a la pantalla anterior
+                },
+                child: Text('Aceptar'),
+              ),
+            ],
+          ),
         );
-        Navigator.pop(context, true);
       }
     } catch (e, st) {
       await AppDatabase.logLocalError(
@@ -362,10 +426,26 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       setState(() => _isSubmitting = false);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al actualizar: $e'),
-            backgroundColor: Colors.red,
+        // Modal de error
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 32),
+                SizedBox(width: 12),
+                Text('Error al Actualizar'),
+              ],
+            ),
+            content: Text(
+              'No se pudo actualizar el compromiso. Por favor, intente nuevamente.\n\nDetalle: $e',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cerrar'),
+              ),
+            ],
           ),
         );
       }
@@ -424,31 +504,6 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Información de solo lectura
-            if (_compromisoOriginal != null)
-              Card(
-                color: Colors.blue.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Información del compromiso',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('ID: ${widget.compromisoId}'),
-                      Text('Cuotas confirmadas: ${_compromisoOriginal!['cuotas_confirmadas'] ?? 0}'),
-                      Text('Estado: ${_compromisoOriginal!['activo'] == 1 ? 'Activo' : 'Pausado'}'),
-                      if (_cuotasExistentes.isNotEmpty)
-                        Text('Cuotas en DB: ${_cuotasExistentes.length}'),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
-            
             // Nombre
             TextFormField(
               controller: _nombreController,
@@ -476,7 +531,10 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
                 DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
               ],
               onChanged: _isSubmitting ? null : (v) {
-                if (v != null) setState(() => _tipo = v);
+                if (v != null) {
+                  setState(() => _tipo = v);
+                  _cargarCategorias(); // Recargar categorías
+                }
               },
             ),
             const SizedBox(height: 16),
@@ -698,16 +756,25 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
               ),
             if (_modalidad == 'RECURRENTE') const SizedBox(height: 16),
             
-            // Categoría
-            TextFormField(
-              controller: _categoriaController,
+            // Categoría (dropdown con categorías del tipo)
+            DropdownButtonFormField<String>(
+              value: _codigoCategoria,
               decoration: const InputDecoration(
                 labelText: 'Categoría',
-                hintText: 'ej: Personal, Infraestructura',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.category),
+                hintText: 'Seleccione una categoría',
               ),
-              enabled: !_isSubmitting,
+              items: _categorias.map((cat) {
+                final codigo = cat['codigo'] as String;
+                final nombre = cat['nombre'] as String;
+                return DropdownMenuItem<String>(
+                  value: codigo,
+                  child: Text(nombre),
+                );
+              }).toList(),
+              onChanged: _isSubmitting ? null : (v) => setState(() => _codigoCategoria = v),
+              validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
             ),
             const SizedBox(height: 16),
             
@@ -876,6 +943,33 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
           ],
         ),
       ),
+      ),
+    );
+  }
+  
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
       ),
     );
   }

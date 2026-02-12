@@ -185,7 +185,7 @@ void main() {
     await AppDatabase.instance();
     
     final db = await AppDatabase.instance();
-    final unidadId = await db.insert('unidades_gestion', {
+    await db.insert('unidades_gestion', {
       'nombre': 'Fútbol Mayor',
       'activo': 1,
       'created_ts': DateTime.now().millisecondsSinceEpoch,

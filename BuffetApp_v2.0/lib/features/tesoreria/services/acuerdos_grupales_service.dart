@@ -186,100 +186,108 @@ class AcuerdosGrupalesService {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     try {
-      // 1. Crear registro de histórico ANTES de crear acuerdos individuales
-      final jugadoresPayload = jugadores
-          .map((j) => {
-                'id': j.id,
-                'nombre': j.nombre,
-                'monto_ajustado': j.monto,
-              })
-          .toList();
+      // FASE 23: Usar transacción para atomicidad (all-or-nothing)
+      await db.transaction((txn) async {
+        // 1. Crear registro de histórico ANTES de crear acuerdos individuales
+        final jugadoresPayload = jugadores
+            .map((j) => {
+                  'id': j.id,
+                  'nombre': j.nombre,
+                  'monto_ajustado': j.monto,
+                })
+            .toList();
 
-      final historicoId = await db.insert('acuerdos_grupales_historico', {
-        'uuid_ref': grupalUuid,
-        'nombre': nombre,
-        'unidad_gestion_id': unidadGestionId,
-        'tipo': tipo,
-        'modalidad': modalidad,
-        'monto_base': montoBase,
-        'frecuencia': frecuencia,
-        'fecha_inicio': fechaInicio,
-        'fecha_fin': fechaFin,
-        'categoria': categoria,
-        'observaciones_comunes': observacionesComunes,
-        'genera_compromisos': generaCompromisos ? 1 : 0,
-        'cantidad_acuerdos_generados': 0, // Se actualiza después
-        'payload_filtros': payloadFiltros != null ? jsonEncode(payloadFiltros) : null,
-        'payload_jugadores': jsonEncode(jugadoresPayload),
-        'created_ts': now,
-      });
+        final historicoId = await txn.insert('acuerdos_grupales_historico', {
+          'uuid_ref': grupalUuid,
+          'nombre': nombre,
+          'unidad_gestion_id': unidadGestionId,
+          'tipo': tipo,
+          'modalidad': modalidad,
+          'monto_base': montoBase,
+          'frecuencia': frecuencia,
+          'fecha_inicio': fechaInicio,
+          'fecha_fin': fechaFin,
+          'categoria': categoria,
+          'observaciones_comunes': observacionesComunes,
+          'genera_compromisos': generaCompromisos ? 1 : 0,
+          'cantidad_acuerdos_generados': 0, // Se actualiza después
+          'payload_filtros': payloadFiltros != null ? jsonEncode(payloadFiltros) : null,
+          'payload_jugadores': jsonEncode(jugadoresPayload),
+          'created_ts': now,
+        });
 
-      // 2. Crear acuerdos individuales
-      for (final jugador in jugadores) {
-        try {
-          // Calcular cuotas si modalidad MONTO_TOTAL_CUOTAS
-          int? cuotasCalc;
-          double montoAcuerdo = jugador.monto;
+        // 2. Crear acuerdos individuales dentro de la transacción
+        for (final jugador in jugadores) {
+          try {
+            // Calcular cuotas si modalidad MONTO_TOTAL_CUOTAS
+            int? cuotasCalc;
+            double montoAcuerdo = jugador.monto;
 
-          if (modalidad == 'MONTO_TOTAL_CUOTAS') {
-            cuotasCalc = cuotas ?? _calcularCuotasPorFrecuencia(
-              fechaInicio,
-              fechaFin,
-              frecuencia,
-            );
-          }
-
-          final acuerdoId = await AcuerdosService.crearAcuerdo(
-            unidadGestionId: unidadGestionId,
-            entidadPlantelId: jugador.id,
-            nombre: '$nombre - ${jugador.nombre}',
-            tipo: tipo,
-            modalidad: modalidad,
-            montoTotal: modalidad == 'MONTO_TOTAL_CUOTAS' ? montoAcuerdo : null,
-            montoPeriodico: modalidad == 'RECURRENTE' ? montoAcuerdo : null,
-            frecuencia: frecuencia,
-            cuotas: cuotasCalc,
-            fechaInicio: fechaInicio,
-            fechaFin: fechaFin,
-            categoria: categoria,
-            observaciones: observacionesComunes,
-            generaCompromisos: generaCompromisos,
-            origenGrupal: true,
-            acuerdoGrupalRef: grupalUuid,
-          );
-
-          acuerdosCreados.add(acuerdoId);
-          
-          // Si debe generar compromisos, crearlos ahora
-          if (generaCompromisos) {
-            try {
-              await AcuerdosService.generarCompromisos(acuerdoId);
-            } catch (e) {
-              await AppDatabase.logLocalError(
-                scope: 'acuerdos_grupales.generar_compromisos',
-                error: e.toString(),
-                payload: {'acuerdo_id': acuerdoId, 'jugador_id': jugador.id},
+            if (modalidad == 'MONTO_TOTAL_CUOTAS') {
+              cuotasCalc = cuotas ?? _calcularCuotasPorFrecuencia(
+                fechaInicio,
+                fechaFin,
+                frecuencia,
               );
-              // No lanzar error para no detener la creación de otros acuerdos
             }
-          }
-        } catch (e) {
-          errores.add('${jugador.nombre}: ${e.toString()}');
-          await AppDatabase.logLocalError(
-            scope: 'acuerdos_grupales.crear_acuerdo_individual',
-            error: e.toString(),
-            payload: {'jugador_id': jugador.id, 'jugador_nombre': jugador.nombre},
-          );
-        }
-      }
 
-      // 3. Actualizar histórico con cantidad de acuerdos creados
-      await db.update(
-        'acuerdos_grupales_historico',
-        {'cantidad_acuerdos_generados': acuerdosCreados.length},
-        where: 'id = ?',
-        whereArgs: [historicoId],
-      );
+            // Crear acuerdo pasando el txn
+            final acuerdoId = await _crearAcuerdoEnTransaccion(
+              txn: txn,
+              unidadGestionId: unidadGestionId,
+              entidadPlantelId: jugador.id,
+              nombre: '$nombre - ${jugador.nombre}',
+              tipo: tipo,
+              modalidad: modalidad,
+              montoTotal: modalidad == 'MONTO_TOTAL_CUOTAS' ? montoAcuerdo : null,
+              montoPeriodico: modalidad == 'RECURRENTE' ? montoAcuerdo : null,
+              frecuencia: frecuencia,
+              cuotas: cuotasCalc,
+              fechaInicio: fechaInicio,
+              fechaFin: fechaFin,
+              categoria: categoria,
+              observaciones: observacionesComunes,
+              generaCompromisos: generaCompromisos,
+              origenGrupal: true,
+              acuerdoGrupalRef: grupalUuid,
+            );
+
+            acuerdosCreados.add(acuerdoId);
+            
+            // Si debe generar compromisos, crearlos dentro de la transacción
+            if (generaCompromisos) {
+              try {
+                await _generarCompromisosEnTransaccion(txn, acuerdoId);
+              } catch (e) {
+                await AppDatabase.logLocalError(
+                  scope: 'acuerdos_grupales.generar_compromisos',
+                  error: e.toString(),
+                  payload: {'acuerdo_id': acuerdoId, 'jugador_id': jugador.id},
+                );
+                // Relanzar para que la transacción haga rollback
+                rethrow;
+              }
+            }
+          } catch (e) {
+            errores.add('${jugador.nombre}: ${e.toString()}');
+            await AppDatabase.logLocalError(
+              scope: 'acuerdos_grupales.crear_acuerdo_individual',
+              error: e.toString(),
+              payload: {'jugador_id': jugador.id, 'jugador_nombre': jugador.nombre},
+            );
+            // Relanzar para rollback completo
+            rethrow;
+          }
+        }
+
+        // 3. Actualizar histórico con cantidad de acuerdos creados
+        await txn.update(
+          'acuerdos_grupales_historico',
+          {'cantidad_acuerdos_generados': acuerdosCreados.length},
+          where: 'id = ?',
+          whereArgs: [historicoId],
+        );
+      }); // Fin de transacción
 
       return ResultadoCreacionGrupal(
         acuerdosCreados: acuerdosCreados,
@@ -337,6 +345,121 @@ class AcuerdosGrupalesService {
   // =====================
   // HELPERS PRIVADOS
   // =====================
+
+  /// FASE 23: Crear acuerdo dentro de una transacción existente
+  Future<int> _crearAcuerdoEnTransaccion({
+    required dynamic txn, // Transaction o Database
+    required int unidadGestionId,
+    required int entidadPlantelId,
+    required String nombre,
+    required String tipo,
+    required String modalidad,
+    double? montoTotal,
+    double? montoPeriodico,
+    required String frecuencia,
+    int? cuotas,
+    required String fechaInicio,
+    String? fechaFin,
+    required String categoria,
+    String? observaciones,
+    required bool generaCompromisos,
+    required bool origenGrupal,
+    required String acuerdoGrupalRef,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    final acuerdoId = await txn.insert('acuerdos', {
+      'unidad_gestion_id': unidadGestionId,
+      'entidad_plantel_id': entidadPlantelId,
+      'nombre': nombre,
+      'tipo': tipo,
+      'modalidad': modalidad,
+      'monto_total': montoTotal,
+      'monto_periodico': montoPeriodico,
+      'frecuencia': frecuencia,
+      'cuotas': cuotas,
+      'fecha_inicio': fechaInicio,
+      'fecha_fin': fechaFin,
+      'categoria': categoria,
+      'observaciones': observaciones,
+      'activo': 1,
+      'origen_grupal': origenGrupal ? 1 : 0,
+      'acuerdo_grupal_ref': acuerdoGrupalRef,
+      'cuotas_confirmadas': 0,
+      'eliminado': 0,
+      'sync_estado': 'PENDIENTE',
+      'created_ts': now,
+      'updated_ts': now,
+    });
+
+    return acuerdoId;
+  }
+
+  /// FASE 23: Generar compromisos dentro de una transacción existente
+  Future<void> _generarCompromisosEnTransaccion(dynamic txn, int acuerdoId) async {
+    // Obtener acuerdo
+    final acuerdos = await txn.query('acuerdos', where: 'id = ?', whereArgs: [acuerdoId]);
+    if (acuerdos.isEmpty) {
+      throw Exception('Acuerdo no encontrado');
+    }
+
+    final acuerdo = acuerdos.first;
+    final modalidad = acuerdo['modalidad'] as String;
+    final cuotas = acuerdo['cuotas'] as int?;
+    final fechaInicio = DateTime.parse(acuerdo['fecha_inicio'] as String);
+    final frecuencia = acuerdo['frecuencia'] as String;
+    final tipo = acuerdo['tipo'] as String;
+
+    // Calcular montos por cuota
+    double montoCuota;
+    int cantidadCuotas;
+
+    if (modalidad == 'MONTO_TOTAL_CUOTAS') {
+      final montoTotal = (acuerdo['monto_total'] as num).toDouble();
+      cantidadCuotas = cuotas!;
+      montoCuota = montoTotal / cantidadCuotas;
+    } else {
+      // RECURRENTE
+      montoCuota = (acuerdo['monto_periodico'] as num).toDouble();
+      cantidadCuotas = cuotas ?? 12; // Default si no está definido
+    }
+
+    // Generar compromisos
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    for (var i = 0; i < cantidadCuotas; i++) {
+      DateTime fechaVencimiento = fechaInicio;
+      
+      switch (frecuencia) {
+        case 'MENSUAL':
+          fechaVencimiento = DateTime(fechaInicio.year, fechaInicio.month + i, fechaInicio.day);
+          break;
+        case 'QUINCENAL':
+          fechaVencimiento = fechaInicio.add(Duration(days: 15 * i));
+          break;
+        case 'SEMANAL':
+          fechaVencimiento = fechaInicio.add(Duration(days: 7 * i));
+          break;
+      }
+
+      await txn.insert('compromisos', {
+        'acuerdo_id': acuerdoId,
+        'unidad_gestion_id': acuerdo['unidad_gestion_id'],
+        'entidad_plantel_id': acuerdo['entidad_plantel_id'],
+        'tipo': tipo,
+        'categoria': acuerdo['categoria'],
+        'monto': montoCuota,
+        'fecha_vencimiento': fechaVencimiento.toIso8601String().split('T')[0],
+        'estado': 'ESPERADO',
+        'activo': 1,
+        'observaciones': 'Cuota ${i + 1}/$cantidadCuotas - ${acuerdo['nombre']}',
+        'eliminado': 0,
+        'sync_estado': 'PENDIENTE',
+        'created_ts': now,
+        'updated_ts': now,
+      });
+    }
+  }
 
   int _calcularCuotasPorFrecuencia(String fechaInicio, String? fechaFin, String frecuencia) {
     if (fechaFin == null) return -1; // Infinito

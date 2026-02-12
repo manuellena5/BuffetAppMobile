@@ -75,7 +75,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
   Future<void> _load() async {
     final db = await AppDatabase.instance();
     final prods = await db.rawQuery(
-        'SELECT id, nombre, precio_venta, stock_actual, imagen FROM products WHERE visible=1 ORDER BY orden_visual ASC, id ASC');
+        'SELECT id, nombre, precio_venta, stock_actual, imagen, categoria_id FROM products WHERE visible=1 ORDER BY orden_visual ASC, id ASC');
     // cargar preferencia de layout
     try {
       final sp = await SharedPreferences.getInstance();
@@ -220,7 +220,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
     final cart = context.watch<CartModel>();
     final uiScale = context.watch<AppSettings>().uiScale;
     final width = MediaQuery.of(context).size.width;
-    
+
     // Si necesita configurar punto de venta, mostrar página de setup
     if (_needsPuntoVentaSetup) {
       return PuntoVentaSetupPage(
@@ -234,7 +234,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
         },
       );
     }
-    
+
     if (_loading) {
       return WillPopScope(
         onWillPop: () async {
@@ -663,14 +663,45 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
     );
   }
 
+  // --- Colores por categoría ---
+  // 1=Comida → Naranja, 2=Bebida → Celeste, 3/otros → Gris
+  static const Map<int, MaterialColor> _categorySwatch = {
+    1: Colors.orange,
+    2: Colors.lightBlue,
+  };
+
+  static Color _categoryColor(int? catId) {
+    return _categorySwatch[catId] ?? Colors.grey;
+  }
+
+  static Color _categoryBgColor(int? catId) {
+    final swatch = _categorySwatch[catId];
+    return swatch?.shade100 ?? Colors.grey.shade200;
+  }
+
+  static Color _categoryDarkColor(int? catId) {
+    final swatch = _categorySwatch[catId];
+    return swatch?.shade700 ?? Colors.grey.shade700;
+  }
+
+  static String _categoryName(int? catId) {
+    switch (catId) {
+      case 1:
+        return 'Comida';
+      case 2:
+        return 'Bebida';
+      default:
+        return 'Otros';
+    }
+  }
+
   Widget _buildGrid(double width, double uiScale) {
     final s = uiScale <= 0 ? 1.0 : uiScale;
     final effectiveWidth = width / s;
 
     final settings = context.read<AppSettings>();
     final minTileWidth = settings.winSalesGridMinTileWidth;
-    final useCustomWin = Platform.isWindows && minTileWidth != null;
-    final crossAxisCount = useCustomWin
+    final crossAxisCount = (minTileWidth != null && minTileWidth > 0)
         ? (effectiveWidth / minTileWidth).floor().clamp(2, 8)
         : _gridCountForWidth(effectiveWidth);
 
@@ -688,38 +719,129 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
   }
 
   Widget _buildList() {
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      itemCount: _productos.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (ctx, i) {
-        final p = _productos[i];
-        return ListTile(
-          onTap: () => _onTapProduct(p),
-          leading: _buildLeadingImage(p),
-          title: Text(p['nombre'] as String,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Row(children: [
-            Text(
-              formatCurrencyNoDecimals(p['precio_venta'] as num),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(width: 12),
-            if (((p['stock_actual'] as int?) ?? 0) != 999)
-              Text('Stock: ${p['stock_actual']}',
-                  style: TextStyle(color: Colors.grey.shade700)),
-          ]),
-          // trailing vacío para un look más limpio en lista
+    // Agrupar productos por categoría
+    final Map<int, List<Map<String, dynamic>>> grouped = {};
+    for (final p in _productos) {
+      final catId = (p['categoria_id'] as int?) ?? 0;
+      grouped.putIfAbsent(catId, () => []).add(p);
+    }
+    // Orden fijo: 1=Comida, 2=Bebida, luego el resto
+    final sortedKeys = grouped.keys.toList()
+      ..sort((a, b) {
+        const order = {1: 0, 2: 1};
+        return (order[a] ?? 99).compareTo(order[b] ?? 99);
+      });
+
+    return OrientationBuilder(
+      builder: (context, orientation) {
+        if (orientation == Orientation.landscape) {
+          // Landscape: 3 columnas lado a lado
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (int i = 0; i < sortedKeys.length; i++) ...[
+                if (i > 0) const SizedBox(width: 4),
+                Expanded(
+                  child: _buildCategoryColumn(
+                      sortedKeys[i], grouped[sortedKeys[i]]!),
+                ),
+              ],
+            ],
+          );
+        }
+        // Portrait: categorías apiladas verticalmente
+        return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          children: [
+            for (final catId in sortedKeys)
+              _buildCategorySection(catId, grouped[catId]!),
+          ],
         );
       },
     );
   }
 
+  /// Columna individual de una categoría (para landscape)
+  Widget _buildCategoryColumn(int catId, List<Map<String, dynamic>> products) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      children: [
+        _buildCategoryHeader(catId),
+        for (final p in products) ...[
+          _buildProductListItem(p),
+          const Divider(height: 1),
+        ],
+      ],
+    );
+  }
+
+  /// Sección de categoría con header + productos (para portrait)
+  Widget _buildCategorySection(int catId, List<Map<String, dynamic>> products) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildCategoryHeader(catId),
+        for (final p in products) ...[
+          _buildProductListItem(p),
+          const Divider(height: 1),
+        ],
+      ],
+    );
+  }
+
+  /// Header de categoría reutilizable
+  Widget _buildCategoryHeader(int catId) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.only(top: 8, bottom: 4),
+      decoration: BoxDecoration(
+        color: _categoryColor(catId).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(
+            color: _categoryColor(catId),
+            width: 4,
+          ),
+        ),
+      ),
+      child: Text(
+        _categoryName(catId),
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: _categoryDarkColor(catId),
+        ),
+      ),
+    );
+  }
+
+  /// Item de producto en modo lista reutilizable
+  Widget _buildProductListItem(Map<String, dynamic> p) {
+    return ListTile(
+      onTap: () => _onTapProduct(p),
+      leading: _buildLeadingImage(p),
+      title: Text(p['nombre'] as String,
+          maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Row(children: [
+        Text(
+          formatCurrencyNoDecimals(p['precio_venta'] as num),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(width: 12),
+        if (((p['stock_actual'] as int?) ?? 0) != 999)
+          Text('Stock: ${p['stock_actual']}',
+              style: TextStyle(color: Colors.grey.shade700)),
+      ]),
+    );
+  }
+
   Widget _productButton(Map<String, dynamic> p, {bool isGrid = false}) {
+    final catId = p['categoria_id'] as int?;
     return ElevatedButton(
       onPressed: () => _onTapProduct(p),
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.grey.shade200,
+        backgroundColor: _categoryBgColor(catId),
         foregroundColor: Colors.black87,
         padding: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -750,13 +872,15 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
     final name = (p['nombre'] as String?) ?? '';
     final price = p['precio_venta'] as num?;
     final stock = (p['stock_actual'] as int?) ?? 0;
+    final catId = p['categoria_id'] as int?;
+    final catColor = _categoryColor(catId);
     return Stack(
       fit: StackFit.expand,
       children: [
         if (img != null && img.isNotEmpty)
           Image.file(File(img), fit: BoxFit.cover)
         else
-          Container(color: Colors.grey.shade300),
+          Container(color: _categoryBgColor(catId)),
         // chip de stock (arriba-izquierda), oculto si 999 (ilimitado)
         if (stock != 999)
           Positioned(
@@ -803,7 +927,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
           right: 0,
           bottom: 0,
           child: Container(
-            color: Colors.black54,
+            color: catColor.withValues(alpha: 0.80),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             child: Text(
               name,

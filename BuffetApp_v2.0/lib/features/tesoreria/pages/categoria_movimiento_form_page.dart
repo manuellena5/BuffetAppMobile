@@ -259,6 +259,7 @@ class _CategoriaMovimientoFormPageState
                     TextFormField(
                       controller: _codigoController,
                       textCapitalization: TextCapitalization.characters,
+                      maxLength: 10,
                       decoration: InputDecoration(
                         hintText: 'Ej. CUOT',
                         hintStyle: const TextStyle(color: Color(0xFF61896F)),

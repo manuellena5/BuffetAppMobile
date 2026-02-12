@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../shared/state/app_mode.dart';
-import '../buffet/pages/buffet_home_page.dart';
 import '../tesoreria/pages/tesoreria_home_page.dart';
 import 'home_page.dart';
-import '../buffet/services/caja_service.dart';
 import '../../app_version.dart';
 
 /// Pantalla de selección de modo (Buffet / Tesorería)
@@ -166,18 +164,11 @@ class _ModeSelectorPageState extends State<ModeSelectorPage> {
     
     if (!context.mounted) return;
     
-    // Para Buffet, verificar si hay caja abierta
+    // Navegar según modo seleccionado
     Widget destination;
     if (mode == AppMode.buffet) {
-      // Verificar si hay caja abierta
-      final caja = await CajaService().getCajaAbierta();
-      if (caja != null) {
-        // Si hay caja abierta, ir directo a BuffetHomePage
-        destination = const BuffetHomePage();
-      } else {
-        // Sin caja abierta, ir a HomePage (pantalla de inicio de buffet)
-        destination = const HomePage();
-      }
+      // Siempre ir a HomePage (inicio buffet); desde ahí se accede a ventas si hay caja
+      destination = const HomePage();
     } else {
       destination = const TesoreriaHomePage();
     }

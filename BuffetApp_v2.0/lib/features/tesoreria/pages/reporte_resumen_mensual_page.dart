@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:excel/excel.dart';
+import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/format.dart';
 import '../services/reporte_resumen_service.dart';
@@ -210,30 +212,30 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Resumen Mensual $_yearActual'),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: _exportando
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.download),
-            onPressed: _exportando ? null : _exportarExcel,
-            tooltip: 'Exportar a Excel',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
+    return TesoreriaScaffold(
+      title: 'Resumen Mensual $_yearActual',
+      currentRouteName: '/reportes/resumen_mensual',
+      appBarColor: Colors.green,
+      actions: [
+        IconButton(
+          icon: _exportando
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.download),
+          onPressed: _exportando ? null : _exportarExcel,
+          tooltip: 'Exportar a Excel',
+        ),
+      ],
+      body: ResponsiveContainer(
+        maxWidth: 1200,
+        child: Column(
+          children: [
           // Unidad de Gestión
           if (_unidadGestionNombre != null)
             Container(
@@ -369,6 +371,7 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

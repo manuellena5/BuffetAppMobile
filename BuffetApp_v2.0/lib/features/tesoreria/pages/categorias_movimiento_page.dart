@@ -7,6 +7,7 @@ import '../services/categoria_import_export_service.dart';
 import 'categoria_movimiento_form_page.dart';
 import 'importar_categorias_page.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import '../../../data/dao/db.dart';
 
 /// Pantalla de Gestión de Categorías de Movimientos (según mockup)
@@ -113,39 +114,27 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return Scaffold(
+    return TesoreriaScaffold(
+      title: 'Categorías',
+      currentRouteName: '/categorias',
+      appBarColor: Colors.orange,
       backgroundColor: isDark ? const Color(0xFF111813) : const Color(0xFFF8FAF9),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF111813) : Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
-          onPressed: () => Navigator.pop(context),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.upload),
+          tooltip: 'Importar',
+          onPressed: _importarCategorias,
         ),
-        title: const Text(
-          'Categorías',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        IconButton(
+          icon: const Icon(Icons.download),
+          tooltip: 'Exportar',
+          onPressed: _exportarCategorias,
         ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.upload),
-            tooltip: 'Importar',
-            onPressed: _importarCategorias,
-          ),
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: 'Exportar',
-            onPressed: _exportarCategorias,
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFF0F4F2),
-          ),
-        ),
+      ],
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _abrirFormulario(),
+        backgroundColor: Colors.green,
+        child: const Icon(Icons.add),
       ),
       body: ResponsiveContainer(
         maxWidth: 1000,
@@ -217,14 +206,8 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                     ? _buildEmpty()
                     : _buildVistaTabla(),
           ),
-          ],
-        ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _abrirFormulario(),
-        backgroundColor: const Color(0xFF2E7D32),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Nueva Categoría', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -267,123 +250,6 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
             fontSize: 14,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCategoriaItem(Map<String, dynamic> cat, bool isDark) {
-    final activa = (cat['activa'] as int) == 1;
-    final tipo = cat['tipo'] as String;
-    final icono = cat['icono'] as String?;
-    final nombre = cat['nombre'] as String;
-    final codigo = cat['codigo'] as String;
-
-    Color tipoColor;
-    IconData tipoIcon;
-    String tipoText;
-    
-    switch (tipo) {
-      case 'INGRESO':
-        tipoColor = const Color(0xFF4CAF50);
-        tipoIcon = Icons.add_circle;
-        tipoText = 'Ingreso';
-        break;
-      case 'EGRESO':
-        tipoColor = const Color(0xFFF44336);
-        tipoIcon = Icons.remove_circle;
-        tipoText = 'Egreso';
-        break;
-      default:
-        tipoColor = const Color(0xFFFF9800);
-        tipoIcon = Icons.swap_vert;
-        tipoText = 'Ambos';
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A2E1F) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: tipoColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tipoColor.withOpacity(0.3)),
-          ),
-          child: Icon(
-            icono != null ? _getIconData(icono) : tipoIcon,
-            color: tipoColor,
-            size: 28,
-          ),
-        ),
-        title: Text(
-          nombre,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-            color: activa ? null : Colors.grey,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              'Código: $codigo',
-              style: TextStyle(
-                fontSize: 13,
-                color: activa ? const Color(0xFF61896F) : Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: tipoColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: tipoColor.withOpacity(0.3), width: 1),
-              ),
-              child: Text(
-                tipoText,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: tipoColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-        trailing: activa
-            ? IconButton(
-                icon: const Icon(Icons.edit, color: Colors.blue),
-                onPressed: () => _abrirFormulario(categoria: cat),
-              )
-            : IconButton(
-                icon: const Icon(Icons.restore, color: Colors.green),
-                onPressed: () async {
-                  await CategoriaMovimientoService.activarCategoria(cat['id'] as int);
-                  _cargarCategorias();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Categoría reactivada')),
-                    );
-                  }
-                },
-              ),
-        onTap: () => _abrirFormulario(categoria: cat),
       ),
     );
   }

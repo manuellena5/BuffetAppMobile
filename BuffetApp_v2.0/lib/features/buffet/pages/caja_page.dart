@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
-import 'dart:io' show Platform;
 
 import '../../../data/dao/db.dart';
 import '../services/caja_service.dart';
 import '../../shared/services/movimiento_service.dart';
 import '../../shared/services/print_service.dart';
 import '../../shared/services/usb_printer_service.dart';
+import '../../shared/services/export_service.dart';
 import '../../shared/format.dart';
+import 'package:open_filex/open_filex.dart';
 import '../../shared/state/app_settings.dart';
 import 'caja_tickets_page.dart';
 import '../../eventos/pages/detalle_evento_page.dart';
@@ -190,8 +191,7 @@ class _CajaPageState extends State<CajaPage> {
     final porProducto = List<Map<String, dynamic>>.from(
         (resumen['por_producto'] as List?) ?? const []);
 
-    final isWideWindows =
-        Platform.isWindows && MediaQuery.of(context).size.width >= 900;
+    final isWide = MediaQuery.of(context).size.width >= 900;
 
     final detallesEventoSection = _SectionCard(
       title: 'Detalles del Evento',
@@ -618,7 +618,7 @@ class _CajaPageState extends State<CajaPage> {
               syncLastError: (_caja!['sync_last_error'] as String?),
             ),
             const SizedBox(height: 12),
-            if (isWideWindows)
+            if (isWide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -643,7 +643,7 @@ class _CajaPageState extends State<CajaPage> {
               detallesEventoSection,
             ],
             const SizedBox(height: 12),
-            if (isWideWindows)
+            if (isWide)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -655,8 +655,16 @@ class _CajaPageState extends State<CajaPage> {
             else
               movimientosSection,
             const SizedBox(height: 12),
-            ventasPorProductoSection,
-            if (!isWideWindows) ...[
+            if (isWide)
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: ventasPorProductoSection,
+                ),
+              )
+            else
+              ventasPorProductoSection,
+            if (!isWide) ...[
               const SizedBox(height: 12),
               cierreSection,
             ],
@@ -664,7 +672,24 @@ class _CajaPageState extends State<CajaPage> {
         ),
       ),
       bottomNavigationBar: readOnly
-          ? null
+          ? SafeArea(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  border: Border(
+                      top: BorderSide(color: Theme.of(context).dividerColor)),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _exportCajaExcel,
+                    icon: const Icon(Icons.table_chart),
+                    label: const Text('Exportar a Excel'),
+                  ),
+                ),
+              ),
+            )
           : SafeArea(
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -920,6 +945,63 @@ class _CajaPageState extends State<CajaPage> {
       onLayout: (format) => PrintService().buildCajaResumenPdf(cajaId),
       name: 'cierre_caja_$cajaId.pdf',
     );
+  }
+
+  Future<void> _exportCajaExcel() async {
+    final cajaId = _cajaId;
+    if (cajaId == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final savedPath = await ExportService().exportCajaExcel(cajaId);
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('Excel generado')),
+            ],
+          ),
+          content: Text(
+            'El archivo se guardó correctamente.\n\nUbicación: $savedPath',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cerrar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await OpenFilex.open(savedPath);
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Abrir archivo'),
+            ),
+          ],
+        ),
+      );
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'caja_page.export_excel',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'cajaId': cajaId},
+      );
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Error al exportar a Excel. Intente nuevamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _printCajaConDecision() async {

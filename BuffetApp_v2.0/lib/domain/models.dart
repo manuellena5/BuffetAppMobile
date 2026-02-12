@@ -170,3 +170,119 @@ class SaldoInicial {
     );
   }
 }
+
+/// Cuenta de Fondos: representa una cuenta bancaria, billetera digital,
+/// caja de efectivo o inversión. El saldo se calcula dinámicamente.
+class CuentaFondos {
+  final int id;
+  final String nombre;
+  final String tipo; // 'BANCO' | 'BILLETERA' | 'CAJA' | 'INVERSION'
+  final int unidadGestionId;
+  final double saldoInicial;
+  final bool tieneComision;
+  final double? comisionPorcentaje;
+  final bool activa;
+  final String? observaciones;
+  final String? moneda;
+  final String? bancoNombre;
+  final String? cbuAlias;
+  final String? dispositivoId;
+  final bool eliminado;
+  final String syncEstado;
+  final int createdTs;
+  final int? updatedTs;
+
+  CuentaFondos({
+    required this.id,
+    required this.nombre,
+    required this.tipo,
+    required this.unidadGestionId,
+    required this.saldoInicial,
+    required this.tieneComision,
+    this.comisionPorcentaje,
+    required this.activa,
+    this.observaciones,
+    this.moneda,
+    this.bancoNombre,
+    this.cbuAlias,
+    this.dispositivoId,
+    required this.eliminado,
+    required this.syncEstado,
+    required this.createdTs,
+    this.updatedTs,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'nombre': nombre,
+      'tipo': tipo,
+      'unidad_gestion_id': unidadGestionId,
+      'saldo_inicial': saldoInicial,
+      'tiene_comision': tieneComision ? 1 : 0,
+      'comision_porcentaje': comisionPorcentaje,
+      'activa': activa ? 1 : 0,
+      'observaciones': observaciones,
+      'moneda': moneda,
+      'banco_nombre': bancoNombre,
+      'cbu_alias': cbuAlias,
+      'dispositivo_id': dispositivoId,
+      'eliminado': eliminado ? 1 : 0,
+      'sync_estado': syncEstado,
+      'created_ts': createdTs,
+      'updated_ts': updatedTs,
+    };
+  }
+
+  factory CuentaFondos.fromMap(Map<String, dynamic> map) {
+    return CuentaFondos(
+      id: map['id'] as int,
+      nombre: map['nombre'] as String,
+      tipo: map['tipo'] as String,
+      unidadGestionId: map['unidad_gestion_id'] as int,
+      saldoInicial: (map['saldo_inicial'] as num?)?.toDouble() ?? 0.0,
+      tieneComision: (map['tiene_comision'] as int?) == 1,
+      comisionPorcentaje: (map['comision_porcentaje'] as num?)?.toDouble(),
+      activa: (map['activa'] as int?) == 1,
+      observaciones: map['observaciones'] as String?,
+      moneda: map['moneda'] as String?,
+      bancoNombre: map['banco_nombre'] as String?,
+      cbuAlias: map['cbu_alias'] as String?,
+      dispositivoId: map['dispositivo_id'] as String?,
+      eliminado: (map['eliminado'] as int?) == 1,
+      syncEstado: map['sync_estado'] as String? ?? 'PENDIENTE',
+      createdTs: map['created_ts'] as int,
+      updatedTs: map['updated_ts'] as int?,
+    );
+  }
+
+  /// Calcula el saldo actual de la cuenta en base a:
+  /// saldo_inicial + ingresos_confirmados - egresos_confirmados
+  /// 
+  /// IMPORTANTE: Las transferencias NO afectan el saldo total del sistema,
+  /// solo mueven dinero entre cuentas.
+  Future<double> calcularSaldoActual(dynamic db) async {
+    final result = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END), 0) as ingresos,
+        COALESCE(SUM(CASE WHEN tipo='EGRESO' THEN monto ELSE 0 END), 0) as egresos
+      FROM evento_movimiento
+      WHERE cuenta_id = ? 
+        AND estado = 'CONFIRMADO'
+        AND eliminado = 0
+    ''', [id]);
+    
+    final ingresos = (result[0]['ingresos'] as num?)?.toDouble() ?? 0.0;
+    final egresos = (result[0]['egresos'] as num?)?.toDouble() ?? 0.0;
+    
+    return saldoInicial + ingresos - egresos;
+  }
+
+  /// Calcula el monto de comisión bancaria para un movimiento
+  double? calcularComision(double monto) {
+    if (!tieneComision || comisionPorcentaje == null || comisionPorcentaje! <= 0) {
+      return null;
+    }
+    return monto * (comisionPorcentaje! / 100);
+  }
+}

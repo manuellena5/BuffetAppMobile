@@ -9,16 +9,18 @@ import 'package:provider/provider.dart';
 import '../../../data/dao/db.dart';
 import '../../buffet/services/caja_service.dart';
 import '../state/app_settings.dart';
+import '../widgets/responsive_container.dart';
 import '../../home/home_page.dart';
 import '../../buffet/pages/buffet_home_page.dart';
 
 class PuntoVentaSetupPage extends StatefulWidget {
   final bool initialFlow;
+
   /// Callback opcional para cuando se completa la configuración
   /// Si se proporciona, se llama en lugar de navegar a HomePage
   final VoidCallback? onComplete;
   const PuntoVentaSetupPage({
-    super.key, 
+    super.key,
     this.initialFlow = false,
     this.onComplete,
   });
@@ -124,7 +126,8 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
       await settings?.ensureLoaded();
       pv = await _svc.listarPuntosVenta();
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'pv_setup.load', error: e, stackTrace: st);
+      await AppDatabase.logLocalError(
+          scope: 'pv_setup.load', error: e, stackTrace: st);
     }
 
     final puntos = pv
@@ -140,7 +143,8 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
       selected = puntos.isNotEmpty ? puntos.first['codigo'] : null;
     } else {
       final exists = puntos.any((p) => p['codigo'] == selected);
-      if (!exists) selected = puntos.isNotEmpty ? puntos.first['codigo'] : selected;
+      if (!exists)
+        selected = puntos.isNotEmpty ? puntos.first['codigo'] : selected;
     }
 
     String alias = (configuredAlias ?? '').trim();
@@ -156,11 +160,10 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
       final sel = selected;
       final aliasCaja = sel == null
           ? ''
-          : (puntos
-                  .firstWhere(
-                    (p) => p['codigo'] == sel,
-                    orElse: () => const {'alias_caja': ''},
-                  )['alias_caja'] ??
+          : (puntos.firstWhere(
+                (p) => p['codigo'] == sel,
+                orElse: () => const {'alias_caja': ''},
+              )['alias_caja'] ??
               '');
       _aliasCajaCtrl.text = aliasCaja.trim();
       _loading = false;
@@ -182,14 +185,18 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
         final brand = (a.brand).trim();
         final model = (a.model).trim();
         final short = [brand, model].where((s) => s.isNotEmpty).join(' ');
-        return short.isEmpty ? 'Android • app ${pkg.version}' : '$short • app ${pkg.version}';
+        return short.isEmpty
+            ? 'Android • app ${pkg.version}'
+            : '$short • app ${pkg.version}';
       }
       if (Platform.isIOS) {
         final i = await info.iosInfo;
         final name = (i.name).trim();
         final model = (i.utsname.machine).trim();
         final short = [name, model].where((s) => s.isNotEmpty).join(' ');
-        return short.isEmpty ? 'iOS • app ${pkg.version}' : '$short • app ${pkg.version}';
+        return short.isEmpty
+            ? 'iOS • app ${pkg.version}'
+            : '$short • app ${pkg.version}';
       }
       return '${Platform.operatingSystem} • app ${pkg.version}';
     } catch (_) {
@@ -240,18 +247,23 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
           if (!mounted) return;
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => caja == null ? const HomePage() : const BuffetHomePage()),
+            MaterialPageRoute(
+                builder: (_) =>
+                    caja == null ? const HomePage() : const BuffetHomePage()),
           );
         } catch (e, st) {
-          await AppDatabase.logLocalError(scope: 'pv_setup.after_save', error: e, stackTrace: st);
+          await AppDatabase.logLocalError(
+              scope: 'pv_setup.after_save', error: e, stackTrace: st);
           if (!mounted) return;
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
+          Navigator.pushReplacement(
+              context, MaterialPageRoute(builder: (_) => const HomePage()));
         }
       } else {
         Navigator.pop(context, true);
       }
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'pv_setup.save', error: e, stackTrace: st);
+      await AppDatabase.logLocalError(
+          scope: 'pv_setup.save', error: e, stackTrace: st);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo guardar la configuración: $e')),
@@ -261,7 +273,8 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
     }
   }
 
-  Future<bool> _confirmarCambioCodigoCaja({required String from, required String to}) async {
+  Future<bool> _confirmarCambioCodigoCaja(
+      {required String from, required String to}) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -291,141 +304,150 @@ class _PuntoVentaSetupPageState extends State<PuntoVentaSetupPage> {
     final settings = context.watch<AppSettings>();
 
     return PopScope(
-      canPop: !_dirty,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        if (!_dirty) {
-          Navigator.pop(context);
-          return;
-        }
-        final shouldPop = await _confirmarSalirConCambios();
-        if (shouldPop && mounted) {
-          Navigator.pop(context);
-        }
-      },
-      child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Configurar Punto de venta'),
-        actions: [
-          TextButton(
-            onPressed: (_loading || _saving) ? null : _guardar,
-            child: const Text('GUARDAR'),
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: _puntoVentaCodigo,
-                      decoration: const InputDecoration(
-                        labelText: 'Código de caja (Punto de venta)',
-                        helperText:
-                            'Importante: no repitas este código en otros dispositivos (evita mezclar cajas).',
-                        helperMaxLines: 3,
-                      ),
-                      items: _puntos
-                          .map(
-                            (p) => DropdownMenuItem<String>(
-                              value: p['codigo'],
-                              child: Text('${p['codigo']} — ${p['nombre']}'),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) async {
-                        final vv = v;
-                        if (vv == null) return;
-
-                        final current = (_puntoVentaCodigo ?? '').trim();
-                        final next = vv.trim();
-                        if (current.isNotEmpty && next == current) return;
-
-                        if (settings.isPuntoVentaConfigured && current.isNotEmpty) {
-                          final ok = await _confirmarCambioCodigoCaja(from: current, to: next);
-                          if (!ok) return;
-                        }
-
-                        final aliasCaja = (_puntos
-                                    .firstWhere(
-                                      (p) => p['codigo'] == vv,
-                                      orElse: () => const {'alias_caja': ''},
-                                    )['alias_caja'] ??
-                                '')
-                            .toString();
-
-                        if (!mounted) return;
-                        setState(() {
-                          _puntoVentaCodigo = vv;
-
-                        _recomputeDirty();
-                          _aliasCajaCtrl.text = aliasCaja.trim();
-                        });
-                      },
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Seleccioná un punto de venta';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _aliasCajaCtrl,
-                      maxLength: 100,
-                      decoration: const InputDecoration(
-                        labelText: 'Alias de caja',
-                        hintText: 'Ej: Barra principal',
-                      ),
-                      textInputAction: TextInputAction.next,
-                      validator: (v) {
-                        final s = (v ?? '').trim();
-                        if (s.isEmpty) return 'Ingresá un alias de caja';
-                        if (s.length > 100) return 'Máximo 100 caracteres';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _aliasCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'AliasDispositivo',
-                        hintText: 'Ej: Lenovo Caja1',
-                      ),
-                      textInputAction: TextInputAction.done,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Ingresá un alias para identificar el dispositivo';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    if (settings.isPuntoVentaConfigured)
-                      Text(
-                        'Configuración actual: ${settings.puntoVentaCodigo} • ${settings.aliasDispositivo}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: (_loading || _saving) ? null : _guardar,
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.save),
-                        label: Text(_saving ? 'Guardando…' : 'Guardar'),
-                      ),
-                    ),
-                  ],
-                ),
+        canPop: !_dirty,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          if (!_dirty) {
+            Navigator.pop(context);
+            return;
+          }
+          final shouldPop = await _confirmarSalirConCambios();
+          if (shouldPop && mounted) {
+            Navigator.pop(context);
+          }
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Configurar Punto de venta'),
+            actions: [
+              TextButton(
+                onPressed: (_loading || _saving) ? null : _guardar,
+                child: const Text('GUARDAR'),
               ),
-            ),
-    ));
+            ],
+          ),
+          body: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : LandscapeCenteredBody(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: _puntoVentaCodigo,
+                            decoration: const InputDecoration(
+                              labelText: 'Código de caja (Punto de venta)',
+                              helperText:
+                                  'Importante: no repitas este código en otros dispositivos (evita mezclar cajas).',
+                              helperMaxLines: 3,
+                            ),
+                            items: _puntos
+                                .map(
+                                  (p) => DropdownMenuItem<String>(
+                                    value: p['codigo'],
+                                    child:
+                                        Text('${p['codigo']} — ${p['nombre']}'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) async {
+                              final vv = v;
+                              if (vv == null) return;
+
+                              final current = (_puntoVentaCodigo ?? '').trim();
+                              final next = vv.trim();
+                              if (current.isNotEmpty && next == current) return;
+
+                              if (settings.isPuntoVentaConfigured &&
+                                  current.isNotEmpty) {
+                                final ok = await _confirmarCambioCodigoCaja(
+                                    from: current, to: next);
+                                if (!ok) return;
+                              }
+
+                              final aliasCaja = (_puntos.firstWhere(
+                                        (p) => p['codigo'] == vv,
+                                        orElse: () => const {'alias_caja': ''},
+                                      )['alias_caja'] ??
+                                      '')
+                                  .toString();
+
+                              if (!mounted) return;
+                              setState(() {
+                                _puntoVentaCodigo = vv;
+
+                                _recomputeDirty();
+                                _aliasCajaCtrl.text = aliasCaja.trim();
+                              });
+                            },
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty)
+                                return 'Seleccioná un punto de venta';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _aliasCajaCtrl,
+                            maxLength: 100,
+                            decoration: const InputDecoration(
+                              labelText: 'Alias de caja',
+                              hintText: 'Ej: Barra principal',
+                            ),
+                            textInputAction: TextInputAction.next,
+                            validator: (v) {
+                              final s = (v ?? '').trim();
+                              if (s.isEmpty) return 'Ingresá un alias de caja';
+                              if (s.length > 100)
+                                return 'Máximo 100 caracteres';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _aliasCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'AliasDispositivo',
+                              hintText: 'Ej: Lenovo Caja1',
+                            ),
+                            textInputAction: TextInputAction.done,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty)
+                                return 'Ingresá un alias para identificar el dispositivo';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          if (settings.isPuntoVentaConfigured)
+                            Text(
+                              'Configuración actual: ${settings.puntoVentaCodigo} • ${settings.aliasDispositivo}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          const Spacer(),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  (_loading || _saving) ? null : _guardar,
+                              icon: _saving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.save),
+                              label: Text(_saving ? 'Guardando…' : 'Guardar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+        ));
   }
 }

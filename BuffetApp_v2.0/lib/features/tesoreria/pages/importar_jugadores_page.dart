@@ -6,6 +6,15 @@ import 'package:intl/intl.dart';
 import '../../shared/services/plantel_import_export_service.dart';
 import '../../../data/dao/db.dart';
 
+/// Posiciones válidas para jugadores (mantener sincronizado con DB y servicio)
+const _posicionesValidas = ['ARQUERO', 'DEFENSOR', 'MEDIOCAMPISTA', 'DELANTERO', 'STAFF_CT'];
+
+/// Roles válidos (mantener sincronizado con DB y servicio)
+const _rolesValidos = ['JUGADOR', 'DT', 'AYUDANTE', 'PF', 'OTRO'];
+
+/// Tipos de contratación válidos (mantener sincronizado con DB y servicio)
+const _tiposContratacionValidos = ['LOCAL', 'REFUERZO', 'OTRO'];
+
 /// Pantalla para importar jugadores desde un archivo Excel.
 /// Muestra instrucciones, permite seleccionar archivo, previsualizar datos
 /// y confirmar importación con validaciones.
@@ -25,6 +34,11 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   List<String> _erroresLectura = [];
   bool _importacionCompletada = false;
   Map<String, dynamic>? _resultadoImport;
+  
+  // Jugadores con datos inválidos pendientes de corrección
+  List<Map<String, dynamic>> _jugadoresConErrorPosicion = [];
+  List<Map<String, dynamic>> _jugadoresConErrorRol = [];
+  List<Map<String, dynamic>> _jugadoresConErrorTipoContratacion = [];
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +68,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                     _buildSelectorArchivo(),
                     const SizedBox(height: 24),
                     if (_erroresLectura.isNotEmpty) _buildErrores(),
+                    if (_jugadoresConErrorRol.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildAlertaRolesInvalidos(),
+                    ],
+                    if (_jugadoresConErrorTipoContratacion.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildAlertaTiposContratacionInvalidos(),
+                    ],
+                    if (_jugadoresConErrorPosicion.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildAlertaPosicionesInvalidas(),
+                    ],
                     if (_jugadoresPreview.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       _buildPreview(),
@@ -97,8 +123,10 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             _buildInstruccionItem('3', 'Columnas REQUERIDAS: Nombre, Rol'),
             _buildInstruccionItem('4', 'Roles válidos: JUGADOR, DT, AYUDANTE, PF, OTRO'),
             _buildInstruccionItem('5', 'Tipo Contratación: LOCAL, REFUERZO, OTRO (solo para jugadores)'),
-            _buildInstruccionItem('6', 'Fecha Nacimiento formato: DD/MM/YYYY (ej: 15/03/1995)'),
-            _buildInstruccionItem('7', 'Nombres duplicados serán ignorados'),
+            _buildInstruccionItem('6', 'Posiciones: ARQUERO, DEFENSOR, MEDIOCAMPISTA, DELANTERO, STAFF_CT (solo jugadores)'),
+            _buildInstruccionItem('7', 'Fecha Nacimiento formato: DD/MM/YYYY (ej: 15/03/1995)'),
+            _buildInstruccionItem('8', 'Nombres duplicados serán ignorados'),
+            _buildInstruccionItem('9', 'Consulte la hoja "_Valores" del template para ver todos los valores permitidos'),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -298,29 +326,86 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
               ],
             ),
             const SizedBox(height: 16),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(Colors.grey[200]),
-                columns: const [
-                  DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('Contacto', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('DNI', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('F. Nac.', style: TextStyle(fontWeight: FontWeight.bold))),
-                ],
+            // Tabla con scroll horizontal explícito
+            Container(
+              constraints: BoxConstraints(
+                maxHeight: 400,
+                maxWidth: MediaQuery.of(context).size.width - 32,
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(Colors.grey[200]),
+                    columns: const [
+                      DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Tipo Contrat.', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Posición', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Contacto', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('DNI', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('F. Nac.', style: TextStyle(fontWeight: FontWeight.bold))),
+                    ],
                 rows: _jugadoresPreview.map((jugador) {
+                  final rolInvalido = jugador['rol_invalido'] == true;
+                  final tipoContratacionInvalido = jugador['tipo_contratacion_invalido'] == true;
+                  final posicionInvalida = jugador['posicion_invalida'] == true;
+                  final tieneErrores = rolInvalido || tipoContratacionInvalido || posicionInvalida;
+                  
                   return DataRow(
+                    color: tieneErrores 
+                        ? WidgetStateProperty.all(Colors.orange[50])
+                        : null,
                     cells: [
                       DataCell(Text(jugador['nombre']?.toString() ?? '')),
                       DataCell(
-                        Chip(
-                          label: Text(
-                            jugador['rol']?.toString() ?? '',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          backgroundColor: _getColorRol(jugador['rol']?.toString()),
-                        ),
+                        rolInvalido
+                            ? Row(
+                                children: [
+                                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    jugador['rol']?.toString() ?? '-',
+                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              )
+                            : Chip(
+                                label: Text(
+                                  jugador['rol']?.toString() ?? '',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                backgroundColor: _getColorRol(jugador['rol']?.toString()),
+                              ),
+                      ),
+                      DataCell(
+                        tipoContratacionInvalido
+                            ? Row(
+                                children: [
+                                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    jugador['tipo_contratacion']?.toString() ?? '-',
+                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              )
+                            : Text(jugador['tipo_contratacion']?.toString() ?? '-'),
+                      ),
+                      DataCell(
+                        posicionInvalida
+                            ? Row(
+                                children: [
+                                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    jugador['posicion']?.toString() ?? '-',
+                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              )
+                            : Text(jugador['posicion']?.toString() ?? '-'),
                       ),
                       DataCell(Text(jugador['contacto']?.toString() ?? '-')),
                       DataCell(Text(jugador['dni']?.toString() ?? '-')),
@@ -328,6 +413,245 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                     ],
                   );
                 }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlertaPosicionesInvalidas() {
+    return Card(
+      color: Colors.orange[50],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange[800]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Posiciones inválidas detectadas (${_jugadoresConErrorPosicion.length})',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[900],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Text(
+              'Los siguientes jugadores tienen posiciones que no coinciden con los valores permitidos:',
+              style: TextStyle(color: Colors.orange[900]),
+            ),
+            const SizedBox(height: 12),
+            ..._jugadoresConErrorPosicion.map((jugador) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '• ${jugador['nombre']} - Posición: "${jugador['posicion']}"',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _corregirPosicion(jugador),
+                    icon: const Icon(Icons.edit, size: 18),
+                    label: const Text('Corregir'),
+                  ),
+                ],
+              ),
+            )),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Posiciones válidas:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[900],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _posicionesValidas.join(' • '),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlertaRolesInvalidos() {
+    return Card(
+      color: Colors.red[50],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red[800]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Roles inválidos detectados (${_jugadoresConErrorRol.length})',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red[900],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Text(
+              'Los siguientes registros tienen roles que no coinciden con los valores permitidos:',
+              style: TextStyle(color: Colors.red[900]),
+            ),
+            const SizedBox(height: 12),
+            ..._jugadoresConErrorRol.map((jugador) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '• ${jugador['nombre']} - Rol: "${jugador['rol']}"',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _corregirRol(jugador),
+                    icon: const Icon(Icons.edit, size: 18),
+                    label: const Text('Corregir'),
+                  ),
+                ],
+              ),
+            )),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Roles válidos:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red[900],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _rolesValidos.join(' • '),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlertaTiposContratacionInvalidos() {
+    return Card(
+      color: Colors.amber[50],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning, color: Colors.amber[800]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Tipos de contratación inválidos (${_jugadoresConErrorTipoContratacion.length})',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber[900],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Text(
+              'Los siguientes jugadores tienen tipos de contratación que no coinciden con los valores permitidos:',
+              style: TextStyle(color: Colors.amber[900]),
+            ),
+            const SizedBox(height: 12),
+            ..._jugadoresConErrorTipoContratacion.map((jugador) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '• ${jugador['nombre']} - Tipo: "${jugador['tipo_contratacion']}"',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _corregirTipoContratacion(jugador),
+                    icon: const Icon(Icons.edit, size: 18),
+                    label: const Text('Corregir'),
+                  ),
+                ],
+              ),
+            )),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tipos de contratación válidos:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber[900],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _tiposContratacionValidos.join(' • '),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
               ),
             ),
           ],
@@ -337,31 +661,71 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   }
 
   Widget _buildBotonesConfirmacion() {
-    return Row(
+    final tienePendientes = _jugadoresConErrorPosicion.isNotEmpty ||
+                            _jugadoresConErrorRol.isNotEmpty ||
+                            _jugadoresConErrorTipoContratacion.isNotEmpty;
+    
+    final totalErrores = _jugadoresConErrorPosicion.length +
+                         _jugadoresConErrorRol.length +
+                         _jugadoresConErrorTipoContratacion.length;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _limpiarSeleccion,
-            icon: const Icon(Icons.cancel),
-            label: const Text('Cancelar'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
+        if (tienePendientes)
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              border: Border.all(color: Colors.orange),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange[800]),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Debe corregir los $totalErrores registros con datos inválidos antes de importar',
+                    style: TextStyle(
+                      color: Colors.orange[900],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
-          child: ElevatedButton.icon(
-            onPressed: _jugadoresPreview.isEmpty ? null : _confirmarImportacion,
-            icon: const Icon(Icons.check_circle),
-            label: Text('Importar ${_jugadoresPreview.length} jugadores'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _limpiarSeleccion,
+                icon: const Icon(Icons.cancel),
+                label: const Text('Cancelar'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton.icon(
+                onPressed: (_jugadoresPreview.isEmpty || tienePendientes) ? null : _confirmarImportacion,
+                icon: const Icon(Icons.check_circle),
+                label: Text('Importar ${_jugadoresPreview.length} jugadores'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey[300],
+                  disabledForegroundColor: Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -654,13 +1018,43 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
 
       final datos = await _importSvc.leerArchivoExcel(filePath);
 
+      // Separar jugadores válidos de los que tienen errores
+      final jugadores = datos['jugadores'] as List<Map<String, dynamic>>;
+      final jugadoresValidos = <Map<String, dynamic>>[];
+      final jugadoresConErrorPosicion = <Map<String, dynamic>>[];
+      final jugadoresConErrorRol = <Map<String, dynamic>>[];
+      final jugadoresConErrorTipoContratacion = <Map<String, dynamic>>[];
+      
+      for (final jugador in jugadores) {
+        final tieneErrorRol = jugador['rol_invalido'] == true;
+        final tieneErrorTipoContratacion = jugador['tipo_contratacion_invalido'] == true;
+        final tieneErrorPosicion = jugador['posicion_invalida'] == true;
+        
+        if (tieneErrorRol) {
+          jugadoresConErrorRol.add(jugador);
+        } else if (tieneErrorTipoContratacion) {
+          jugadoresConErrorTipoContratacion.add(jugador);
+        } else if (tieneErrorPosicion) {
+          jugadoresConErrorPosicion.add(jugador);
+        } else {
+          jugadoresValidos.add(jugador);
+        }
+      }
+
       setState(() {
-        _jugadoresPreview = datos['jugadores'] as List<Map<String, dynamic>>;
+        _jugadoresPreview = jugadoresValidos;
+        _jugadoresConErrorPosicion = jugadoresConErrorPosicion;
+        _jugadoresConErrorRol = jugadoresConErrorRol;
+        _jugadoresConErrorTipoContratacion = jugadoresConErrorTipoContratacion;
         _erroresLectura = datos['errores'] as List<String>;
         _cargando = false;
       });
 
-      if (_jugadoresPreview.isEmpty && _erroresLectura.isEmpty) {
+      if (_jugadoresPreview.isEmpty && 
+          _jugadoresConErrorPosicion.isEmpty && 
+          _jugadoresConErrorRol.isEmpty &&
+          _jugadoresConErrorTipoContratacion.isEmpty &&
+          _erroresLectura.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -690,10 +1084,368 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
     }
   }
 
+  Future<void> _corregirPosicion(Map<String, dynamic> jugador) async {
+    String? posicionSeleccionada;
+    
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Corregir Posición'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Jugador: ${jugador['nombre']}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.orange),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Posición inválida: "${jugador['posicion']}"',
+                      style: TextStyle(color: Colors.orange[900]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Seleccione la posición correcta:'),
+            const SizedBox(height: 12),
+            StatefulBuilder(
+              builder: (context, setDialogState) {
+                return DropdownButtonFormField<String>(
+                  value: posicionSeleccionada,
+                  decoration: const InputDecoration(
+                    labelText: 'Posición *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.sports_soccer),
+                  ),
+                  items: _posicionesValidas.map((pos) {
+                    return DropdownMenuItem(
+                      value: pos,
+                      child: Text(_nombrePosicion(pos)),
+                    );
+                  }).toList(),
+                  onChanged: (valor) {
+                    setDialogState(() {
+                      posicionSeleccionada = valor;
+                    });
+                  },
+                  validator: (v) => v == null ? 'Debe seleccionar una posición' : null,
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (posicionSeleccionada != null) {
+                Navigator.pop(context, posicionSeleccionada);
+              }
+            },
+            child: const Text('Corregir'),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado != null) {
+      setState(() {
+        // Actualizar posición del jugador
+        jugador['posicion'] = resultado;
+        jugador['posicion_invalida'] = false;
+        
+        // Mover de la lista de errores a la lista de válidos
+        _jugadoresConErrorPosicion.remove(jugador);
+        _jugadoresPreview.add(jugador);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Posición corregida para ${jugador['nombre']}: $resultado'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  String _nombrePosicion(String posicion) {
+    switch (posicion) {
+      case 'ARQUERO':
+        return 'Arquero';
+      case 'DEFENSOR':
+        return 'Defensor';
+      case 'MEDIOCAMPISTA':
+        return 'Mediocampista';
+      case 'DELANTERO':
+        return 'Delantero';
+      case 'STAFF_CT':
+        return 'Staff Cuerpo Técnico';
+      default:
+        return posicion;
+    }
+  }
+
+  Future<void> _corregirRol(Map<String, dynamic> jugador) async {
+    String? rolSeleccionado;
+    
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Corregir Rol'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Entidad: ${jugador['nombre']}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.red),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, size: 16, color: Colors.red[800]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Rol inválido: "${jugador['rol']}"',
+                      style: TextStyle(color: Colors.red[900]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Seleccione el rol correcto:'),
+            const SizedBox(height: 12),
+            StatefulBuilder(
+              builder: (context, setDialogState) {
+                return DropdownButtonFormField<String>(
+                  value: rolSeleccionado,
+                  decoration: const InputDecoration(
+                    labelText: 'Rol *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  items: _rolesValidos.map((rol) {
+                    return DropdownMenuItem(
+                      value: rol,
+                      child: Text(_nombreRol(rol)),
+                    );
+                  }).toList(),
+                  onChanged: (valor) {
+                    setDialogState(() {
+                      rolSeleccionado = valor;
+                    });
+                  },
+                  validator: (v) => v == null ? 'Debe seleccionar un rol' : null,
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (rolSeleccionado != null) {
+                Navigator.pop(context, rolSeleccionado);
+              }
+            },
+            child: const Text('Corregir'),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado != null) {
+      setState(() {
+        jugador['rol'] = resultado;
+        jugador['rol_invalido'] = false;
+        
+        _jugadoresConErrorRol.remove(jugador);
+        _jugadoresPreview.add(jugador);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Rol corregido para ${jugador['nombre']}: $resultado'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _corregirTipoContratacion(Map<String, dynamic> jugador) async {
+    String? tipoSeleccionado;
+    
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Corregir Tipo de Contratación'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Jugador: ${jugador['nombre']}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber[50],
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.amber),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning, size: 16, color: Colors.amber[800]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Tipo de contratación inválido: "${jugador['tipo_contratacion']}"',
+                      style: TextStyle(color: Colors.amber[900]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Seleccione el tipo de contratación correcto:'),
+            const SizedBox(height: 12),
+            StatefulBuilder(
+              builder: (context, setDialogState) {
+                return DropdownButtonFormField<String>(
+                  value: tipoSeleccionado,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de Contratación *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.assignment),
+                  ),
+                  items: _tiposContratacionValidos.map((tipo) {
+                    return DropdownMenuItem(
+                      value: tipo,
+                      child: Text(_nombreTipoContratacion(tipo)),
+                    );
+                  }).toList(),
+                  onChanged: (valor) {
+                    setDialogState(() {
+                      tipoSeleccionado = valor;
+                    });
+                  },
+                  validator: (v) => v == null ? 'Debe seleccionar un tipo' : null,
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (tipoSeleccionado != null) {
+                Navigator.pop(context, tipoSeleccionado);
+              }
+            },
+            child: const Text('Corregir'),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado != null) {
+      setState(() {
+        jugador['tipo_contratacion'] = resultado;
+        jugador['tipo_contratacion_invalido'] = false;
+        
+        _jugadoresConErrorTipoContratacion.remove(jugador);
+        _jugadoresPreview.add(jugador);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Tipo de contratación corregido para ${jugador['nombre']}: $resultado'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  String _nombreRol(String rol) {
+    switch (rol) {
+      case 'JUGADOR':
+        return 'Jugador';
+      case 'DT':
+        return 'Director Técnico';
+      case 'AYUDANTE':
+        return 'Ayudante de Campo';
+      case 'PF':
+        return 'Preparador Físico';
+      case 'OTRO':
+        return 'Otro';
+      default:
+        return rol;
+    }
+  }
+
+  String _nombreTipoContratacion(String tipo) {
+    switch (tipo) {
+      case 'LOCAL':
+        return 'Local';
+      case 'REFUERZO':
+        return 'Refuerzo';
+      case 'OTRO':
+        return 'Otro';
+      default:
+        return tipo;
+    }
+  }
+
   void _limpiarSeleccion() {
     setState(() {
       _archivoSeleccionado = null;
       _jugadoresPreview = [];
+      _jugadoresConErrorPosicion = [];
+      _jugadoresConErrorRol = [];
+      _jugadoresConErrorTipoContratacion = [];
       _erroresLectura = [];
       _importacionCompletada = false;
       _resultadoImport = null;
@@ -701,13 +1453,67 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   }
 
   Future<void> _confirmarImportacion() async {
+    // Detectar duplicados antes de confirmar
+    final db = await AppDatabase.instance();
+    final jugadoresExistentes = await db.query('entidades_plantel');
+    final nombresExistentes = jugadoresExistentes
+        .map((e) => (e['nombre'] as String?)?.toLowerCase().trim())
+        .where((n) => n != null)
+        .toSet();
+    
+    final duplicados = <String>[];
+    for (final jugador in _jugadoresPreview) {
+      final nombre = (jugador['nombre'] as String?)?.toLowerCase().trim();
+      if (nombre != null && nombresExistentes.contains(nombre)) {
+        duplicados.add(jugador['nombre'] as String);
+      }
+    }
+
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirmar Importación'),
-        content: Text(
-          '¿Desea importar ${_jugadoresPreview.length} jugadores?\n\n'
-          'Los nombres duplicados serán ignorados.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('¿Desea importar ${_jugadoresPreview.length} jugadores?'),
+            const SizedBox(height: 12),
+            if (duplicados.isNotEmpty) ...[
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.orange[800], size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Jugadores duplicados (serán ignorados):',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: duplicados.map((nombre) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.person, size: 16),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text(nombre)),
+                        ],
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ),
+            ] else
+              const Text('No se detectaron duplicados.'),
+          ],
         ),
         actions: [
           TextButton(

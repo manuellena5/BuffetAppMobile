@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/responsive_container.dart';
+import '../widgets/tesoreria_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -11,8 +12,9 @@ import '../services/print_service.dart';
 import '../services/usb_printer_service.dart';
 import '../state/app_settings.dart';
 import '../state/app_mode.dart';
+import '../state/drawer_state.dart';
 import 'punto_venta_setup_page.dart';
-import '../../home/mode_selector_page.dart';
+import '../../home/main_menu_page.dart';
 
 enum ProductosLayout { grid, list }
 
@@ -210,8 +212,13 @@ class _SettingsPageState extends State<SettingsPage> {
     _initialTheme = _theme;
     _initialWinPrinterName = _winPrinterName;
     _initialUiScale = _uiScale;
-    _dirty = false;
-    nav.pop(true);
+    setState(() => _dirty = false);
+    
+    // Solo hacer pop si drawer NO está fijo (si está fijo, solo actualizamos dirty state)
+    final drawerState = context.read<DrawerState?>();
+    if (drawerState == null || !drawerState.isFixed) {
+      nav.pop(true);
+    }
   }
 
   String _themeLabel(AppThemeMode mode) {
@@ -292,11 +299,16 @@ class _SettingsPageState extends State<SettingsPage> {
         }
         await _showUnsavedChangesModal();
       },
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Configuraciones'), actions: [
+      child: TesoreriaScaffold(
+        title: 'Configuraciones',
+        currentRouteName: '/settings',
+        appBarColor: Colors.grey,
+        actions: [
           TextButton(
-              onPressed: _loading ? null : _save, child: const Text('GUARDAR')),
-        ]),
+            onPressed: _loading ? null : _save,
+            child: const Text('GUARDAR'),
+          ),
+        ],
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : ResponsiveContainer(
@@ -319,6 +331,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       trailing: const Icon(Icons.swap_horiz),
                       onTap: () async {
+                        final nav = Navigator.of(context);
+                        
                         // Confirmar antes de cambiar
                         final confirm = await showDialog<bool>(
                           context: context,
@@ -341,11 +355,11 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         );
                         
-                        if (confirm == true && mounted) {
-                          // Ir al selector de modo
-                          Navigator.of(context).pushAndRemoveUntil(
+                        if (confirm == true) {
+                          // Ir al menú principal
+                          nav.pushAndRemoveUntil(
                             MaterialPageRoute(
-                              builder: (_) => const ModeSelectorPage(),
+                              builder: (_) => const MainMenuPage(),
                             ),
                             (route) => false,
                           );
@@ -442,30 +456,28 @@ class _SettingsPageState extends State<SettingsPage> {
                       }),
                     ),
                   ),
-                  if (Platform.isWindows) ...[
-                    const SizedBox(height: 10),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          final settings = context.read<AppSettings?>();
-                          await settings?.ensureLoaded();
-                          if (!mounted) return;
-                          await Navigator.of(context).push<bool>(
-                            MaterialPageRoute(
-                              builder: (_) => _VentasGridPreviewPage(
-                                initialMinTileWidth:
-                                    settings?.winSalesGridMinTileWidth,
-                              ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final settings = context.read<AppSettings?>();
+                        await settings?.ensureLoaded();
+                        if (!mounted) return;
+                        await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) => _VentasGridPreviewPage(
+                              initialMinTileWidth:
+                                  settings?.winSalesGridMinTileWidth,
                             ),
-                          );
-                        },
-                        icon: const Icon(Icons.grid_view),
-                        label: const Text(
-                            'Previsualizar pantalla de Ventas (tarjetas)'),
-                      ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.grid_view),
+                      label: const Text(
+                          'Previsualizar pantalla de Ventas (tarjetas)'),
                     ),
-                  ],
+                  ),
                   const Divider(),
                   ListTile(
                     title: const Text('Modo oscuro'),
@@ -809,7 +821,7 @@ class _VentasGridPreviewPageState extends State<_VentasGridPreviewPage> {
                 Row(
                   children: [
                     const Expanded(
-                      child: Text('Tamaño de tarjetas (Windows)'),
+                      child: Text('Tamaño de tarjetas'),
                     ),
                     Text(label,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -843,7 +855,7 @@ class _VentasGridPreviewPageState extends State<_VentasGridPreviewPage> {
                   ],
                 ),
                 Text(
-                  'Tip: esto sólo cambia el tamaño de la cuadrícula de productos (no el zoom general).',
+                  'Tip: cambia el tamaño de la cuadrícula de productos (no el zoom general).',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

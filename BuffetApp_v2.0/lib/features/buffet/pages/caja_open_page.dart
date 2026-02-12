@@ -6,6 +6,7 @@ import 'buffet_home_page.dart';
 import 'products_page.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
+import '../../shared/widgets/responsive_container.dart';
 import '../../shared/pages/punto_venta_setup_page.dart';
 import '../../tesoreria/pages/unidad_gestion_selector_page.dart';
 
@@ -21,12 +22,12 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
   final _fondo = TextEditingController(text: '');
   final _desc = TextEditingController();
   final _obs = TextEditingController();
-  
+
   // Unidad de Gestión seleccionada para esta caja
   int? _unidadGestionId;
   String? _unidadGestionNombre;
   bool _needsUnidadGestionSetup = false;
-  
+
   String? _puntoVentaCodigo; // Caj01/Caj02/Caj03
   List<Map<String, String>> _puntos = const []; // {codigo, nombre, alias_caja}
   final _svc = CajaService();
@@ -49,11 +50,11 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
 
   Future<void> _checkUnidadGestionAndLoad() async {
     setState(() => _loading = true);
-    
+
     try {
       final settings = context.read<AppSettings>();
       await settings.ensureLoaded();
-      
+
       // Siempre mostrar selector de Unidad de Gestión al abrir caja nueva
       // (cada caja debe tener su propia selección)
       setState(() {
@@ -112,25 +113,24 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         builder: (_) => const UnidadGestionSelectorPage(isInitialFlow: false),
       ),
     );
-    
+
     if (result == true && mounted) {
       // Cargar los datos de la unidad seleccionada
       final settings = context.read<AppSettings>();
       await settings.ensureLoaded();
-      
+
       if (settings.unidadGestionActivaId != null) {
         final db = await AppDatabase.instance();
         final rows = await db.rawQuery(
           'SELECT nombre FROM unidades_gestion WHERE id = ?',
           [settings.unidadGestionActivaId],
         );
-        
+
         if (mounted) {
           setState(() {
             _unidadGestionId = settings.unidadGestionActivaId;
-            _unidadGestionNombre = rows.isNotEmpty
-                ? rows.first['nombre'] as String?
-                : null;
+            _unidadGestionNombre =
+                rows.isNotEmpty ? rows.first['nombre'] as String? : null;
             _needsUnidadGestionSetup = false;
           });
           await _cargarCatalogos();
@@ -185,7 +185,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
 
   Future<void> _abrir() async {
     if (!_form.currentState!.validate()) return;
-    
+
     // Validar Unidad de Gestión
     if (_unidadGestionId == null || _unidadGestionNombre == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -193,7 +193,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
       );
       return;
     }
-    
+
     final fondo = parseLooseDouble(_fondo.text);
     final pvCode = (_puntoVentaCodigo ?? '').trim();
 
@@ -269,6 +269,48 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         if (ok != true) return;
       }
 
+      // --- Modal de confirmación con resumen de datos ---
+      if (!mounted) return;
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue, size: 28),
+              SizedBox(width: 10),
+              Text('Confirmar apertura'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Revisá los datos antes de abrir la caja:',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+              _confirmRow('Cajero', _usuario.text.trim()),
+              _confirmRow('Fondo inicial', formatCurrency(fondo)),
+              _confirmRow('Unidad de Gestión', disciplina),
+              _confirmRow('Descripción evento', _desc.text.trim()),
+              _confirmRow('Punto de venta', _pvDisplay()),
+              if (_obs.text.trim().isNotEmpty)
+                _confirmRow('Observación', _obs.text.trim()),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirmar y abrir'),
+            ),
+          ],
+        ),
+      );
+      if (confirmar != true) return;
+
       await _svc.abrirCaja(
         usuario: _usuario.text.trim(),
         fondoInicial: fondo,
@@ -332,6 +374,28 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
     }
   }
 
+  /// Fila de resumen para el modal de confirmación
+  static Widget _confirmRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text('$label:',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, color: Colors.black54)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _pvDisplay() {
     final code = (_puntoVentaCodigo ?? '').trim();
     if (code.isEmpty) return 'Sin configurar';
@@ -353,20 +417,19 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         onComplete: () async {
           final settings = context.read<AppSettings>();
           await settings.ensureLoaded();
-          
+
           if (settings.unidadGestionActivaId != null) {
             final db = await AppDatabase.instance();
             final rows = await db.rawQuery(
               'SELECT nombre FROM unidades_gestion WHERE id = ?',
               [settings.unidadGestionActivaId],
             );
-            
+
             if (mounted) {
               setState(() {
                 _unidadGestionId = settings.unidadGestionActivaId;
-                _unidadGestionNombre = rows.isNotEmpty
-                    ? rows.first['nombre'] as String?
-                    : null;
+                _unidadGestionNombre =
+                    rows.isNotEmpty ? rows.first['nombre'] as String? : null;
                 _needsUnidadGestionSetup = false;
               });
               await _cargarCatalogos();
@@ -375,129 +438,132 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         },
       );
     }
-    
+
     if (_loading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Apertura de caja')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    
+
     return Scaffold(
       appBar: AppBar(title: const Text('Apertura de caja')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _form,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _usuario,
-                decoration: const InputDecoration(labelText: 'Cajero apertura'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _fondo,
-                decoration: const InputDecoration(labelText: 'Fondo inicial'),
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  final val = parseLooseDouble(v ?? '');
-                  return (val < 0) ? '>= 0' : null;
-                },
-              ),
-              const SizedBox(height: 8),
-              // Unidad de Gestión (solo lectura + botón modificar)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      key: ValueKey('unidad_gestion_${_unidadGestionNombre ?? ''}'),
-                      initialValue: _unidadGestionNombre ?? 'Sin seleccionar',
-                      enabled: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Unidad de Gestión',
-                      ),
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.grey.shade700),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: OutlinedButton(
-                      onPressed: _abrirSelectorUnidadGestion,
-                      child: const Text('Modificar'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _desc,
-                decoration:
-                    const InputDecoration(
-                      labelText: 'Descripción del evento',
-                      hintText: 'Partido vs Piamonte',
-                    ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      key: ValueKey('pv_display_${_pvDisplay()}'),
-                      initialValue: _pvDisplay(),
-                      enabled: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Punto de venta (configurado)',
-                      ),
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.grey),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        final changed = await Navigator.push<bool>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PuntoVentaSetupPage(),
-                          ),
-                        );
-                        if (!mounted) return;
-                        if (changed == true) {
-                          await _cargarCatalogos();
-                        }
-                      },
-                      child: const Text('Editar'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _obs,
-                decoration: const InputDecoration(
-                  labelText: 'Observación',
-                  hintText: 'No funciona la impresora',
+      body: LandscapeCenteredBody(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _form,
+            child: ListView(
+              children: [
+                TextFormField(
+                  controller: _usuario,
+                  decoration:
+                      const InputDecoration(labelText: 'Cajero apertura'),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
                 ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                  onPressed: _abrir, child: const Text('Abrir caja')),
-            ],
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _fondo,
+                  decoration: const InputDecoration(labelText: 'Fondo inicial'),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    final val = parseLooseDouble(v ?? '');
+                    return (val < 0) ? '>= 0' : null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                // Unidad de Gestión (solo lectura + botón modificar)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        key: ValueKey(
+                            'unidad_gestion_${_unidadGestionNombre ?? ''}'),
+                        initialValue: _unidadGestionNombre ?? 'Sin seleccionar',
+                        enabled: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Unidad de Gestión',
+                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.grey.shade700),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: OutlinedButton(
+                        onPressed: _abrirSelectorUnidadGestion,
+                        child: const Text('Modificar'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _desc,
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción del evento',
+                    hintText: 'Partido vs Piamonte',
+                  ),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        key: ValueKey('pv_display_${_pvDisplay()}'),
+                        initialValue: _pvDisplay(),
+                        enabled: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Punto de venta (configurado)',
+                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          final changed = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const PuntoVentaSetupPage(),
+                            ),
+                          );
+                          if (!mounted) return;
+                          if (changed == true) {
+                            await _cargarCatalogos();
+                          }
+                        },
+                        child: const Text('Editar'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _obs,
+                  decoration: const InputDecoration(
+                    labelText: 'Observación',
+                    hintText: 'No funciona la impresora',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                    onPressed: _abrir, child: const Text('Abrir caja')),
+              ],
+            ),
           ),
         ),
       ),

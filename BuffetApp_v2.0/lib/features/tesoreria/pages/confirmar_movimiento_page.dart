@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../features/shared/services/movimiento_service.dart';
@@ -9,6 +10,7 @@ import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/state/app_settings.dart';
 import '../../../data/dao/db.dart';
 import '../services/categoria_movimiento_service.dart';
+import '../services/cuenta_service.dart';
 import '../../shared/widgets/responsive_container.dart';
 import 'dart:io';
 
@@ -41,6 +43,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
   final _formKey = GlobalKey<FormState>();
   final _svc = EventoMovimientoService();
   final _compromisosService = CompromisosService.instance;
+  final _cuentaService = CuentaService();
   
   // Controllers
   final _montoController = TextEditingController();
@@ -49,14 +52,17 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
   // Form values
   DateTime _fechaReal = DateTime.now();
   int? _medioPagoId;
+  int? _cuentaId; // Cuenta desde la cual se paga
   
-  // Adjunto
+  // Adjunto (puede ser imagen o PDF)
   File? _archivoLocal;
   String? _archivoNombre;
+  String? _archivoTipo;
   
   // Estado
   bool _isSubmitting = false;
   List<Map<String, dynamic>> _mediosPago = [];
+  List<Map<String, dynamic>> _cuentas = [];
   Map<String, dynamic>? _compromiso;
   String? _categoriaNombre;
   
@@ -78,9 +84,18 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
   Future<void> _cargarDatos() async {
     try {
       final db = await AppDatabase.instance();
+      final settings = Provider.of<AppSettings>(context, listen: false);
+      final unidadGestionId = settings.unidadGestionActivaId;
       
       // Cargar medios de pago
       final medios = await db.query('metodos_pago', orderBy: 'descripcion');
+      
+      // Cargar cuentas activas de la unidad actual
+      List<Map<String, dynamic>> cuentas = [];
+      if (unidadGestionId != null) {
+        final cuentasResult = await _cuentaService.listarPorUnidad(unidadGestionId);
+        cuentas = cuentasResult.map((c) => c.toMap()).toList();
+      }
       
       // Cargar compromiso
       final compromiso = await _compromisosService.obtenerCompromiso(widget.compromisoId);
@@ -93,10 +108,14 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
       
       setState(() {
         _mediosPago = medios;
+        _cuentas = cuentas;
         _compromiso = compromiso;
         _categoriaNombre = catNombre;
         if (_mediosPago.isNotEmpty) {
           _medioPagoId = _mediosPago.first['id'] as int;
+        }
+        if (_cuentas.isNotEmpty) {
+          _cuentaId = _cuentas.first['id'] as int;
         }
       });
     } catch (e, st) {
@@ -138,6 +157,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
         setState(() {
           _archivoLocal = file;
           _archivoNombre = pickedFile.name;
+          _archivoTipo = 'image';
         });
       }
     } catch (e, st) {
@@ -155,6 +175,51 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
     }
   }
 
+  Future<void> _seleccionarPDF() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final size = await file.length();
+        
+        // Validar tamaño (25MB)
+        if (size > 25 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('El archivo supera el límite de 25MB'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        setState(() {
+          _archivoLocal = file;
+          _archivoNombre = result.files.single.name;
+          _archivoTipo = 'pdf';
+        });
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'confirmar_movimiento.seleccionar_pdf',
+        error: e,
+        stackTrace: st,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al seleccionar PDF: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _confirmar() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -163,6 +228,13 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
     if (_medioPagoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Seleccioná un medio de pago')),
+      );
+      return;
+    }
+
+    if (_cuentaId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccioná una cuenta')),
       );
       return;
     }
@@ -179,13 +251,15 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
 
       final monto = double.parse(_montoController.text);
 
-      // Crear movimiento
-      final movId = await _svc.crear(
-        disciplinaId: unidadGestionId, // Temporal, migrar a unidadGestionId
+      // Crear movimiento con fecha real seleccionada
+      await _svc.crear(
+        disciplinaId: unidadGestionId,
+        cuentaId: _cuentaId!, // Usar cuenta seleccionada
         tipo: widget.tipo,
         categoria: widget.categoria,
         monto: monto,
         medioPagoId: _medioPagoId!,
+        fecha: _fechaReal, // CLAVE: Usar fecha seleccionada, no DateTime.now()
         observacion: _observacionesController.text.trim().isNotEmpty
             ? _observacionesController.text.trim()
             : null,
@@ -193,6 +267,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
         estado: 'CONFIRMADO',
         archivoLocalPath: _archivoLocal?.path,
         archivoNombre: _archivoNombre,
+        archivoTipo: _archivoTipo,
       );
 
       // Actualizar estado de la cuota en compromiso_cuotas
@@ -396,6 +471,32 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
               ),
               const SizedBox(height: 16),
               
+              // Cuenta (fondo)
+              DropdownButtonFormField<int>(
+                value: _cuentaId,
+                decoration: const InputDecoration(
+                  labelText: 'Cuenta (fondo) *',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.account_balance_wallet),
+                ),
+                items: _cuentas.map((c) {
+                  return DropdownMenuItem(
+                    value: c['id'] as int,
+                    child: Text(c['nombre'] as String),
+                  );
+                }).toList(),
+                onChanged: _isSubmitting ? null : (v) {
+                  setState(() => _cuentaId = v);
+                },
+                validator: (v) {
+                  if (v == null) {
+                    return 'Seleccioná una cuenta';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
               // Observaciones
               TextFormField(
                 controller: _observacionesController,
@@ -438,6 +539,15 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _isSubmitting ? null : _seleccionarPDF,
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                label: const Text('Seleccionar PDF'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red.shade700,
+                ),
               ),
               if (_archivoLocal != null) ...[
                 const SizedBox(height: 8),

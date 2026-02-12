@@ -4,6 +4,7 @@ import '../../shared/format.dart';
 import '../../../data/dao/db.dart';
 import '../state/cart_model.dart';
 import 'payment_method_page.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
@@ -13,7 +14,8 @@ class CartPage extends StatelessWidget {
     final cart = context.watch<CartModel>();
     return Scaffold(
       appBar: AppBar(title: Text('Ticket  (${cart.count})')),
-      body: Column(
+      body: LandscapeCenteredBody(
+        child: Column(
         children: [
           Expanded(
             child: ListView.separated(
@@ -146,6 +148,7 @@ class CartPage extends StatelessWidget {
             ),
           )
         ],
+      ),
       ),
     );
   }

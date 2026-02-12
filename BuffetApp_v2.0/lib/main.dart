@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
-import 'features/buffet/pages/buffet_home_page.dart';
 import 'features/home/home_page.dart';
-import 'features/home/mode_selector_page.dart';
-import 'features/tesoreria/pages/tesoreria_home_page.dart';
+import 'features/home/main_menu_page.dart';
 import 'features/buffet/state/cart_model.dart';
 import 'features/buffet/services/caja_service.dart';
 import 'data/dao/db.dart';
 import 'features/shared/state/app_settings.dart';
 import 'features/shared/state/app_mode.dart';
+import 'features/shared/state/drawer_state.dart';
 import 'features/shared/services/usb_printer_service.dart';
 import 'features/shared/services/supabase_sync_service.dart';
 
@@ -52,6 +51,11 @@ class App extends StatelessWidget {
           final m = AppModeState();
           m.loadMode();
           return m;
+        }),
+        ChangeNotifierProvider(create: (_) {
+          final d = DrawerState();
+          d.loadState();
+          return d;
         }),
       ],
       child: Consumer<AppSettings>(
@@ -220,36 +224,10 @@ class _SeedGateState extends State<_SeedGate> {
           );
         }
         final caja = snap.data;
-        
-        // Determinar pantalla inicial según modo y estado de caja
-        return Consumer<AppModeState>(
-          builder: (context, modeState, _) {
-            // Si no se ha cargado el modo, mostrar loading
-            if (!modeState.isLoaded) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-            
-            // Si hay caja abierta, ir directo a Buffet (modo caja)
-            if (caja != null) {
-              return const BuffetHomePage();
-            }
-            
-            // Sin caja abierta: verificar si hay modo configurado
-            // Si es la primera vez (no hay modo configurado), mostrar selector
-            if (!modeState.hasConfiguredMode) {
-              return const ModeSelectorPage();
-            }
-            
-            // Si ya hay modo configurado, ir según el modo seleccionado
-            if (modeState.isBuffetMode) {
-              return const HomePage(); // Home de buffet (antigua)
-            } else {
-              return const TesoreriaHomePage();
-            }
-          },
-        );
+        final hasCajaAbierta = caja != null;
+
+        // Siempre mostrar el menú principal al abrir la app
+        return MainMenuPage(hasCajaAbierta: hasCajaAbierta);
       },
     );
   }

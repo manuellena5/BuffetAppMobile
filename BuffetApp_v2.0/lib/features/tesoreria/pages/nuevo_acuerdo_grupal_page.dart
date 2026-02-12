@@ -1,4 +1,3 @@
-import 'package:buffet_app/features/shared/format.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -192,18 +191,28 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
 
   Future<void> _generarPreview() async {
     try {
+      print('DEBUG: Iniciando generación de preview');
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
 
+      print('DEBUG: Validando ${_jugadoresSeleccionados.length} jugadores');
       // Validar jugadores
       final validacionRes = await _grupalSvc.validarJugadores(
         jugadores: _jugadoresSeleccionados.values.toList(),
-        unidadGestionId: _unidadGestionId!,
+        unidadGestionId: _unidadGestionId,
         categoria: _categoria,
       );
+      print('DEBUG: Validación completada - ${validacionRes.length} advertencias');
 
+      print('DEBUG: Generando preview con:');
+      print('  - Nombre: ${_nombreCtrl.text.trim()}');
+      print('  - Tipo: $_tipo');
+      print('  - Modalidad: $_modalidad');
+      print('  - Frecuencia: $_frecuencia');
+      print('  - Jugadores: ${_jugadoresSeleccionados.length}');
+      
       // Generar preview
       final preview = await _grupalSvc.generarPreview(
         nombre: _nombreCtrl.text.trim(),
@@ -225,12 +234,19 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         generaCompromisos: _generaCompromisos,
       );
 
+      print('DEBUG: Preview generado exitosamente');
+      print('  - Acuerdos: ${preview.cantidadAcuerdos}');
+      print('  - Compromisos: ${preview.totalCompromisos}');
+      print('  - Total: ${preview.totalComprometido}');
+
       setState(() {
         _preview = preview;
         _validaciones = validacionRes;
         _isLoading = false;
       });
     } catch (e, stack) {
+      print('ERROR en _generarPreview: $e');
+      print('StackTrace: $stack');
       await AppDatabase.logLocalError(
         scope: 'nuevo_acuerdo_grupal.generar_preview',
         error: e.toString(),
@@ -238,6 +254,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
       );
       setState(() {
         _errorMessage = 'Error al generar preview: ${e.toString()}';
+        _preview = null;
         _isLoading = false;
       });
     }
@@ -254,7 +271,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
 
       final resultado = await _grupalSvc.crearAcuerdosGrupales(
         nombre: _nombreCtrl.text.trim(),
-        unidadGestionId: _unidadGestionId!,
+        unidadGestionId: _unidadGestionId,
         tipo: _tipo,
         modalidad: _modalidad,
         montoBase: _modalidad == 'RECURRENTE' 
@@ -275,14 +292,92 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         generaCompromisos: _generaCompromisos,
       );
 
+      setState(() => _isLoading = false);
+
+      // MODAL DE CONFIRMACIÓN (según reglas del proyecto)
       if (mounted) {
-        Navigator.pop(context, resultado);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Se crearon ${resultado.cantidadCreados} acuerdos${resultado.tieneErrores ? ' (con ${resultado.errores.length} errores)' : ''}',
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  resultado.todoExitoso ? Icons.check_circle : Icons.warning,
+                  color: resultado.todoExitoso ? Colors.green : Colors.orange,
+                  size: 32,
+                ),
+                const SizedBox(width: 12),
+                Text(resultado.todoExitoso ? 'Acuerdo Grupal Creado' : 'Creado con Advertencias'),
+              ],
             ),
-            backgroundColor: resultado.todoExitoso ? Colors.green : Colors.orange,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nombre: ${_nombreCtrl.text.trim()}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Tipo: $_tipo'),
+                  Text('Categoría: $_categoria'),
+                  Text('Modalidad: $_modalidad'),
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Acuerdos creados: ${resultado.cantidadCreados}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.green,
+                    ),
+                  ),
+                  if (resultado.tieneErrores) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Errores: ${resultado.errores.length}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.red,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...resultado.errores.map((err) => Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 4),
+                      child: Text(
+                        '• $err',
+                        style: const TextStyle(fontSize: 12, color: Colors.red),
+                      ),
+                    )),
+                  ],
+                  if (_generaCompromisos) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      '✓ Compromisos generados automáticamente',
+                      style: TextStyle(color: Colors.green, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'UUID: ${resultado.grupalUuid}',
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Cerrar modal
+                  Navigator.pop(context, resultado); // Volver a la pantalla anterior
+                },
+                child: const Text('Aceptar'),
+              ),
+            ],
           ),
         );
       }
@@ -292,10 +387,53 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         error: e.toString(),
         stackTrace: stack,
       );
+      
       setState(() {
-        _errorMessage = 'Error al crear acuerdos: ${e.toString()}';
         _isLoading = false;
+        _errorMessage = 'Error al crear acuerdos: ${e.toString()}';
       });
+
+      // MODAL DE ERROR
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.error, color: Colors.red, size: 32),
+                SizedBox(width: 12),
+                Text('Error al Crear Acuerdos'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'No se pudo crear el acuerdo grupal.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Error: ${e.toString()}',
+                  style: const TextStyle(fontSize: 12, color: Colors.red),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Por favor, revise los datos e intente nuevamente.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 
@@ -807,9 +945,42 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             ),
           ),
         const SizedBox(height: 8),
-        Text(
-          'Seleccionados: ${_jugadoresSeleccionados.length}',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Seleccionados: ${_jugadoresSeleccionados.length} / ${_jugadoresFiltrados.length}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            ElevatedButton.icon(
+              onPressed: _jugadoresFiltrados.isEmpty ? null : () {
+                setState(() {
+                  final montoBase = double.tryParse(_montoCtrl.text) ?? 0;
+                  for (final jugador in _jugadoresFiltrados) {
+                    final id = jugador['id'] as int;
+                    if (!_jugadoresSeleccionados.containsKey(id)) {
+                      _jugadoresSeleccionados[id] = JugadorConMonto(
+                        id: id,
+                        nombre: jugador['nombre'] as String? ?? '',
+                        numeroAsociado: null,
+                        rol: jugador['rol'] as String?,
+                        alias: jugador['alias'] as String?,
+                        tipoContratacion: jugador['tipo_contratacion'] as String?,
+                        posicion: jugador['posicion'] as String?,
+                        monto: montoBase,
+                      );
+                    }
+                  }
+                });
+              },
+              icon: const Icon(Icons.done_all, size: 18),
+              label: const Text('Seleccionar Todos'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         // Filtros
@@ -878,27 +1049,56 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                 final isSelected = _jugadoresSeleccionados.containsKey(id);
                 
                 return Card(
+                  elevation: isSelected ? 4 : 1,
+                  color: isSelected ? Colors.blue.shade50 : null,
                   child: CheckboxListTile(
                     value: isSelected,
                     onChanged: (selected) => _toggleJugador(jugador, selected ?? false),
-                    title: Text(jugador['nombre'] as String? ?? ''),
+                    title: Text(
+                      jugador['nombre'] as String? ?? '',
+                      style: TextStyle(
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Rol: ${jugador['rol'] ?? '-'}'),
-                        if (jugador['alias'] != null)
-                          Text('Alias: ${jugador['alias']}', 
-                            style: const TextStyle(fontStyle: FontStyle.italic)),
-                        if (isSelected)
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Rol: ${jugador['rol'] ?? '-'}'),
+                                  if (jugador['posicion'] != null && (jugador['posicion'] as String).isNotEmpty)
+                                    Text('Posición: ${jugador['posicion']}'),
+                                  if (jugador['tipo_contratacion'] != null)
+                                    Text('Tipo: ${jugador['tipo_contratacion']}'),
+                                  if (jugador['alias'] != null && (jugador['alias'] as String).isNotEmpty)
+                                    Text('Alias: ${jugador['alias']}', 
+                                      style: const TextStyle(fontStyle: FontStyle.italic)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (isSelected) ...[
+                          const Divider(),
                           Row(
                             children: [
-                              const Text('Monto: \$'),
+                              const Text('Monto: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 8),
                               SizedBox(
-                                width: 100,
+                                width: 120,
                                 child: TextFormField(
-                                  initialValue: _jugadoresSeleccionados[id]!.monto.toString(),
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(isDense: true),
+                                  initialValue: _jugadoresSeleccionados[id]!.monto.toStringAsFixed(2),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    prefixText: '\$ ',
+                                    border: OutlineInputBorder(),
+                                  ),
                                   onChanged: (v) {
                                     final monto = double.tryParse(v) ?? 0;
                                     _ajustarMontoIndividual(id, monto);
@@ -907,6 +1107,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                               ),
                             ],
                           ),
+                        ],
                       ],
                     ),
                   ),
@@ -920,11 +1121,66 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
 
   Widget _buildStepPreview() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Generando preview...'),
+          ],
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Card(
+          color: Colors.red.shade50,
+          margin: const EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _generarPreview,
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     if (_preview == null) {
-      return const Center(child: Text('No se pudo generar el preview'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.warning, color: Colors.orange, size: 48),
+            const SizedBox(height: 16),
+            const Text(
+              'No se pudo generar el preview',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _generarPreview,
+              child: const Text('Generar Preview'),
+            ),
+          ],
+        ),
+      );
     }
 
     return SingleChildScrollView(

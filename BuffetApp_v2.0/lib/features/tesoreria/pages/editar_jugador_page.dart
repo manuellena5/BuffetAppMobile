@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../shared/widgets/breadcrumb.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
 
@@ -170,10 +171,52 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
       await _plantelSvc.actualizarEntidad(widget.entidadId, cambios);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Jugador actualizado correctamente')),
+        // Modal de confirmación exitosa
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                SizedBox(width: 12),
+                Text('Actualización Exitosa'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Los datos de la entidad se actualizaron correctamente:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                SizedBox(height: 16),
+                if (cambios['nombre'] != null)
+                  _buildInfoRow('Nombre', cambios['nombre'] as String),
+                if (cambios['rol'] != null)
+                  _buildInfoRow('Rol', cambios['rol'] as String),
+                if (cambios['alias'] != null)
+                  _buildInfoRow('Alias', cambios['alias'] as String),
+                if (cambios['dni'] != null)
+                  _buildInfoRow('DNI', cambios['dni'] as String),
+                if (cambios['posicion'] != null)
+                  _buildInfoRow('Posición', cambios['posicion'] as String),
+                if (cambios['tipo_contratacion'] != null)
+                  _buildInfoRow('Contratación', cambios['tipo_contratacion'] as String),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Cierra el dialog
+                  Navigator.pop(context, true); // Retorna a la pantalla anterior
+                },
+                child: Text('Aceptar'),
+              ),
+            ],
+          ),
         );
-        Navigator.pop(context, true); // true = se modificó
       }
     } catch (e, stack) {
       await AppDatabase.logLocalError(
@@ -184,10 +227,26 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
       );
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al actualizar. Por favor, intente nuevamente.'),
-            backgroundColor: Colors.red,
+        // Modal de error
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 32),
+                SizedBox(width: 12),
+                Text('Error al Actualizar'),
+              ],
+            ),
+            content: Text(
+              'No se pudieron actualizar los datos de la entidad. Por favor, intente nuevamente.\n\nDetalle: ${e.toString()}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cerrar'),
+              ),
+            ],
           ),
         );
       }
@@ -202,7 +261,24 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Editar Jugador/Staff'),
+        title: AppBarBreadcrumb(
+          items: [
+            BreadcrumbItem(
+              label: 'Plantel',
+              icon: Icons.people,
+              onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+            BreadcrumbItem(
+              label: _entidadOriginal != null 
+                ? (_entidadOriginal!['nombre']?.toString() ?? 'Jugador')
+                : 'Jugador',
+              onTap: () => Navigator.of(context).pop(),
+            ),
+            BreadcrumbItem(
+              label: 'Editar',
+            ),
+          ],
+        ),
         actions: [
           if (_guardando)
             const Padding(
@@ -445,6 +521,33 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
                 ),
               ),
             ),
+    );
+  }
+  
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

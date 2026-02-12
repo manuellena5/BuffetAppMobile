@@ -367,7 +367,6 @@ class PrintService {
 
     double sumFondo = 0;
     double sumEfecDeclarado = 0;
-    double sumTransfDeclarado = 0;
     double sumDiferencia = 0;
     int sumEntradas = 0;
     bool anyEntradas = false;
@@ -379,8 +378,6 @@ class PrintService {
       sumFondo += ((c['fondo_inicial'] as num?) ?? 0).toDouble();
       sumEfecDeclarado +=
           ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
-      sumTransfDeclarado +=
-          ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
       sumDiferencia += ((c['diferencia'] as num?) ?? 0).toDouble();
       final entradas = (c['entradas'] as num?)?.toInt();
       if (entradas != null) {
@@ -458,8 +455,6 @@ class PrintService {
         final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
         final efectivoDeclarado =
             ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
-        final transfDeclarado =
-            ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
         final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
         final int? entradasVendidas = (c['entradas'] as num?)?.toInt();
         final descEvento = (c['descripcion_evento'] as String?) ?? '';

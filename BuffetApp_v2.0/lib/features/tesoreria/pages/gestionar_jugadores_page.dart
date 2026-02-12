@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
@@ -30,6 +31,7 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
   String _filtroEstado = 'ACTIVOS';
   String _filtroTipoContratacion = 'TODOS'; // TODOS, LOCAL, REFUERZO, OTRO
   bool _vistaTabla = false; // false = tarjetas, true = tabla
+  Set<int> _jugadoresSeleccionados = {}; // IDs de jugadores seleccionados en vista tabla
 
   @override
   void initState() {
@@ -50,6 +52,7 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
       setState(() {
         _entidadesOriginales = entidades;
         _aplicarFiltros();
+        _jugadoresSeleccionados.clear(); // Limpiar selección al recargar
       });
     } catch (e, stack) {
       await AppDatabase.logLocalError(
@@ -140,50 +143,50 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gestionar Jugadores'),
-        actions: [
-          // Importar
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Importar desde Excel',
-            onPressed: _irAImportar,
-          ),
-          // Exportar
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.download),
-            tooltip: 'Exportar a Excel',
-            onSelected: _exportar,
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'TODOS',
-                child: Text('Exportar todos'),
-              ),
-              const PopupMenuItem(
-                value: 'JUGADOR',
-                child: Text('Exportar jugadores'),
-              ),
-              const PopupMenuItem(
-                value: 'DT',
-                child: Text('Exportar DT'),
-              ),
-              const PopupMenuItem(
-                value: 'AYUDANTE',
-                child: Text('Exportar Ayudantes'),
-              ),
-            ],
-          ),
-          // Cambiar vista
-          IconButton(
-            icon: Icon(_vistaTabla ? Icons.view_module : Icons.table_chart),
-            tooltip: _vistaTabla ? 'Ver tarjetas' : 'Ver tabla',
-            onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
-          ),
-        ],
-      ),
+    return TesoreriaScaffold(
+      title: 'Gestionar Jugadores',
+      currentRouteName: '/gestionar_jugadores',
+      appBarColor: Colors.teal,
+      actions: [
+        // Importar
+        IconButton(
+          icon: const Icon(Icons.upload_file),
+          tooltip: 'Importar desde Excel',
+          onPressed: _irAImportar,
+        ),
+        // Exportar
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.download),
+          tooltip: 'Exportar a Excel',
+          onSelected: _exportar,
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'TODOS',
+              child: Text('Exportar todos'),
+            ),
+            const PopupMenuItem(
+              value: 'JUGADOR',
+              child: Text('Exportar jugadores'),
+            ),
+            const PopupMenuItem(
+              value: 'DT',
+              child: Text('Exportar DT'),
+            ),
+            const PopupMenuItem(
+              value: 'AYUDANTE',
+              child: Text('Exportar Ayudantes'),
+            ),
+          ],
+        ),
+        // Cambiar vista
+        IconButton(
+          icon: Icon(_vistaTabla ? Icons.view_module : Icons.table_chart),
+          tooltip: _vistaTabla ? 'Ver tarjetas' : 'Ver tabla',
+          onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
+        ),
+      ],
       body: ResponsiveContainer(
-        maxWidth: 1000,
+        maxWidth: 1400,
         child: RefreshIndicator(
           onRefresh: _cargarEntidades,
         child: Column(
@@ -298,11 +301,18 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _irACrear,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Nuevo'),
-      ),
+      floatingActionButton: _jugadoresSeleccionados.isEmpty
+          ? FloatingActionButton.extended(
+              onPressed: _irACrear,
+              icon: const Icon(Icons.person_add),
+              label: const Text('Nuevo'),
+            )
+          : FloatingActionButton.extended(
+              onPressed: _confirmarBajaMasiva,
+              backgroundColor: Colors.orange,
+              icon: const Icon(Icons.person_remove),
+              label: Text('Dar de baja (${_jugadoresSeleccionados.length})'),
+            ),
     );
   }
 
@@ -382,7 +392,9 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
         scrollDirection: Axis.horizontal,
         child: DataTable(
           headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+          showCheckboxColumn: true,
           columns: const [
+            DataColumn(label: Text('Detalle', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(label: Text('Posición', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -399,10 +411,34 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
             final tipoContratacion = entidad['tipo_contratacion'] as String? ?? '-';
 
             return DataRow(
+              selected: _jugadoresSeleccionados.contains(id),
+              onSelectChanged: activo ? (selected) {
+                setState(() {
+                  if (selected == true) {
+                    _jugadoresSeleccionados.add(id);
+                  } else {
+                    _jugadoresSeleccionados.remove(id);
+                  }
+                });
+              } : null, // No permitir seleccionar jugadores dados de baja
               color: MaterialStateProperty.all(
                 activo ? null : Colors.grey.shade100,
               ),
               cells: [
+                DataCell(
+                  IconButton(
+                    icon: const Icon(Icons.info_outline, size: 20),
+                    tooltip: 'Ver detalle',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DetalleJugadorPage(entidadId: id),
+                        ),
+                      ).then((_) => _cargarEntidades());
+                    },
+                  ),
+                ),
                 DataCell(Text(
                   nombre,
                   style: TextStyle(
@@ -429,12 +465,6 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
                   ),
                 ),
               ],
-              onSelectChanged: (_) {
-                // TODO: Navegar a detalle_jugador_page
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Detalle próximamente')),
-                );
-              },
             );
           }).toList(),
         ),
@@ -554,6 +584,223 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
         return Colors.grey;
       default:
         return Colors.grey;
+    }
+  }
+
+  // ========== BAJA MASIVA ==========
+
+  Future<void> _confirmarBajaMasiva() async {
+    if (_jugadoresSeleccionados.isEmpty) return;
+
+    // Obtener nombres de los jugadores seleccionados
+    final jugadoresADarDeBaja = _entidades
+        .where((e) => _jugadoresSeleccionados.contains(e['id'] as int))
+        .toList();
+
+    final resultado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar baja masiva'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Se van a dar de baja los siguientes ${jugadoresADarDeBaja.length} jugadores:',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: jugadoresADarDeBaja.map((j) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${j['nombre']} (${_nombreRol(j['rol'] as String)})',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                border: Border.all(color: Colors.orange),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.orange[800]),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Solo se darán de baja los que no tengan compromisos activos.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
+            child: const Text('Confirmar baja'),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado == true) {
+      await _ejecutarBajaMasiva(jugadoresADarDeBaja);
+    }
+  }
+
+  Future<void> _ejecutarBajaMasiva(List<Map<String, dynamic>> jugadores) async {
+    int exitosos = 0;
+    int fallidos = 0;
+    final errores = <String>[];
+
+    // Mostrar progreso
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('Dando de baja ${jugadores.length} jugadores...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    for (final jugador in jugadores) {
+      try {
+        await _plantelSvc.darDeBajaEntidad(jugador['id'] as int);
+        exitosos++;
+      } catch (e) {
+        fallidos++;
+        errores.add('${jugador['nombre']}: ${e.toString()}');
+        await AppDatabase.logLocalError(
+          scope: 'gestionar_jugadores.baja_masiva',
+          error: e.toString(),
+          payload: {'jugador_id': jugador['id'], 'nombre': jugador['nombre']},
+        );
+      }
+    }
+
+    // Cerrar diálogo de progreso
+    if (mounted) Navigator.pop(context);
+
+    // Limpiar selección y recargar
+    setState(() => _jugadoresSeleccionados.clear());
+    await _cargarEntidades();
+
+    // Mostrar resultado
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                exitosos > 0 ? Icons.check_circle : Icons.error,
+                color: exitosos > 0 ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 8),
+              const Text('Resultado de baja masiva'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (exitosos > 0) ...[
+                Row(
+                  children: [
+                    Icon(Icons.check, color: Colors.green[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Exitosos: $exitosos',
+                      style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (fallidos > 0) ...[
+                Row(
+                  children: [
+                    Icon(Icons.error, color: Colors.red[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Fallidos: $fallidos',
+                      style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Errores:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: errores.map((e) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            '• $e',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
     }
   }
 

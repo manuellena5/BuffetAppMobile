@@ -4,6 +4,7 @@ import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
 import 'sale_detail_page.dart';
 import '../services/caja_service.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 class SalesListPage extends StatefulWidget {
   const SalesListPage({super.key});
@@ -64,117 +65,126 @@ class _SalesListPageState extends State<SalesListPage> {
     String? currentDateHeader;
     return Scaffold(
       appBar: AppBar(title: const Text('Tickets')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Row(children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(labelText: 'Estado'),
-                  initialValue: _estadoFiltro,
-                  items: const ['Todos', 'Impreso', 'Anulado', 'No impreso']
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _estadoFiltro = v ?? 'Todos'),
+      body: LandscapeCenteredBody(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(labelText: 'Estado'),
+                    initialValue: _estadoFiltro,
+                    items: const ['Todos', 'Impreso', 'Anulado', 'No impreso']
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => _estadoFiltro = v ?? 'Todos'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(labelText: 'Producto'),
-                  initialValue: _productoFiltro,
-                  items: _productos
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _productoFiltro = v ?? 'Todos'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(labelText: 'Producto'),
+                    initialValue: _productoFiltro,
+                    items: _productos
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => _productoFiltro = v ?? 'Todos'),
+                  ),
                 ),
-              ),
-            ]),
-          ),
-          const SizedBox(height: 8),
-          const Divider(height: 1),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                itemCount: _filteredRows().length,
-                itemBuilder: (ctx, i) {
-                  final v = _filteredRows()[i];
-                  final dt =
-                      DateTime.tryParse(v['fecha_hora'] as String? ?? '') ??
-                          DateTime.now();
-                  final dateHeader = DateFormat.yMMMMEEEEd('es_AR')
-                      .format(DateTime(dt.year, dt.month, dt.day));
-                  final timeStr = DateFormat.Hm('es_AR').format(dt);
-                  final tiles = <Widget>[];
-                  if (currentDateHeader != dateHeader) {
-                    currentDateHeader = dateHeader;
-                    tiles.add(Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Text(dateHeader,
-                          style: const TextStyle(
-                              color: Colors.green,
-                              fontWeight: FontWeight.w600)),
+              ]),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _load,
+                child: ListView.builder(
+                  itemCount: _filteredRows().length,
+                  itemBuilder: (ctx, i) {
+                    final v = _filteredRows()[i];
+                    final dt =
+                        DateTime.tryParse(v['fecha_hora'] as String? ?? '') ??
+                            DateTime.now();
+                    final dateHeader = DateFormat.yMMMMEEEEd('es_AR')
+                        .format(DateTime(dt.year, dt.month, dt.day));
+                    final timeStr = DateFormat.Hm('es_AR').format(dt);
+                    final tiles = <Widget>[];
+                    if (currentDateHeader != dateHeader) {
+                      currentDateHeader = dateHeader;
+                      tiles.add(Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        child: Text(dateHeader,
+                            style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600)),
+                      ));
+                    }
+                    IconData icon = Icons.money; // efectivo
+                    if ((v['metodo_pago_id'] as int?) == 2) {
+                      icon = Icons
+                          .credit_card; // transferencia asimilada a tarjeta
+                    }
+                    final status = (v['status'] as String?) ?? '';
+                    Color? statusColor;
+                    final norm = _normEstado(status);
+                    if (norm == 'anulado') {
+                      statusColor = Colors.redAccent;
+                    } else if (norm == 'impreso') {
+                      statusColor = Colors.blueGrey;
+                    } else {
+                      statusColor = Colors.orangeAccent; // No Impreso
+                    }
+                    tiles.add(ListTile(
+                      leading: Icon(icon),
+                      title: Text(formatCurrency(v['total_ticket'] as num)),
+                      subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if ((v['item_nombre'] as String?)?.isNotEmpty ==
+                                true)
+                              Text(v['item_nombre'] as String)
+                            else
+                              const Text('Producto'),
+                            if ((v['metodo_pago_desc'] as String?)
+                                    ?.isNotEmpty ==
+                                true)
+                              Text(v['metodo_pago_desc'] as String,
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic)),
+                            Text(timeStr),
+                            const SizedBox(height: 2),
+                            Text(_labelEstado(norm),
+                                style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w600)),
+                          ]),
+                      trailing: Text(v['identificador_ticket'] as String? ??
+                          '#${v['id']}'),
+                      onTap: () async {
+                        final nav = Navigator.of(context);
+                        final changed = await nav.push(MaterialPageRoute(
+                            builder: (_) =>
+                                SaleDetailPage(ticketId: v['id'] as int)));
+                        if (changed == true) {
+                          if (!mounted) return;
+                          _load();
+                        }
+                      },
                     ));
-                  }
-                  IconData icon = Icons.money; // efectivo
-                  if ((v['metodo_pago_id'] as int?) == 2) {
-                    icon = Icons.credit_card; // transferencia asimilada a tarjeta
-                  }
-                  final status = (v['status'] as String?) ?? '';
-                  Color? statusColor;
-                  final norm = _normEstado(status);
-                  if (norm == 'anulado') {
-                    statusColor = Colors.redAccent;
-                  } else if (norm == 'impreso') {
-                    statusColor = Colors.blueGrey;
-                  } else {
-                    statusColor = Colors.orangeAccent; // No Impreso
-                  }
-                  tiles.add(ListTile(
-                    leading: Icon(icon),
-                    title: Text(formatCurrency(v['total_ticket'] as num)),
-                    subtitle: Column(
+                    return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if ((v['item_nombre'] as String?)?.isNotEmpty == true)
-                            Text(v['item_nombre'] as String)
-                          else
-                            const Text('Producto'),
-                          if ((v['metodo_pago_desc'] as String?)?.isNotEmpty == true)
-                            Text(v['metodo_pago_desc'] as String,
-                                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
-                          Text(timeStr),
-                          const SizedBox(height: 2),
-                          Text(_labelEstado(norm),
-                              style: TextStyle(
-                                  color: statusColor,
-                                  fontWeight: FontWeight.w600)),
-                        ]),
-                    trailing: Text(
-                        v['identificador_ticket'] as String? ?? '#${v['id']}'),
-                    onTap: () async {
-                      final nav = Navigator.of(context);
-                      final changed = await nav.push(
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  SaleDetailPage(ticketId: v['id'] as int)));
-                      if (changed == true) {
-                        if (!mounted) return;
-                        _load();
-                      }
-                    },
-                  ));
-                  return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: tiles);
-                },
+                        children: tiles);
+                  },
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

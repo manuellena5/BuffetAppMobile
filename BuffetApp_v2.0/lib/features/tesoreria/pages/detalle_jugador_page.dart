@@ -3,6 +3,8 @@ import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/services/acuerdos_service.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/breadcrumb.dart';
+import '../../shared/format.dart';
 import 'editar_jugador_page.dart';
 import 'detalle_acuerdo_page.dart';
 
@@ -28,6 +30,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
   List<Map<String, dynamic>> _compromisos = [];
   Map<String, dynamic> _estadoMensual = {};
   List<Map<String, dynamic>> _historialPagos = [];
+  List<Map<String, dynamic>> _movimientos = [];
   String? _errorCompromisos;
   
   // FASE 19: Acuerdos activos de esta entidad
@@ -90,6 +93,14 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         hasta: ahora,
       );
       
+      // Cargar todos los movimientos (compromisos + directos)
+      final movimientos = await _plantelSvc.obtenerMovimientosPorEntidad(
+        widget.entidadId,
+        desde: hace6Meses,
+        hasta: ahora,
+        limit: 50,
+      );
+      
       // FASE 19: Cargar acuerdos activos de esta entidad
       List<Map<String, dynamic>> acuerdos = [];
       try {
@@ -112,6 +123,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         _compromisos = compromisos;
         _estadoMensual = estadoMensual;
         _historialPagos = historialPagos;
+        _movimientos = movimientos;
         _errorCompromisos = errorCompromisos;
         _acuerdosActivos = acuerdos;
       });
@@ -197,7 +209,20 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_entidad?['nombre'] ?? 'Detalle'),
+        title: AppBarBreadcrumb(
+          items: [
+            BreadcrumbItem(
+              label: 'Plantel',
+              icon: Icons.people,
+              onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+            BreadcrumbItem(
+              label: _entidad != null 
+                ? (_entidad!['nombre']?.toString() ?? 'Jugador')
+                : 'Jugador',
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
@@ -258,6 +283,11 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
 
                     // Historial de pagos
                     _buildHistorialPagos(),
+
+                    const Divider(height: 1),
+
+                    // Movimientos asociados (todos)
+                    _buildMovimientos(),
 
                     const SizedBox(height: 16),
                   ],
@@ -593,6 +623,128 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                     trailing: Text(
                       '\$${_formatMonto(totalPagado)}',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMovimientos() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.receipt_long, color: Colors.teal.shade700, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Movimientos Asociados (últimos 6 meses)',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Incluye movimientos de compromisos y movimientos directos',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          if (_movimientos.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Sin movimientos registrados',
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _movimientos.length,
+              itemBuilder: (context, index) {
+                final mov = _movimientos[index];
+                final tipo = mov['tipo']?.toString() ?? '';
+                final monto = (mov['monto'] as num?)?.toDouble() ?? 0.0;
+                final categoria = mov['categoria']?.toString() ?? '';
+                final fecha = mov['fecha']?.toString() ?? '';
+                final compromisoNombre = mov['compromiso_nombre']?.toString();
+                final medioPago = mov['medio_pago_desc']?.toString() ?? '';
+                final observacion = mov['observacion']?.toString();
+                
+                final esIngreso = tipo == 'INGRESO';
+                final icono = esIngreso ? Icons.arrow_downward : Icons.arrow_upward;
+                final color = esIngreso ? Colors.green : Colors.red;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(icono, color: color),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            compromisoNombre ?? categoria,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Text(
+                          Format.money(monto),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                      ],
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$fecha • $medioPago',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        if (compromisoNombre != null)
+                          Text(
+                            '🔗 Desde compromiso',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.blue.shade700,
+                            ),
+                          )
+                        else
+                          Text(
+                            '📋 Movimiento directo',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        if (observacion != null && observacion.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              observacion,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 );

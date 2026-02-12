@@ -171,6 +171,48 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
   Future<void> _guardarAcuerdo() async {
     if (!_formKey.currentState!.validate()) return;
     
+    // Modal de confirmación
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.help_outline, color: Colors.orange[700]),
+            const SizedBox(width: 12),
+            const Text('Confirmar Creación'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '¿Desea crear el siguiente acuerdo?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            _buildResumenAcuerdo(),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+    
     setState(() => _isSubmitting = true);
     
     try {
@@ -201,11 +243,68 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
       // Generar compromisos automáticamente
       final cuotasGeneradas = await AcuerdosService.generarCompromisos(acuerdoId);
       
+      setState(() => _isSubmitting = false);
+      
+      // Modal de éxito
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Acuerdo creado con $cuotasGeneradas compromisos'),
-            backgroundColor: Colors.green,
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green[700], size: 32),
+                const SizedBox(width: 12),
+                const Text('Acuerdo Creado'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'El acuerdo se creó exitosamente',
+                  style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green[200]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.insert_drive_file, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'ID Acuerdo: $acuerdoId',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_month, size: 16),
+                          const SizedBox(width: 8),
+                          Text('Compromisos generados: $cuotasGeneradas'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Aceptar'),
+              ),
+            ],
           ),
         );
         Navigator.pop(context, true);
@@ -219,11 +318,47 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
       
       setState(() => _isSubmitting = false);
       
+      // Modal de error
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar: ${e.toString()}'),
-            backgroundColor: Colors.red,
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error, color: Colors.red[700], size: 32),
+                const SizedBox(width: 12),
+                const Text('Error'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'No se pudo crear el acuerdo',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red[200]!),
+                  ),
+                  child: Text(
+                    e.toString(),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
           ),
         );
       }
@@ -650,5 +785,53 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildResumenAcuerdo() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _nombreController.text.trim(),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          _buildInfoRow('Tipo', _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso'),
+          _buildInfoRow('Modalidad', _modalidad == 'MONTO_TOTAL_CUOTAS' ? 'Cuotas' : 'Recurrente'),
+          if (_modalidad == 'MONTO_TOTAL_CUOTAS') ...[
+            _buildInfoRow('Monto Total', '\$${_montoTotalController.text}'),
+            _buildInfoRow('Cuotas', _cuotasController.text),
+          ] else
+            _buildInfoRow('Monto Periódico', '\$${_montoPeriodicoController.text}'),
+          _buildInfoRow('Frecuencia', _frecuencias.firstWhere(
+            (f) => f['codigo'] == _frecuencia,
+            orElse: () => {'descripcion': _frecuencia},
+          )['descripcion'] as String),
+          _buildInfoRow('Fecha Inicio', DateFormat('dd/MM/yyyy').format(_fechaInicio)),
+          if (_fechaFin != null)
+            _buildInfoRow('Fecha Fin', DateFormat('dd/MM/yyyy').format(_fechaFin!)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('$label:', style: const TextStyle(color: Colors.black54)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
   }
 }

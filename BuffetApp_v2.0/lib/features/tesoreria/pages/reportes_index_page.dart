@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import 'reporte_categorias_page.dart';
 import 'reporte_resumen_anual_page.dart';
 import 'reporte_resumen_mensual_page.dart';
+import 'reporte_plantel_mensual_page.dart';
 
 /// Pantalla índice de reportes de Tesorería
 class ReportesIndexPage extends StatelessWidget {
@@ -9,12 +11,10 @@ class ReportesIndexPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reportes'),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-      ),
+    return TesoreriaScaffold(
+      title: 'Reportes',
+      currentRouteName: '/reportes',
+      appBarColor: Colors.blue,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -90,6 +90,22 @@ class ReportesIndexPage extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => const ReporteResumenMensualPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildReporteCard(
+                      context: context,
+                      titulo: 'Plantel Mensual',
+                      descripcion: 'Estado de pagos por jugador/staff CT mes a mes con exportación a Excel',
+                      icono: Icons.people,
+                      color: Colors.teal,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ReportePlantelMensualPage(),
                           ),
                         );
                       },

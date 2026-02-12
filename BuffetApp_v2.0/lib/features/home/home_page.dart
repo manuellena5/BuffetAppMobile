@@ -14,14 +14,14 @@ import '../shared/pages/help_page.dart';
 import '../tesoreria/pages/movimientos_page.dart';
 import '../shared/pages/error_logs_page.dart';
 import '../eventos/pages/eventos_page.dart';
-import '../tesoreria/pages/tesoreria_home_page.dart';
-import '../shared/state/app_mode.dart';
+import 'main_menu_page.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/dao/db.dart';
 import '../shared/state/app_settings.dart';
+import '../tesoreria/pages/unidad_gestion_selector_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -142,6 +142,24 @@ class _HomePageState extends State<HomePage> {
             disciplinaNombre = (rows.first['nombre'] ?? '').toString();
           }
         }
+
+        // Si no se resolvió por disciplina, intentar con Unidad de Gestión activa
+        if (disciplinaNombre == null || disciplinaNombre!.trim().isEmpty) {
+          final ugId = settings.unidadGestionActivaId;
+          if (widget.enableContextDbLookups && ugId != null) {
+            final db = await AppDatabase.instance();
+            final rows = await db.query(
+              'unidades_gestion',
+              columns: ['nombre'],
+              where: 'id = ?',
+              whereArgs: [ugId],
+              limit: 1,
+            );
+            if (rows.isNotEmpty) {
+              disciplinaNombre = (rows.first['nombre'] ?? '').toString();
+            }
+          }
+        }
       } catch (e, st) {
         AppDatabase.logLocalError(
             scope: 'home_page.contexto_activo', error: e, stackTrace: st);
@@ -159,17 +177,6 @@ class _HomePageState extends State<HomePage> {
       _disciplinaActivaNombre = disciplinaNombre;
       _loading = false;
     });
-  }
-
-  String _formatFechaYmdToDmY(String ymd) {
-    // Espera YYYY-MM-DD
-    try {
-      final parts = ymd.split('-');
-      if (parts.length != 3) return ymd;
-      return '${parts[2].padLeft(2, '0')}/${parts[1].padLeft(2, '0')}/${parts[0].padLeft(4, '0')}';
-    } catch (_) {
-      return ymd;
-    }
   }
 
   void _startUsbPolling() {
@@ -194,7 +201,6 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final hasCaja = _caja != null;
-    final settings = context.watch<AppSettings>();
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -341,46 +347,19 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
               const Divider(),
-              // Cambiar a Tesorería
+              // Menú Principal
               ListTile(
-                leading: const Icon(Icons.account_balance, color: Colors.green),
-                title: const Text('Cambiar a Tesorería'),
-                subtitle: const Text('Movimientos financieros'),
-                onTap: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Cambiar módulo'),
-                      content: const Text(
-                        'Vas a cambiar al módulo Tesorería.\n\n'
-                        '¿Deseas continuar?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancelar'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Cambiar'),
-                        ),
-                      ],
+                leading:
+                    const Icon(Icons.home_outlined, color: Colors.deepPurple),
+                title: const Text('Menú Principal'),
+                subtitle: const Text('Volver al selector de módulos'),
+                onTap: () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (_) => const MainMenuPage(),
                     ),
+                    (route) => false,
                   );
-                  
-                  if (confirm == true && context.mounted) {
-                    // Cambiar modo y navegar directo a Tesorería
-                    final modeState = context.read<AppModeState>();
-                    await modeState.setMode(AppMode.tesoreria);
-                    
-                    if (!context.mounted) return;
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (_) => const TesoreriaHomePage(),
-                      ),
-                      (route) => false,
-                    );
-                  }
                 },
               ),
               const Divider(),
@@ -480,26 +459,43 @@ class _HomePageState extends State<HomePage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ListTile(
-                                  dense: true,
-                                  leading: const Icon(Icons.business_outlined),
-                                  title: const Text('Unidad de gestión'),
-                                  subtitle: Text(
-                                    hasCaja
-                                        ? (_caja?['disciplina'] ?? '')
-                                            .toString()
-                                        : (_disciplinaActivaNombre
-                                                    ?.trim()
-                                                    .isNotEmpty ==
-                                                true
-                                            ? _disciplinaActivaNombre!
-                                            : 'Sin seleccionar'),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () async {
+                                final changed = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const UnidadGestionSelectorPage(),
                                   ),
-                                ),
-                              ],
+                                );
+                                if (changed == true && mounted) {
+                                  await _load();
+                                }
+                              },
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ListTile(
+                                    dense: true,
+                                    leading:
+                                        const Icon(Icons.business_outlined),
+                                    title: const Text('Unidad de gestión'),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    subtitle: Text(
+                                      hasCaja
+                                          ? (_caja?['disciplina'] ?? '')
+                                              .toString()
+                                          : (_disciplinaActivaNombre
+                                                      ?.trim()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? _disciplinaActivaNombre!
+                                              : 'Sin seleccionar'),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
 
@@ -657,11 +653,15 @@ class _HomePageState extends State<HomePage> {
                               },
                               label: const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 14),
-                                child: Text(
-                                  'Eventos',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Eventos',
+                                      style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                  ],
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(

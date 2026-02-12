@@ -1,20 +1,31 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import '../../shared/services/movimiento_service.dart';
 import '../../shared/services/attachment_service.dart';
 import '../../shared/services/error_handler.dart';
+import '../../shared/services/plantel_service.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import '../../../data/dao/db.dart';
+import '../../../domain/models.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../services/cuenta_service.dart';
 
 /// Pantalla para crear o editar un movimiento financiero (ingreso/egreso)
 class CrearMovimientoPage extends StatefulWidget {
   final Map<String, dynamic>? movimientoExistente;
+  final int? unidadGestionIdInicial;
+  final String? eventoIdInicial;
+  final int? cuentaIdInicial;
   
   const CrearMovimientoPage({
     super.key,
     this.movimientoExistente,
+    this.unidadGestionIdInicial,
+    this.eventoIdInicial,
+    this.cuentaIdInicial,
   });
 
   @override
@@ -29,10 +40,14 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   String _tipo = 'INGRESO';
   String? _codigoCategoria;
   int? _medioPagoId;
+  int? _cuentaId;
+  int? _entidadPlantelId;
   File? _attachmentFile;
   
   List<Map<String, dynamic>> _metodosPago = [];
   List<Map<String, dynamic>> _categorias = [];
+  List<CuentaFondos> _cuentas = [];
+  List<Map<String, dynamic>> _entidadesPlantel = [];
   
   bool _cargando = true;
   bool _guardando = false;
@@ -41,12 +56,19 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   void initState() {
     super.initState();
     
+    // FASE 22.2: Si se pasan parámetros iniciales, usarlos
+    if (widget.cuentaIdInicial != null) {
+      _cuentaId = widget.cuentaIdInicial;
+    }
+    
     // Si es edición, pre-cargar los datos
     if (widget.movimientoExistente != null) {
       final mov = widget.movimientoExistente!;
       _tipo = mov['tipo'] as String? ?? 'INGRESO';
       _codigoCategoria = mov['categoria'] as String?;
       _medioPagoId = mov['medio_pago_id'] as int?;
+      _cuentaId = mov['cuenta_id'] as int?;
+      _entidadPlantelId = mov['entidad_plantel_id'] as int?;
       _montoCtrl.text = (mov['monto'] as num?)?.toString() ?? '';
       _obsCtrl.text = mov['observacion'] as String? ?? '';
     }
@@ -57,6 +79,8 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   Future<void> _cargarDatos() async {
     try {
       final db = await AppDatabase.instance();
+      final settings = context.read<AppSettings>();
+      final unidadId = settings.disciplinaActivaId;
       
       // Cargar métodos de pago
       final metodos = await db.query('metodos_pago', orderBy: 'id ASC');
@@ -69,12 +93,28 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         orderBy: 'nombre ASC',
       );
       
+      // Cargar cuentas activas de la unidad
+      List<CuentaFondos> cuentas = [];
+      if (unidadId != null) {
+        final cuentaService = CuentaService();
+        cuentas = await cuentaService.listarPorUnidad(unidadId, soloActivas: true);
+      }
+      
+      // Cargar entidades del plantel (jugadores y staff)
+      final entidades = await PlantelService.instance.listarEntidades(soloActivos: true);
+      
       if (!mounted) return;
       
       setState(() {
         _metodosPago = metodos;
         _categorias = cats;
+        _cuentas = cuentas;
+        _entidadesPlantel = entidades;
         _medioPagoId = metodos.isNotEmpty ? metodos.first['id'] as int? : null;
+        // FASE 22.2: Mantener cuentaId inicial si se pasó, sino usar primera cuenta
+        if (_cuentaId == null || !cuentas.any((c) => c.id == _cuentaId)) {
+          _cuentaId = cuentas.isNotEmpty ? cuentas.first.id : null;
+        }
         _cargando = false;
       });
     } catch (e, st) {
@@ -139,6 +179,13 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       return;
     }
     
+    if (_cuentaId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleccioná una cuenta')),
+      );
+      return;
+    }
+    
     setState(() => _guardando = true);
     
     try {
@@ -167,6 +214,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         await svc.actualizar(
           id: movId,
           disciplinaId: disciplinaId,
+          cuentaId: _cuentaId!,
           eventoId: settings.eventoActivoId,
           tipo: _tipo,
           categoria: _codigoCategoria!,
@@ -177,11 +225,13 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           archivoNombre: archivoNombre,
           archivoTipo: archivoTipo,
           archivoSize: archivoSize,
+          entidadPlantelId: _entidadPlantelId,
         );
       } else {
         // Crear nuevo movimiento
         await svc.crear(
           disciplinaId: disciplinaId,
+          cuentaId: _cuentaId!,
           eventoId: settings.eventoActivoId,
           tipo: _tipo,
           categoria: _codigoCategoria!,
@@ -192,7 +242,11 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           archivoNombre: archivoNombre,
           archivoTipo: archivoTipo,
           archivoSize: archivoSize,
+          entidadPlantelId: _entidadPlantelId,
         );
+        
+        // Lógica de comisión semiautomática (solo para movimientos nuevos)
+        await _verificarComision(_cuentaId!, monto, disciplinaId, settings.eventoActivoId);
       }
       
       if (!mounted) return;
@@ -235,6 +289,11 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
               title: const Text('Cámara'),
               onTap: () => Navigator.pop(context, 'camera'),
             ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('Archivo PDF'),
+              onTap: () => Navigator.pop(context, 'pdf'),
+            ),
             if (_attachmentFile != null)
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
@@ -259,6 +318,9 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       } else if (result == 'camera') {
         final file = await attachmentSvc.pickFromCamera();
         if (file != null) setState(() => _attachmentFile = file);
+      } else if (result == 'pdf') {
+        final file = await attachmentSvc.pickPdf();
+        if (file != null) setState(() => _attachmentFile = file);
       }
     } catch (e) {
       if (!mounted) return;
@@ -280,12 +342,10 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
     final settings = context.watch<AppSettings>();
     final unidadGestionId = settings.unidadGestionActivaId;
     
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.movimientoExistente != null ? 'Editar Movimiento' : 'Nuevo Movimiento'),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-      ),
+    return TesoreriaScaffold(
+      title: widget.movimientoExistente != null ? 'Editar Movimiento' : 'Nuevo Movimiento',
+      currentRouteName: '/crear_movimiento',
+      appBarColor: Colors.teal,
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
           : unidadGestionId == null
@@ -442,6 +502,70 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           
           const SizedBox(height: 16),
           
+          // Cuenta
+          if (_cuentas.isNotEmpty)
+            DropdownButtonFormField<int>(
+              value: _cuentaId,
+              decoration: const InputDecoration(
+                labelText: 'Cuenta *',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.account_balance_wallet),
+                helperText: 'Cuenta donde se registra el movimiento',
+              ),
+              items: _cuentas.map((cuenta) {
+                return DropdownMenuItem<int>(
+                  value: cuenta.id,
+                  child: Text('${cuenta.nombre} (${cuenta.tipo})'),
+                );
+              }).toList(),
+              onChanged: (v) => setState(() => _cuentaId = v),
+              validator: (v) => v == null ? 'Requerido' : null,
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange),
+              ),
+              child: const Text(
+                '⚠ No hay cuentas disponibles. Creá una cuenta primero.',
+                style: TextStyle(color: Colors.orange),
+              ),
+            ),
+          
+          const SizedBox(height: 16),
+          
+          // Entidad del plantel (opcional)
+          DropdownButtonFormField<int?>(
+            value: _entidadPlantelId,
+            decoration: const InputDecoration(
+              labelText: 'Asociar a jugador/staff (opcional)',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person),
+              helperText: 'Podés asociar este movimiento a una persona del plantel',
+            ),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('Sin asociar'),
+              ),
+              ..._entidadesPlantel.map((entidad) {
+                final id = entidad['id'] as int;
+                final nombre = entidad['nombre'] as String;
+                final rol = entidad['rol'] as String;
+                return DropdownMenuItem<int?>(
+                  value: id,
+                  child: Text('$nombre ($rol)'),
+                );
+              }),
+            ],
+            onChanged: (v) => setState(() => _entidadPlantelId = v),
+          ),
+          
+          const SizedBox(height: 16),
+          
           // Observación
           TextFormField(
             controller: _obsCtrl,
@@ -470,15 +594,45 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           
           if (_attachmentFile != null) ...[
             const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                _attachmentFile!,
-                height: 200,
-                width: double.infinity,
-                fit: BoxFit.cover,
+            // Mostrar nombre del archivo
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _attachmentFile!.path.toLowerCase().endsWith('.pdf')
+                        ? Icons.picture_as_pdf
+                        : Icons.image,
+                    color: Colors.green,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      p.basename(_attachmentFile!.path),
+                      style: const TextStyle(fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 12),
+            // Mostrar preview solo si es imagen (no PDF)
+            if (!_attachmentFile!.path.toLowerCase().endsWith('.pdf'))
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  _attachmentFile!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
           ],
           
           const SizedBox(height: 24),
@@ -512,6 +666,238 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         ],
       ),
       ),
+    );
+  }
+
+  /// Verifica si la cuenta tiene comisión y ofrece registrarla
+  Future<void> _verificarComision(int cuentaId, double monto, int disciplinaId, String? eventoId) async {
+    try {
+      final cuentaService = CuentaService();
+      final comision = await cuentaService.calcularComision(cuentaId, monto);
+      
+      if (comision == null || comision <= 0) return;
+      
+      if (!mounted) return;
+      
+      // Mostrar dialog de confirmación con campos editables
+      final resultado = await showDialog<Map<String, dynamic>?>(
+        context: context,
+        builder: (context) => _DialogComision(
+          comision: comision,
+          cuenta: _cuentas.firstWhere((c) => c.id == cuentaId),
+          montoTransferido: monto,
+          observacionMovimiento: _obsCtrl.text.trim(),
+        ),
+      );
+      
+      if (resultado == null) return; // Usuario canceló
+      
+      // Obtener valores editados del diálogo
+      final montoComision = resultado['monto'] as double? ?? comision;
+      final observacionExtra = resultado['observacion'] as String?;
+      
+      // Registrar comisión como movimiento separado con valores editados
+      final svc = EventoMovimientoService();
+      await svc.crear(
+        disciplinaId: disciplinaId,
+        cuentaId: cuentaId,
+        eventoId: eventoId,
+        tipo: 'EGRESO',
+        categoria: 'COM_BANC',
+        monto: montoComision,
+        medioPagoId: _medioPagoId!,
+        observacion: observacionExtra ?? 'Comisión bancaria',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Comisión de \$${comision.toStringAsFixed(2)} registrada'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'crear_movimiento_page.verificar_comision',
+        error: e,
+        stackTrace: st,
+      );
+      // Error silencioso - la comisión es opcional
+    }
+  }
+}
+
+/// Dialog para confirmar y editar comisión bancaria
+class _DialogComision extends StatefulWidget {
+  final double comision;
+  final CuentaFondos cuenta;
+  final double montoTransferido;
+  final String observacionMovimiento;
+
+  const _DialogComision({
+    required this.comision,
+    required this.cuenta,
+    required this.montoTransferido,
+    required this.observacionMovimiento,
+  });
+
+  @override
+  State<_DialogComision> createState() => _DialogComisionState();
+}
+
+class _DialogComisionState extends State<_DialogComision> {
+  late TextEditingController _montoController;
+  late TextEditingController _observacionController;
+  
+  @override
+  void initState() {
+    super.initState();
+    _montoController = TextEditingController(text: widget.comision.toStringAsFixed(2));
+    
+    // Precargar observación con prefijo
+    final observacionPrefijo = widget.observacionMovimiento.isNotEmpty
+        ? 'Comisión bancaria: ${widget.observacionMovimiento}'
+        : 'Comisión bancaria';
+    _observacionController = TextEditingController(text: observacionPrefijo);
+  }
+
+  @override
+  void dispose() {
+    _montoController.dispose();
+    _observacionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final porcentaje = widget.cuenta.comisionPorcentaje ?? 0.0;
+    
+    return AlertDialog(
+      icon: const Icon(Icons.account_balance, size: 48, color: Colors.orange),
+      title: const Text('Comisión Bancaria'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'La cuenta "${widget.cuenta.nombre}" cobra comisión del $porcentaje%.',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            
+            // Info de cálculo
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Monto transferido:'),
+                      Text(
+                        '\$ ${widget.montoTransferido.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Porcentaje comisión:'),
+                      Text(
+                        '$porcentaje%',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Comisión calculada:'),
+                      Text(
+                        '\$ ${widget.comision.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 20),
+            const Text(
+              'Monto de comisión (editable):',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _montoController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                prefixText: '\$ ',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            const Text(
+              'Observación (opcional):',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _observacionController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Detalles adicionales...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final montoEditado = double.tryParse(_montoController.text) ?? widget.comision;
+            final observacion = _observacionController.text.trim();
+            
+            Navigator.pop(context, {
+              'monto': montoEditado,
+              'observacion': observacion.isEmpty ? null : observacion,
+            });
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.orange,
+          ),
+          child: const Text('Confirmar'),
+        ),
+      ],
     );
   }
 }

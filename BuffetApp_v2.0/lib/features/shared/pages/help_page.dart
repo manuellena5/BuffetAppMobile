@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../app_version.dart';
+import '../widgets/tesoreria_scaffold.dart';
+import '../widgets/responsive_container.dart';
 
 class HelpPage extends StatelessWidget {
   const HelpPage({super.key});
@@ -8,11 +10,15 @@ class HelpPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final bodyStyle = Theme.of(context).textTheme.bodyMedium;
     final iconSize = (bodyStyle?.fontSize ?? 14.0);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ayuda')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+    return TesoreriaScaffold(
+      title: 'Ayuda',
+      currentRouteName: '/help',
+      appBarColor: Colors.blue,
+      body: ResponsiveContainer(
+        maxWidth: 800,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -170,7 +176,8 @@ class HelpPage extends StatelessWidget {
           const Text(
             '• Cierre de caja: Diferencia = ((Efectivo declarado - Fondo Inicial - Ingresos + Retiros) + Transferencias) - Total Ventas (sistema).',
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
 import '../services/categoria_movimiento_service.dart';
+import '../services/cuenta_service.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 class MovimientosPage extends StatefulWidget {
   final int cajaId;
@@ -24,6 +26,7 @@ class MovimientoCreatePage extends StatefulWidget {
 
 class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
   final _svc = EventoMovimientoService();
+  final _cuentaSvc = CuentaService();
 
   String _tipo = 'INGRESO';
   String? _codigoCategoria;
@@ -34,7 +37,9 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
   bool _saving = false;
   List<Map<String, dynamic>> _metodosPago = const [];
   List<Map<String, dynamic>> _categorias = [];
+  List<Map<String, dynamic>> _cuentas = [];
   int? _medioPagoId;
+  int? _cuentaId;
 
   @override
   void initState() {
@@ -44,13 +49,26 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
 
   Future<void> _load() async {
     try {
+      final settings = context.read<AppSettings>();
+      final disciplinaId = settings.disciplinaActivaId;
+
       final db = await AppDatabase.instance();
       final rows = await db.query('metodos_pago', orderBy: 'id ASC');
       await _cargarCategorias();
+
+      List<Map<String, dynamic>> cuentas = [];
+      if (disciplinaId != null) {
+        final cuentasObj = await _cuentaSvc.listarPorUnidad(disciplinaId);
+        cuentas = cuentasObj.map((c) => c.toMap()).toList();
+      }
+
+      if (!mounted) return;
       setState(() {
         _metodosPago = rows.map((e) => Map<String, dynamic>.from(e)).toList();
         _medioPagoId =
             _metodosPago.isNotEmpty ? (_metodosPago.first['id'] as int?) : null;
+        _cuentas = cuentas;
+        _cuentaId = _cuentas.isNotEmpty ? (_cuentas.first['id'] as int?) : null;
         _loading = false;
       });
     } catch (e, st) {
@@ -66,12 +84,14 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
 
   Future<void> _cargarCategorias() async {
     try {
-      final cats = await CategoriaMovimientoService.obtenerCategoriasPorTipo(tipo: _tipo);
+      final cats = await CategoriaMovimientoService.obtenerCategoriasPorTipo(
+          tipo: _tipo);
       setState(() {
         _categorias = cats;
         // Verificar si la categoría actual sigue siendo válida
         if (_codigoCategoria != null) {
-          final esValida = _categorias.any((cat) => cat['codigo'] == _codigoCategoria);
+          final esValida =
+              _categorias.any((cat) => cat['codigo'] == _codigoCategoria);
           if (!esValida) {
             _codigoCategoria = null; // Limpiar si no es válida
           }
@@ -117,11 +137,17 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
           const SnackBar(content: Text('Seleccioná un medio de pago')));
       return;
     }
+    if (_cuentaId == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Seleccioná una cuenta')));
+      return;
+    }
 
     setState(() => _saving = true);
     try {
       await _svc.crear(
         disciplinaId: disciplinaId,
+        cuentaId: _cuentaId!,
         eventoId: settings.eventoActivoId,
         tipo: _tipo,
         categoria: _codigoCategoria,
@@ -216,7 +242,7 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
                     ),
                   ] else ...[
                     DropdownButtonFormField<String>(
-                      value: _tipo,
+                      initialValue: _tipo,
                       decoration: const InputDecoration(labelText: 'Tipo'),
                       items: const [
                         DropdownMenuItem(
@@ -231,7 +257,7 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      value: _codigoCategoria,
+                      initialValue: _codigoCategoria,
                       decoration: const InputDecoration(
                         labelText: 'Categoría (opcional)',
                         hintText: 'Seleccionar categoría',
@@ -255,7 +281,7 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<int>(
-                      value: _medioPagoId,
+                      initialValue: _medioPagoId,
                       decoration:
                           const InputDecoration(labelText: 'Medio de pago'),
                       items: _metodosPago
@@ -266,6 +292,18 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
                               ))
                           .toList(),
                       onChanged: (v) => setState(() => _medioPagoId = v),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int>(
+                      initialValue: _cuentaId,
+                      decoration: const InputDecoration(labelText: 'Cuenta'),
+                      items: _cuentas
+                          .map((c) => DropdownMenuItem<int>(
+                                value: c['id'] as int,
+                                child: Text('${c['nombre']} (${c['tipo']})'),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _cuentaId = v),
                     ),
                     const SizedBox(height: 10),
                     TextField(
@@ -444,77 +482,81 @@ class _MovimientosPageState extends State<MovimientosPage> {
               child: const Icon(Icons.add),
             )
           : null,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (caja != null) ...[
-                    Text(
-                        'Caja: ${caja['codigo_caja']} • Estado: ${caja['estado']}'),
-                    const SizedBox(height: 4),
-                    Text(
-                        'Ingresos: ${formatCurrency(_totales['ingresos'] ?? 0)}  •  Retiros: ${formatCurrency(_totales['retiros'] ?? 0)}'),
-                    const Divider(height: 20),
+      body: LandscapeCenteredBody(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (caja != null) ...[
+                      Text(
+                          'Caja: ${caja['codigo_caja']} • Estado: ${caja['estado']}'),
+                      const SizedBox(height: 4),
+                      Text(
+                          'Ingresos: ${formatCurrency(_totales['ingresos'] ?? 0)}  •  Retiros: ${formatCurrency(_totales['retiros'] ?? 0)}'),
+                      const Divider(height: 20),
+                    ],
+                    if (_rows.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child:
+                            Center(child: Text('Sin movimientos registrados')),
+                      )
+                    else
+                      ..._rows.map((m) {
+                        final tipo = (m['tipo'] ?? '').toString();
+                        final monto = (m['monto'] as num?)?.toDouble() ?? 0;
+                        final obs = (m['observacion'] as String?) ?? '';
+                        final fecha = _formatCreatedTs(m['created_ts']);
+                        final color = tipo == 'INGRESO'
+                            ? Colors.green.shade200
+                            : Colors.red.shade200;
+                        final canEdit =
+                            (caja != null && caja['estado'] == 'ABIERTA');
+                        return Card(
+                          color: color,
+                          child: ListTile(
+                            title: Text(
+                              '$tipo: ${formatCurrency(monto)}',
+                              style: _tileTitleStyle,
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (obs.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        top: 2, bottom: 2),
+                                    child: Text(obs, style: _tileObsStyle),
+                                  ),
+                                Text(fecha, style: _tileDateStyle),
+                              ],
+                            ),
+                            trailing: canEdit
+                                ? PopupMenuButton<String>(
+                                    onSelected: (v) {
+                                      if (v == 'edit') _editar(m);
+                                      if (v == 'del') _eliminar(m['id'] as int);
+                                    },
+                                    itemBuilder: (ctx) => [
+                                      const PopupMenuItem(
+                                          value: 'edit', child: Text('Editar')),
+                                      const PopupMenuItem(
+                                          value: 'del',
+                                          child: Text('Eliminar')),
+                                    ],
+                                  )
+                                : null,
+                            onTap: canEdit ? () => _editar(m) : null,
+                          ),
+                        );
+                      }),
                   ],
-                  if (_rows.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Center(child: Text('Sin movimientos registrados')),
-                    )
-                  else
-                    ..._rows.map((m) {
-                      final tipo = (m['tipo'] ?? '').toString();
-                      final monto = (m['monto'] as num?)?.toDouble() ?? 0;
-                      final obs = (m['observacion'] as String?) ?? '';
-                      final fecha = _formatCreatedTs(m['created_ts']);
-                      final color = tipo == 'INGRESO'
-                          ? Colors.green.shade200
-                          : Colors.red.shade200;
-                      final canEdit =
-                          (caja != null && caja['estado'] == 'ABIERTA');
-                      return Card(
-                        color: color,
-                        child: ListTile(
-                          title: Text(
-                            '$tipo: ${formatCurrency(monto)}',
-                            style: _tileTitleStyle,
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (obs.isNotEmpty)
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.only(top: 2, bottom: 2),
-                                  child: Text(obs, style: _tileObsStyle),
-                                ),
-                              Text(fecha, style: _tileDateStyle),
-                            ],
-                          ),
-                          trailing: canEdit
-                              ? PopupMenuButton<String>(
-                                  onSelected: (v) {
-                                    if (v == 'edit') _editar(m);
-                                    if (v == 'del') _eliminar(m['id'] as int);
-                                  },
-                                  itemBuilder: (ctx) => [
-                                    const PopupMenuItem(
-                                        value: 'edit', child: Text('Editar')),
-                                    const PopupMenuItem(
-                                        value: 'del', child: Text('Eliminar')),
-                                  ],
-                                )
-                              : null,
-                          onTap: canEdit ? () => _editar(m) : null,
-                        ),
-                      );
-                    }),
-                ],
+                ),
               ),
-            ),
+      ),
     );
   }
 }

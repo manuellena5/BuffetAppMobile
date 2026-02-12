@@ -81,13 +81,52 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Entidad creada correctamente'),
-            backgroundColor: Colors.green,
+        // Modal de confirmación exitosa
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                SizedBox(width: 12),
+                Text('Entidad Creada'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'La entidad se creó correctamente con los siguientes datos:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                SizedBox(height: 16),
+                _buildInfoRow('Nombre', _nombreController.text.trim()),
+                _buildInfoRow('Rol', _rolSeleccionado),
+                if (_aliasController.text.trim().isNotEmpty)
+                  _buildInfoRow('Alias', _aliasController.text.trim()),
+                if (_dniController.text.trim().isNotEmpty)
+                  _buildInfoRow('DNI', _dniController.text.trim()),
+                if (_fechaNacimiento != null)
+                  _buildInfoRow('Fecha Nac.', '${_fechaNacimiento!.day}/${_fechaNacimiento!.month}/${_fechaNacimiento!.year}'),
+                if (_posicion != null)
+                  _buildInfoRow('Posición', _posicion!),
+                if (_tipoContratacion != null)
+                  _buildInfoRow('Contratación', _tipoContratacion!),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Cierra el dialog
+                  Navigator.pop(context, true); // Retorna a la pantalla anterior
+                },
+                child: Text('Aceptar'),
+              ),
+            ],
           ),
         );
-        Navigator.pop(context, true); // Retorna true para recargar lista
       }
     } catch (e, stack) {
       await AppDatabase.logLocalError(
@@ -98,12 +137,28 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
       );
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().contains('Ya existe')
-                ? 'Ya existe una entidad con ese nombre'
-                : 'Error al crear entidad. Por favor, intente nuevamente.'),
-            backgroundColor: Colors.red,
+        // Modal de error
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 32),
+                SizedBox(width: 12),
+                Text('Error'),
+              ],
+            ),
+            content: Text(
+              e.toString().contains('Ya existe')
+                  ? 'Ya existe una entidad con ese nombre. Por favor, use un nombre diferente.'
+                  : 'No se pudo crear la entidad. Por favor, intente nuevamente.\n\nDetalle: ${e.toString()}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cerrar'),
+              ),
+            ],
           ),
         );
       }
@@ -379,6 +434,33 @@ class _CrearJugadorPageState extends State<CrearJugadorPage> {
           ],
         ),
       ),
+      ),
+    );
+  }
+  
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
       ),
     );
   }

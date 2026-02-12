@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import '../services/reporte_categorias_service.dart';
 import '../../shared/format.dart';
 
@@ -235,29 +237,30 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reporte por Categorías'),
-        backgroundColor: Colors.green,
-        actions: [
-          IconButton(
-            icon: _exportando
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.download),
-            onPressed: _exportando ? null : _exportarExcel,
-            tooltip: 'Exportar a Excel (CSV)',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
+    return TesoreriaScaffold(
+      title: 'Reporte por Categorías',
+      currentRouteName: '/reportes/categorias',
+      appBarColor: Colors.green,
+      actions: [
+        IconButton(
+          icon: _exportando
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.download),
+          onPressed: _exportando ? null : _exportarExcel,
+          tooltip: 'Exportar a Excel (CSV)',
+        ),
+      ],
+      body: ResponsiveContainer(
+        maxWidth: 1400,
+        child: Column(
+          children: [
           // Selector de Mes (tipo carrusel)
           if (!_usandoFiltroPersonalizado)
             Container(
@@ -486,8 +489,9 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildKPI(String label, String value, Color color, IconData icon) {
     return Card(

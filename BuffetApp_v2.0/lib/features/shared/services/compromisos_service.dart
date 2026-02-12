@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../../../data/dao/db.dart';
+import '../../../domain/paginated_result.dart';
 
 /// FASE 13.4: Servicio para gestionar compromisos financieros
 /// (obligaciones recurrentes como sueldos, sponsors, seguros).
@@ -212,6 +213,129 @@ class CompromisosService {
     return rows.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
+  /// FASE 31: Obtener compromisos con paginación
+  /// 
+  /// [unidadGestionId] - ID de la unidad de gestión (obligatorio)
+  /// [page] - Número de página (base 1, default: 1)
+  /// [pageSize] - Items por página (default: 50)
+  /// [entidadPlantelId] - Filtro opcional por jugador/DT
+  /// [tipo] - Filtro opcional por tipo (INGRESO/EGRESO)
+  /// [estado] - Filtro opcional por estado (ESPERADO/CONFIRMADO/CANCELADO)
+  /// [activo] - Filtro opcional por estado activo
+  /// [desde] - Fecha vencimiento desde (opcional)
+  /// [hasta] - Fecha vencimiento hasta (opcional)
+  Future<PaginatedResult<Map<String, dynamic>>> getCompromisosPaginados({
+    required int unidadGestionId,
+    int page = 1,
+    int pageSize = 50,
+    int? entidadPlantelId,
+    String? tipo,
+    String? estado,
+    bool? activo,
+    DateTime? desde,
+    DateTime? hasta,
+    bool incluirEliminados = false,
+  }) async {
+    try {
+      final db = await AppDatabase.instance();
+      
+      // Construir WHERE clause
+      final whereConditions = <String>[];
+      final whereArgs = <dynamic>[];
+
+      if (!incluirEliminados) {
+        whereConditions.add('c.eliminado = 0');
+      }
+
+      whereConditions.add('c.unidad_gestion_id = ?');
+      whereArgs.add(unidadGestionId);
+
+      if (entidadPlantelId != null) {
+        whereConditions.add('c.entidad_plantel_id = ?');
+        whereArgs.add(entidadPlantelId);
+      }
+
+      if (tipo != null && tipo.isNotEmpty) {
+        whereConditions.add('c.tipo = ?');
+        whereArgs.add(tipo);
+      }
+
+      if (estado != null && estado.isNotEmpty) {
+        whereConditions.add('c.estado = ?');
+        whereArgs.add(estado);
+      }
+
+      if (activo != null) {
+        whereConditions.add('c.activo = ?');
+        whereArgs.add(activo ? 1 : 0);
+      }
+
+      if (desde != null) {
+        whereConditions.add('c.fecha_vencimiento >= ?');
+        whereArgs.add(desde.toIso8601String().substring(0, 10));
+      }
+
+      if (hasta != null) {
+        whereConditions.add('c.fecha_vencimiento <= ?');
+        whereArgs.add(hasta.toIso8601String().substring(0, 10));
+      }
+
+      final whereClause = whereConditions.join(' AND ');
+
+      // Contar total de registros
+      final countResult = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM compromisos c WHERE $whereClause',
+        whereArgs,
+      );
+      final totalCount = Sqflite.firstIntValue(countResult) ?? 0;
+
+      if (totalCount == 0) {
+        return PaginatedResult.empty();
+      }
+
+      // Obtener items de la página actual con JOIN para nombre de entidad
+      final offset = (page - 1) * pageSize;
+      final query = '''
+        SELECT 
+          c.*,
+          ep.nombre as entidad_nombre,
+          ep.apellido as entidad_apellido,
+          ep.tipo as entidad_tipo
+        FROM compromisos c
+        LEFT JOIN entidades_plantel ep ON c.entidad_plantel_id = ep.id
+        WHERE $whereClause
+        ORDER BY c.fecha_vencimiento ASC, c.created_ts DESC
+        LIMIT ? OFFSET ?
+      ''';
+
+      final items = await db.rawQuery(
+        query,
+        [...whereArgs, pageSize, offset],
+      );
+
+      final compromisos = items.map((row) => Map<String, dynamic>.from(row)).toList();
+
+      return PaginatedResult<Map<String, dynamic>>(
+        items: compromisos,
+        totalCount: totalCount,
+        pageSize: pageSize,
+        currentPage: page,
+      );
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'compromisos_service.get_paginados',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {
+          'unidad_gestion_id': unidadGestionId,
+          'page': page,
+          'page_size': pageSize,
+        },
+      );
+      return PaginatedResult.empty();
+    }
+  }
+
   /// Actualiza un compromiso existente.
   ///
   /// Solo actualiza los campos proporcionados (no nulls).
@@ -304,12 +428,20 @@ class CompromisosService {
     if (archivoSize != null) updates['archivo_size'] = archivoSize;
     if (entidadPlantelId != null) updates['entidad_plantel_id'] = entidadPlantelId;
 
-    return await db.update(
+    final result = await db.update(
       'compromisos',
       updates,
       where: 'id = ?',
       whereArgs: [id],
     );
+
+    // FASE 22.1: Recalcular estado después de actualizar
+    // Si se modificaron fechas, cuotas o modalidad, las cuotas pueden haber cambiado
+    if (result > 0 && (fechaInicio != null || fechaFin != null || cuotas != null || modalidad != null)) {
+      await recalcularEstado(id);
+    }
+
+    return result;
   }
 
   /// Pausa un compromiso (activo=0).
@@ -406,18 +538,42 @@ class CompromisosService {
 
   /// Calcula cuotas restantes de un compromiso.
   ///
+  /// FASE 22.1: Si hay cuotas generadas en compromiso_cuotas, cuenta las ESPERADO.
+  /// Si NO hay cuotas generadas (legacy), usa cálculo basado en compromisos.cuotas.
+  ///
   /// Retorna:
-  /// - Si tiene cuotas definidas: cuotas - cuotas_confirmadas
+  /// - Si tiene cuotas definidas: cuotas - cuotas_confirmadas (legacy)
+  /// - Si tiene cuotas generadas: count(estado = ESPERADO)
   /// - Si no tiene cuotas (null): null (infinitas)
   Future<int?> calcularCuotasRestantes(int compromisoId) async {
-    final compromiso = await obtenerCompromiso(compromisoId);
-    if (compromiso == null) return null;
-
-    final cuotasTotales = compromiso['cuotas'] as int?;
-    if (cuotasTotales == null) return null; // Infinitas
-
-    final confirmadas = await contarCuotasConfirmadas(compromisoId);
-    return (cuotasTotales - confirmadas).clamp(0, cuotasTotales);
+    final db = await AppDatabase.instance();
+    
+    // Verificar si hay cuotas generadas en compromiso_cuotas
+    final cuotasExistentes = await db.query(
+      'compromiso_cuotas',
+      where: 'compromiso_id = ?',
+      whereArgs: [compromisoId],
+    );
+    
+    if (cuotasExistentes.isNotEmpty) {
+      // Nuevo comportamiento: contar cuotas ESPERADO desde compromiso_cuotas
+      final cuotasEsperadas = await db.query(
+        'compromiso_cuotas',
+        where: 'compromiso_id = ? AND estado = ?',
+        whereArgs: [compromisoId, 'ESPERADO'],
+      );
+      return cuotasEsperadas.length;
+    } else {
+      // Legacy: calcular basado en compromisos.cuotas - confirmadas
+      final comp = await obtenerCompromiso(compromisoId);
+      if (comp == null) return null;
+      
+      final cuotasTotales = comp['cuotas'] as int?;
+      if (cuotasTotales == null) return null;
+      
+      final confirmadas = await contarCuotasConfirmadas(compromisoId);
+      return (cuotasTotales - confirmadas).clamp(0, cuotasTotales);
+    }
   }
 
   /// Calcula el próximo vencimiento de un compromiso.
@@ -983,6 +1139,67 @@ class CompromisosService {
     );
 
     return rows.isEmpty ? null : rows.first;
+  }
+
+  /// FASE 22.1: Recalcular cuotas_totales y cuotas_confirmadas desde la base de datos
+  ///
+  /// Este método cuenta las cuotas reales generadas en la tabla compromiso_cuotas
+  /// y actualiza los campos correspondientes en la tabla compromisos.
+  ///
+  /// Se debe llamar después de:
+  /// - Modificar un compromiso (cambio de fechas, cuotas, etc.)
+  /// - Generar nuevas cuotas
+  /// - Eliminar cuotas
+  /// - Confirmar un movimiento de cuota
+  ///
+  /// Retorna: mapa con 'cuotas_totales' y 'cuotas_confirmadas'
+  Future<Map<String, int>> recalcularEstado(int compromisoId) async {
+    try {
+      final db = await AppDatabase.instance();
+
+      // Contar cuotas totales generadas en compromiso_cuotas
+      final totalResult = await db.rawQuery('''
+        SELECT COUNT(*) as total
+        FROM compromiso_cuotas
+        WHERE compromiso_id = ?
+      ''', [compromisoId]);
+      
+      final cuotasTotales = (totalResult.first['total'] as int?) ?? 0;
+
+      // Contar cuotas confirmadas
+      final confirmadasResult = await db.rawQuery('''
+        SELECT COUNT(*) as confirmadas
+        FROM compromiso_cuotas
+        WHERE compromiso_id = ? AND estado = 'CONFIRMADO'
+      ''', [compromisoId]);
+      
+      final cuotasConfirmadas = (confirmadasResult.first['confirmadas'] as int?) ?? 0;
+
+      // Actualizar compromiso con los valores recalculados
+      await db.update(
+        'compromisos',
+        {
+          'cuotas': cuotasTotales,
+          'cuotas_confirmadas': cuotasConfirmadas,
+          'updated_ts': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [compromisoId],
+      );
+
+      return {
+        'cuotas_totales': cuotasTotales,
+        'cuotas_confirmadas': cuotasConfirmadas,
+      };
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'compromisos_service.recalcular_estado',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'compromiso_id': compromisoId},
+      );
+      rethrow;
+    }
   }
 }
 

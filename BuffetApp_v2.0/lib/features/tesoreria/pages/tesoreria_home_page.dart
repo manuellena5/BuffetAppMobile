@@ -64,7 +64,6 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
         onComplete: () {
           setState(() {
             _needsUnidadGestionSetup = false;
-            _loading = true;
           });
           // Recargar datos después de seleccionar unidad
           _checkUnidadGestionAndLoad();

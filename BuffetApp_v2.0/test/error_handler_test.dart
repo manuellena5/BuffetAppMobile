@@ -79,7 +79,7 @@ void main() {
 
   testWidgets('Error handler funciona correctamente',
       (WidgetTester tester) async {
-    final db = await AppDatabase.instance();
+    await AppDatabase.instance();
     
     // Limpiar logs previos
     await AppDatabase.clearErrorLogs();

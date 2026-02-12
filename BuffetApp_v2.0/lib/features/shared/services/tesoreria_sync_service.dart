@@ -15,7 +15,17 @@ class TesoreriaSyncService {
   factory TesoreriaSyncService() => _instance;
   TesoreriaSyncService._internal();
 
-  final _supabase = Supabase.instance.client;
+  // Acceso perezoso y seguro al cliente Supabase. En entornos de test
+  // donde Supabase no está inicializado, esto retornará null y el
+  // servicio debe funcionar en modo offline (no lanzar assertions).
+  SupabaseClient? get _supabaseClient {
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
   final String _bucketName = 'movimientos-adjuntos';
 
   /// Sincroniza un movimiento individual
@@ -49,11 +59,13 @@ class TesoreriaSyncService {
         throw Exception('El movimiento ya está sincronizado');
       }
 
-      // Subir archivo adjunto si existe
+      // Subir archivo adjunto si existe (solo si Supabase disponible)
       String? archivoUrl;
       final archivoPath = (mov['archivo_local_path'] ?? '').toString();
-      if (archivoPath.isNotEmpty && File(archivoPath).existsSync()) {
-        archivoUrl = await _uploadArchivo(movimientoId, archivoPath);
+      if (_supabaseClient != null) {
+        if (archivoPath.isNotEmpty && File(archivoPath).existsSync()) {
+          archivoUrl = await _uploadArchivo(movimientoId, archivoPath);
+        }
       }
 
       // Preparar payload para Supabase
@@ -77,10 +89,19 @@ class TesoreriaSyncService {
         'updated_ts': mov['updated_ts'],
       };
 
-      // Insert en Supabase
-      await _supabase
-          .from('evento_movimiento')
-          .insert(payload);
+      // Insert en Supabase (si está disponible)
+      final sup = _supabaseClient;
+      if (sup != null) {
+        await sup.from('evento_movimiento').insert(payload);
+      } else {
+        // Si no hay Supabase, registrar un log local y fallar la sincronización
+        await AppDatabase.logLocalError(
+          scope: 'tesoreria_sync.offline',
+          error: 'Supabase no inicializado - operación en modo offline',
+          payload: {'movimientoId': movimientoId},
+        );
+        throw Exception('Supabase no inicializado');
+      }
 
       // Marcar como sincronizado en local
       await db.update(
@@ -153,15 +174,16 @@ class TesoreriaSyncService {
     // Leer bytes del archivo
     final bytes = await file.readAsBytes();
 
+    final sup = _supabaseClient;
+    if (sup == null) {
+      throw Exception('Supabase no inicializado');
+    }
+
     // Subir a Supabase Storage
-    await _supabase.storage
-        .from(_bucketName)
-        .uploadBinary(fileName, bytes);
+    await sup.storage.from(_bucketName).uploadBinary(fileName, bytes);
 
     // Obtener URL pública
-    final publicUrl = _supabase.storage
-        .from(_bucketName)
-        .getPublicUrl(fileName);
+    final publicUrl = sup.storage.from(_bucketName).getPublicUrl(fileName);
 
     return publicUrl;
   }
@@ -194,10 +216,17 @@ class TesoreriaSyncService {
         'updated_ts': unidad['updated_ts'],
       };
 
+      final sup = _supabaseClient;
+      if (sup == null) {
+        await AppDatabase.logLocalError(
+          scope: 'tesoreria_sync.offline',
+          error: 'Supabase no inicializado - syncUnidadGestion no ejecutada',
+          payload: {'unidadId': unidadId},
+        );
+        throw Exception('Supabase no inicializado');
+      }
       // Upsert en Supabase (por ID)
-      await _supabase
-          .from('unidades_gestion')
-          .upsert(payload);
+      await sup.from('unidades_gestion').upsert(payload);
 
       return true;
     } catch (e, st) {
@@ -217,7 +246,12 @@ class TesoreriaSyncService {
   /// - total: cantidad total de movimientos pendientes
   /// - exitosos: cantidad sincronizada correctamente
   /// - fallidos: cantidad con errores
-  Future<Map<String, int>> syncMovimientosPendientes() async {
+  /// Sincroniza todos los movimientos pendientes
+  /// 
+  /// [onProgress] callback opcional para reportar progreso: (current, total)
+  Future<Map<String, int>> syncMovimientosPendientes({
+    void Function(int current, int total)? onProgress,
+  }) async {
     int total = 0;
     int exitosos = 0;
     int fallidos = 0;
@@ -234,7 +268,8 @@ class TesoreriaSyncService {
 
       total = pendientes.length;
 
-      for (final mov in pendientes) {
+      for (int i = 0; i < pendientes.length; i++) {
+        final mov = pendientes[i];
         final id = mov['id'] as int?;
         if (id == null) continue;
 
@@ -243,6 +278,11 @@ class TesoreriaSyncService {
           exitosos++;
         } else {
           fallidos++;
+        }
+
+        // Reportar progreso
+        if (onProgress != null) {
+          onProgress(i + 1, total);
         }
       }
     } catch (e, st) {
@@ -302,11 +342,10 @@ class TesoreriaSyncService {
   /// Valida conectividad con Supabase
   Future<bool> verificarConexion() async {
     try {
+      final sup = _supabaseClient;
+      if (sup == null) return false;
       // Intentar una consulta simple
-      await _supabase
-          .from('metodos_pago')
-          .select('id')
-          .limit(1);
+      await sup.from('metodos_pago').select('id').limit(1);
       return true;
     } catch (e) {
       return false;

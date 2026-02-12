@@ -149,10 +149,29 @@ class AcuerdosService {
         'dispositivo_id': dispositivoId,
         'origen_grupal': origenGrupal ? 1 : 0,
         'acuerdo_grupal_ref': acuerdoGrupalRef,
+        'version_actual': 1,
+        'fecha_vigencia_desde': fechaInicio,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
         'created_ts': now,
         'updated_ts': now,
+      });
+      
+      // Crear versión inicial en acuerdos_versiones
+      await db.insert('acuerdos_versiones', {
+        'acuerdo_id': id,
+        'version': 1,
+        'modalidad': modalidad,
+        'monto_total': montoTotal,
+        'monto_periodico': montoPeriodico,
+        'frecuencia': frecuencia,
+        'frecuencia_dias': frecuenciaDias,
+        'cuotas': cuotas,
+        'fecha_vigencia_desde': fechaInicio,
+        'fecha_vigencia_hasta': null,
+        'motivo_cambio': 'Versión inicial',
+        'dispositivo_id': dispositivoId,
+        'created_ts': now,
       });
       
       return id;
@@ -268,11 +287,33 @@ class AcuerdosService {
   /// Actualizar un acuerdo existente
   /// 
   /// Validación crítica: NO permite editar si el acuerdo tiene compromisos CONFIRMADO
+  /// Actualizar acuerdo (con versionado para cambios de monto/frecuencia/modalidad)
+  /// 
+  /// REGLA NO NEGOCIABLE: No modificar datos pasados (compromisos confirmados).
+  /// 
+  /// Si se modifica monto/frecuencia/modalidad:
+  /// - Crea nueva versión con fecha_vigencia_desde = hoy
+  /// - Cierra versión anterior (fecha_vigencia_hasta = ayer)
+  /// - Futuros compromisos usarán nueva versión
+  /// - Compromisos pasados permanecen con versión anterior
+  /// 
+  /// Parámetros que crean nueva versión:
+  /// - modalidad, montoTotal, montoPeriodico, frecuencia, frecuenciaDias, cuotas
+  /// 
+  /// Parámetros que NO crean versión (actualización simple):
+  /// - nombre, fechaFin, observaciones, archivos
   static Future<void> actualizarAcuerdo({
     required int id,
     String? nombre,
+    String? modalidad,
+    double? montoTotal,
+    double? montoPeriodico,
+    String? frecuencia,
+    int? frecuenciaDias,
+    int? cuotas,
     String? fechaFin,
     String? observaciones,
+    String? motivoCambio, // Requerido si hay cambios que crean versión
     String? archivoLocalPath,
     String? archivoRemoteUrl,
     String? archivoNombre,
@@ -288,7 +329,7 @@ class AcuerdosService {
         throw ArgumentError('Acuerdo $id no existe');
       }
       
-      // REGLA NO NEGOCIABLE: No editar acuerdos con compromisos confirmados
+      // REGLA NO NEGOCIABLE: No editar acuerdos con compromisos confirmados EN EL PASADO
       final compromisosConfirmados = await db.rawQuery('''
         SELECT COUNT(*) as count
         FROM compromisos c
@@ -296,14 +337,40 @@ class AcuerdosService {
         WHERE c.acuerdo_id = ? AND cc.estado = 'CONFIRMADO'
       ''', [id]);
       
-      final count = (compromisosConfirmados.first['count'] as int?) ?? 0;
-      if (count > 0) {
-        throw StateError(
-          'No se puede editar un acuerdo con compromisos confirmados. '
-          'Use finalizar() para cerrar el acuerdo.'
+      final countConfirmados = (compromisosConfirmados.first['count'] as int?) ?? 0;
+      
+      // Detectar si hay cambios que requieren versionado
+      final cambiosVersionables = modalidad != null ||
+          montoTotal != null ||
+          montoPeriodico != null ||
+          frecuencia != null ||
+          frecuenciaDias != null ||
+          cuotas != null;
+      
+      if (cambiosVersionables) {
+        // VALIDACIÓN: Si hay compromisos confirmados, solo podemos crear nueva versión
+        if (countConfirmados > 0 && motivoCambio == null) {
+          throw ArgumentError(
+            'Debe proporcionar motivo_cambio para modificar un acuerdo con compromisos confirmados'
+          );
+        }
+        
+        // Crear nueva versión
+        await _crearNuevaVersionAcuerdo(
+          db: db,
+          acuerdoId: id,
+          acuerdoActual: acuerdo,
+          nuevaModalidad: modalidad,
+          nuevoMontoTotal: montoTotal,
+          nuevoMontoPeriodico: montoPeriodico,
+          nuevaFrecuencia: frecuencia,
+          nuevosFrecuenciaDias: frecuenciaDias,
+          nuevasCuotas: cuotas,
+          motivoCambio: motivoCambio ?? 'Modificación de parámetros',
         );
       }
       
+      // Actualización simple de campos no versionables
       final updates = <String, dynamic>{};
       
       if (nombre != null) updates['nombre'] = nombre;
@@ -323,23 +390,116 @@ class AcuerdosService {
       if (archivoTipo != null) updates['archivo_tipo'] = archivoTipo;
       if (archivoSize != null) updates['archivo_size'] = archivoSize;
       
-      if (updates.isEmpty) return;
-      
-      updates['updated_ts'] = DateTime.now().millisecondsSinceEpoch;
-      updates['sync_estado'] = 'PENDIENTE';
-      
-      await db.update(
-        'acuerdos',
-        updates,
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      if (updates.isNotEmpty) {
+        updates['updated_ts'] = DateTime.now().millisecondsSinceEpoch;
+        updates['sync_estado'] = 'PENDIENTE';
+        
+        await db.update(
+          'acuerdos',
+          updates,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
     } catch (e, stack) {
       await AppDatabase.logLocalError(
         scope: 'acuerdos_service.actualizar_acuerdo',
         error: e.toString(),
         stackTrace: stack,
         payload: {'id': id},
+      );
+      rethrow;
+    }
+  }
+
+  /// Crea una nueva versión de un acuerdo (uso interno)
+  static Future<void> _crearNuevaVersionAcuerdo({
+    required Database db,
+    required int acuerdoId,
+    required Map<String, dynamic> acuerdoActual,
+    String? nuevaModalidad,
+    double? nuevoMontoTotal,
+    double? nuevoMontoPeriodico,
+    String? nuevaFrecuencia,
+    int? nuevosFrecuenciaDias,
+    int? nuevasCuotas,
+    required String motivoCambio,
+  }) async {
+    final now = DateTime.now();
+    final hoy = '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    
+    final ayer = now.subtract(const Duration(days: 1));
+    final ayerStr = '${ayer.year.toString().padLeft(4, '0')}-'
+        '${ayer.month.toString().padLeft(2, '0')}-'
+        '${ayer.day.toString().padLeft(2, '0')}';
+    
+    final versionActual = (acuerdoActual['version_actual'] as int?) ?? 1;
+    final nuevaVersion = versionActual + 1;
+    
+    // 1) Cerrar versión anterior (fecha_vigencia_hasta = ayer)
+    await db.update(
+      'acuerdos_versiones',
+      {'fecha_vigencia_hasta': ayerStr},
+      where: 'acuerdo_id = ? AND version = ?',
+      whereArgs: [acuerdoId, versionActual],
+    );
+    
+    // 2) Crear nueva versión
+    await db.insert('acuerdos_versiones', {
+      'acuerdo_id': acuerdoId,
+      'version': nuevaVersion,
+      'modalidad': nuevaModalidad ?? acuerdoActual['modalidad'],
+      'monto_total': nuevoMontoTotal ?? acuerdoActual['monto_total'],
+      'monto_periodico': nuevoMontoPeriodico ?? acuerdoActual['monto_periodico'],
+      'frecuencia': nuevaFrecuencia ?? acuerdoActual['frecuencia'],
+      'frecuencia_dias': nuevosFrecuenciaDias ?? acuerdoActual['frecuencia_dias'],
+      'cuotas': nuevasCuotas ?? acuerdoActual['cuotas'],
+      'fecha_vigencia_desde': hoy,
+      'fecha_vigencia_hasta': null,
+      'motivo_cambio': motivoCambio,
+      'dispositivo_id': acuerdoActual['dispositivo_id'],
+      'created_ts': DateTime.now().millisecondsSinceEpoch,
+    });
+    
+    // 3) Actualizar acuerdo principal con nueva versión y datos
+    await db.update(
+      'acuerdos',
+      {
+        'version_actual': nuevaVersion,
+        'fecha_vigencia_desde': hoy,
+        'modalidad': nuevaModalidad ?? acuerdoActual['modalidad'],
+        'monto_total': nuevoMontoTotal ?? acuerdoActual['monto_total'],
+        'monto_periodico': nuevoMontoPeriodico ?? acuerdoActual['monto_periodico'],
+        'frecuencia': nuevaFrecuencia ?? acuerdoActual['frecuencia'],
+        'frecuencia_dias': nuevosFrecuenciaDias ?? acuerdoActual['frecuencia_dias'],
+        'cuotas': nuevasCuotas ?? acuerdoActual['cuotas'],
+        'updated_ts': DateTime.now().millisecondsSinceEpoch,
+        'sync_estado': 'PENDIENTE',
+      },
+      where: 'id = ?',
+      whereArgs: [acuerdoId],
+    );
+  }
+
+  /// Obtener historial de versiones de un acuerdo
+  static Future<List<Map<String, dynamic>>> obtenerVersionesAcuerdo(int acuerdoId) async {
+    try {
+      final db = await AppDatabase.instance();
+      final versiones = await db.query(
+        'acuerdos_versiones',
+        where: 'acuerdo_id = ?',
+        whereArgs: [acuerdoId],
+        orderBy: 'version ASC',
+      );
+      return versiones;
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'acuerdos_service.obtener_versiones',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'acuerdo_id': acuerdoId},
       );
       rethrow;
     }
@@ -412,6 +572,107 @@ class AcuerdosService {
     } catch (e, stack) {
       await AppDatabase.logLocalError(
         scope: 'acuerdos_service.desactivar_acuerdo',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'id': id},
+      );
+      rethrow;
+    }
+  }
+  
+  /// Eliminar un acuerdo (soft delete con validaciones)
+  /// 
+  /// Validaciones:
+  /// - NO debe tener compromisos confirmados
+  /// - NO debe tener movimientos asociados
+  /// 
+  /// Si pasa las validaciones, marca eliminado=1 y activo=0.
+  /// NO elimina físicamente de la base de datos (política de auditoría).
+  /// 
+  /// Retorna: Map con resultado de validaciones:
+  ///   - 'puede_eliminar': bool
+  ///   - 'razon': String? (si no puede eliminar)
+  ///   - 'compromisos_confirmados': int
+  ///   - 'movimientos': int
+  static Future<Map<String, dynamic>> eliminarAcuerdo(int id) async {
+    try {
+      final db = await AppDatabase.instance();
+      
+      final acuerdo = await obtenerAcuerdo(id);
+      if (acuerdo == null) {
+        throw ArgumentError('Acuerdo $id no existe');
+      }
+      
+      // Validar: contar compromisos confirmados asociados a este acuerdo
+      final compromisosConfirmados = await db.rawQuery(
+        'SELECT COUNT(*) as total FROM compromisos '
+        'WHERE acuerdo_id = ? AND estado = ? AND eliminado = 0',
+        [id, 'CONFIRMADO'],
+      );
+      final totalConfirmados = (compromisosConfirmados.first['total'] as int?) ?? 0;
+      
+      // Validar: contar movimientos asociados a compromisos de este acuerdo
+      final movimientos = await db.rawQuery(
+        'SELECT COUNT(*) as total FROM evento_movimiento '
+        'WHERE compromiso_id IN '
+        '(SELECT id FROM compromisos WHERE acuerdo_id = ? AND eliminado = 0)',
+        [id],
+      );
+      final totalMovimientos = (movimientos.first['total'] as int?) ?? 0;
+      
+      // Si tiene compromisos confirmados o movimientos, no se puede eliminar
+      if (totalConfirmados > 0) {
+        return {
+          'puede_eliminar': false,
+          'razon': 'El acuerdo tiene $totalConfirmados compromiso(s) confirmado(s) y no puede ser eliminado',
+          'compromisos_confirmados': totalConfirmados,
+          'movimientos': totalMovimientos,
+        };
+      }
+      
+      if (totalMovimientos > 0) {
+        return {
+          'puede_eliminar': false,
+          'razon': 'El acuerdo tiene $totalMovimientos movimiento(s) asociado(s) y no puede ser eliminado',
+          'compromisos_confirmados': totalConfirmados,
+          'movimientos': totalMovimientos,
+        };
+      }
+      
+      // Puede eliminar: hacer soft delete
+      await db.update(
+        'acuerdos',
+        {
+          'eliminado': 1,
+          'activo': 0,
+          'updated_ts': DateTime.now().millisecondsSinceEpoch,
+          'sync_estado': 'PENDIENTE',
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      
+      // También marcar como eliminados los compromisos ESPERADO asociados
+      await db.update(
+        'compromisos',
+        {
+          'eliminado': 1,
+          'updated_ts': DateTime.now().millisecondsSinceEpoch,
+          'sync_estado': 'PENDIENTE',
+        },
+        where: 'acuerdo_id = ? AND estado = ? AND eliminado = 0',
+        whereArgs: [id, 'ESPERADO'],
+      );
+      
+      return {
+        'puede_eliminar': true,
+        'razon': null,
+        'compromisos_confirmados': 0,
+        'movimientos': 0,
+      };
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'acuerdos_service.eliminar_acuerdo',
         error: e.toString(),
         stackTrace: stack,
         payload: {'id': id},

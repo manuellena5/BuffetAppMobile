@@ -6,7 +6,11 @@ import '../../shared/services/export_service.dart';
 import '../../shared/services/tesoreria_sync_service.dart';
 import '../../shared/services/movimientos_proyectados_service.dart';
 import '../../shared/services/compromisos_service.dart';
+import '../../shared/services/filtros_persistentes_service.dart';
 import '../../shared/format.dart';
+import '../../shared/widgets/progress_dialog.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../domain/paginated_result.dart';
 import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
@@ -29,7 +33,10 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   final _proyectadosSvc = MovimientosProyectadosService.instance;
   final _compromisosService = CompromisosService.instance;
   
-  List<Map<String, dynamic>> _movimientos = [];
+  // FASE 31: Paginación
+  PaginatedResult<Map<String, dynamic>> _movimientosPaginados = PaginatedResult.empty();
+  static const int _pageSize = 50;
+  
   List<MovimientoProyectado> _movimientosEsperados = [];
   List<MovimientoProyectado> _movimientosCancelados = [];
   bool _loading = true;
@@ -54,7 +61,42 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   @override
   void initState() {
     super.initState();
+    _cargarFiltrosGuardados();
     _load();
+  }
+  
+  /// Cargar filtros guardados de sesiones anteriores
+  Future<void> _cargarFiltrosGuardados() async {
+    final filtros = await FiltrosPersistentesService.cargarFiltros(
+      FiltrosScreenKeys.movimientosList,
+    );
+    
+    if (filtros != null && mounted) {
+      setState(() {
+        _filtroTipo = filtros[FiltrosKeys.tipo] as String?;
+        _filtroEstado = filtros[FiltrosKeys.estado] as String?;
+        
+        // Restaurar mes seleccionado
+        final year = filtros[FiltrosKeys.mesYear] as int?;
+        final month = filtros[FiltrosKeys.mesMonth] as int?;
+        if (year != null && month != null) {
+          _mesSeleccionado = DateTime(year, month);
+        }
+      });
+    }
+  }
+  
+  /// Guardar filtros actuales
+  Future<void> _guardarFiltros() async {
+    await FiltrosPersistentesService.guardarFiltros(
+      FiltrosScreenKeys.movimientosList,
+      {
+        FiltrosKeys.tipo: _filtroTipo,
+        FiltrosKeys.estado: _filtroEstado,
+        FiltrosKeys.mesYear: _mesSeleccionado.year,
+        FiltrosKeys.mesMonth: _mesSeleccionado.month,
+      },
+    );
   }
 
   Future<void> _load() async {
@@ -138,7 +180,12 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         }
         
         setState(() {
-          _movimientos = movs;
+          _movimientosPaginados = PaginatedResult(
+            items: movs,
+            totalCount: movs.length,
+            currentPage: 1,
+            pageSize: _pageSize,
+          );
           _movimientosEsperados = esperados;
           _movimientosCancelados = cancelados;
           _pendientesCount = pendientes;
@@ -147,7 +194,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         });
       } else {
         setState(() {
-          _movimientos = [];
+          _movimientosPaginados = PaginatedResult.empty();
           _pendientesCount = 0;
           _loading = false;
         });
@@ -165,7 +212,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   }
 
   List<Map<String, dynamic>> get _movimientosFiltrados {
-    var resultado = _movimientos;
+    var resultado = _movimientosPaginados.items;
     
     // Filtrar por mes
     resultado = resultado.where((m) {
@@ -365,29 +412,16 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       return;
     }
 
-    // Mostrar diálogo de progreso
+    // Mostrar diálogo de progreso simple
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text('Sincronizando $_pendientesCount movimientos...'),
-          ],
-        ),
-      ),
-    );
+    ProgressDialog.show(context, 'Sincronizando $_pendientesCount movimientos...');
 
     try {
       final resultado = await _syncSvc.syncMovimientosPendientes();
 
       if (mounted) {
         // Cerrar progreso
-        Navigator.pop(context);
+        ProgressDialog.hide(context);
 
         // Mostrar resultado
         final exitosos = resultado['exitosos'] ?? 0;
@@ -438,7 +472,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
 
       if (mounted) {
         // Cerrar progreso
-        Navigator.pop(context);
+        ProgressDialog.hide(context);
 
         // Mostrar error
         showDialog(
@@ -474,20 +508,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     
     // Mostrar diálogo de progreso
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Generando archivo Excel...'),
-          ],
-        ),
-      ),
-    );
+    ProgressDialog.show(context, 'Generando archivo Excel...');
     
     try {
       final mesStr = DateFormat('yyyy-MM').format(_mesSeleccionado);
@@ -507,7 +528,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       
       if (mounted) {
         // Cerrar diálogo de progreso
-        Navigator.pop(context);
+        ProgressDialog.hide(context);
         
         // Mostrar diálogo de éxito con opciones
         await showDialog(
@@ -580,7 +601,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       );
       if (mounted) {
         // Cerrar diálogo de progreso
-        Navigator.pop(context);
+        ProgressDialog.hide(context);
         
         // Mostrar error
         showDialog(
@@ -611,62 +632,108 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     final settings = context.watch<AppSettings>();
     final unidadGestionId = settings.unidadGestionActivaId;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Movimientos'),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-        actions: [
-          // Botón de sincronización con badge
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.cloud_upload),
-                tooltip: 'Sincronizar con Supabase',
-                onPressed: _sincronizarPendientes,
-              ),
-              if (_pendientesCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      _pendientesCount > 99 ? '99+' : '$_pendientesCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+    return TesoreriaScaffold(
+      title: 'Movimientos',
+      currentRouteName: '/movimientos',
+      appBarColor: Colors.teal,
+      actions: [
+        // Botón restaurar filtros guardados
+        FutureBuilder<bool>(
+          future: FiltrosPersistentesService.tieneFiltrosGuardados(
+            FiltrosScreenKeys.movimientosList,
+          ),
+          builder: (context, snapshot) {
+            if (snapshot.data == true) {
+              return IconButton(
+                icon: const Icon(Icons.filter_list_off),
+                tooltip: 'Limpiar filtros guardados',
+                onPressed: () async {
+                  await FiltrosPersistentesService.limpiarFiltros(
+                    FiltrosScreenKeys.movimientosList,
+                  );
+                  setState(() {
+                    _filtroTipo = null;
+                    _filtroEstado = null;
+                    _mesSeleccionado = DateTime.now();
+                  });
+                  await _load();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Filtros limpiados'),
+                        duration: Duration(seconds: 1),
                       ),
-                      textAlign: TextAlign.center,
+                    );
+                  }
+                },
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+        // Botón de sincronización con badge
+        Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.cloud_upload),
+              tooltip: 'Sincronizar con Supabase',
+              onPressed: _sincronizarPendientes,
+            ),
+            if (_pendientesCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    _pendientesCount > 99 ? '99+' : '$_pendientesCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-            ],
-          ),
-          IconButton(
-            icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
-            tooltip: _vistaTabla ? 'Ver como tarjetas' : 'Ver como tabla',
-            onPressed: () {
-              setState(() {
-                _vistaTabla = !_vistaTabla;
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_download),
-            tooltip: 'Exportar Excel',
-            onPressed: _exportarExcel,
-          ),
-        ],
+              ),
+          ],
+        ),
+        IconButton(
+          icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
+          tooltip: _vistaTabla ? 'Ver como tarjetas' : 'Ver como tabla',
+          onPressed: () {
+            setState(() {
+              _vistaTabla = !_vistaTabla;
+            });
+          },
+        ),
+        IconButton(
+          icon: const Icon(Icons.file_download),
+          tooltip: 'Exportar Excel',
+          onPressed: _exportarExcel,
+        ),
+      ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CrearMovimientoPage(),
+            ),
+          );
+          _load();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Crear'),
+        backgroundColor: Colors.teal,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -680,8 +747,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            Colors.green.shade700,
-                            Colors.green.shade500,
+                            Colors.teal.shade700,
+                            Colors.teal.shade500,
                           ],
                         ),
                       ),
@@ -913,6 +980,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                                   _mesSeleccionado.month - 1,
                                 );
                               });
+                              await _guardarFiltros();
                               await _load(); // Recargar movimientos del nuevo mes
                             },
                             tooltip: 'Mes anterior',
@@ -937,6 +1005,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                                   _mesSeleccionado.month + 1,
                                 );
                               });
+                              await _guardarFiltros();
                               await _load(); // Recargar movimientos del nuevo mes
                             },
                             tooltip: 'Mes siguiente',
@@ -947,6 +1016,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                               setState(() {
                                 _mesSeleccionado = DateTime.now();
                               });
+                              await _guardarFiltros();
                               await _load(); // Recargar movimientos del mes actual
                             },
                             tooltip: 'Mes actual',
@@ -982,6 +1052,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                             selected: {_filtroTipo},
                             onSelectionChanged: (Set<String?> selected) {
                               setState(() => _filtroTipo = selected.first);
+                              _guardarFiltros();
                             },
                           ),
                           const SizedBox(height: 8),
@@ -1011,6 +1082,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                             selected: {_filtroEstado},
                             onSelectionChanged: (Set<String?> selected) {
                               setState(() => _filtroEstado = selected.first);
+                              _guardarFiltros();
                             },
                           ),
                         ],
@@ -1081,88 +1153,6 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     ),
                   ],
                 ),
-      bottomNavigationBar: _movimientoSeleccionado != null ? _buildBottomActionBar() : null,
-    );
-  }
-
-  Widget _buildBottomActionBar() {
-    final esCancelado = _movimientoSeleccionado?.estado == 'CANCELADO';
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: esCancelado
-            ? Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _verDetallesMovimientoCancelado,
-                      icon: const Icon(Icons.info_outline, color: Colors.white),
-                      label: const Text('Ver Detalles'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _reactivarMovimientoSeleccionado,
-                      icon: const Icon(Icons.restore, color: Colors.white),
-                      label: const Text('Reactivar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _cancelarMovimientoSeleccionado,
-                      icon: const Icon(Icons.cancel, color: Colors.white),
-                      label: const Text('Cancelar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _confirmarMovimientoSeleccionado,
-                      icon: const Icon(Icons.check_circle, color: Colors.white),
-                      label: const Text('Confirmar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      ),
     );
   }
 
@@ -1690,50 +1680,6 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTotalCard(
-    String label,
-    double amount,
-    IconData icon,
-    Color bgColor,
-    Color textColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: textColor),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            Format.money(amount),
-            style: TextStyle(
-              color: textColor,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
       ),
     );
   }

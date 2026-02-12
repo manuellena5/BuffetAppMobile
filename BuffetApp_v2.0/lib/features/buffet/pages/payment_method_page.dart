@@ -7,6 +7,8 @@ import '../../shared/services/print_service.dart';
 import '../../shared/services/usb_printer_service.dart';
 import '../../shared/format.dart';
 import '../state/cart_model.dart';
+import 'payment_confirm_dialogs.dart';
+import '../../shared/widgets/responsive_container.dart';
 
 class PaymentMethodPage extends StatefulWidget {
   const PaymentMethodPage({super.key});
@@ -104,150 +106,168 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
     }
     return Scaffold(
       appBar: AppBar(title: const Text('Método de pago')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_processing) const LinearProgressIndicator(minHeight: 3),
-            Text(formatCurrency(cart.total),
-                style:
-                    const TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text('Cantidad total a pagar'),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: cart.items.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (ctx, i) {
-                  final it = cart.items[i];
-                  return ListTile(
-                    dense: true,
-                    title: Text(it.nombre),
-                    subtitle: Text(
-                        '${it.cantidad} x ${formatCurrency(it.precioUnitario)}'),
-                    trailing:
-                        Text(formatCurrency(it.precioUnitario * it.cantidad)),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 24),
-            CheckboxListTile(
-              value: _imprimir,
-              onChanged: (v) => setState(() => _imprimir = v ?? true),
-              title: const Text('Imprimir ticket'),
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 8),
-            for (final m in _mp)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16)),
-                  onPressed: cart.isEmpty || _processing
-                      ? null
-                      : () async {
-                          setState(() => _processing = true);
-                          final nav = Navigator.of(context);
-                          final cartModel = context.read<CartModel>();
-                          final items = cart.items
-                              .map((e) => {
-                                    'producto_id': e.productoId,
-                                    'nombre': e.nombre,
-                                    'precio_unitario': e.precioUnitario,
-                                    'cantidad': e.cantidad,
-                                  })
-                              .toList();
-                          // Validar USB conectada
-                          try {
-                            bool usbConnected = false;
-                            try {
-                              usbConnected = await _usb.isConnected().timeout(
-                                  const Duration(seconds: 2),
-                                  onTimeout: () => false);
-                            } catch (_) {
-                              usbConnected =
-                                  false; // en emulador o sin plugin, continuar sin impresión
-                            }
-
-                            if (_imprimir && !usbConnected && context.mounted) {
-                              final cajaId = await _getCajaAbiertaId();
-                              final suppressed = cajaId != null &&
-                                  _suppressNoUsbWarningForCajaIds
-                                      .contains(cajaId);
-                              if (!suppressed) {
-                                final res = await _showNoUsbPrintDialog();
-                                if (res == null || res.confirmed != true) {
-                                  return;
-                                }
-                                if (res.dontShowAgain && cajaId != null) {
-                                  _suppressNoUsbWarningForCajaIds.add(cajaId);
-                                }
-                              }
-                            }
-
-                            final marcarImpreso = _imprimir && usbConnected;
-                            final result = await _ventaService.crearVenta(
-                              metodoPagoId: m['id'] as int,
-                              items: items,
-                              marcarImpreso: marcarImpreso,
-                            );
-                            if (marcarImpreso) {
-                              try {
-                                final ventaId = result['ventaId'] as int;
-                                final ok = await PrintService()
-                                    .printVentaTicketsForVentaUsbOnly(ventaId)
-                                    .timeout(const Duration(seconds: 10),
-                                        onTimeout: () => false);
-                                if (!ok && context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Fallo la impresión por USB.')),
-                                  );
-                                }
-                              } catch (e, st) {
-                                AppDatabase.logLocalError(
-                                    scope: 'payment.print_tickets',
-                                    error: e,
-                                    stackTrace: st);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                        content: Text('Error al imprimir: $e')),
-                                  );
-                                }
-                              }
-                            }
-                            if (context.mounted) {
-                              cartModel.clear();
-                              nav.pop(true);
-                            }
-                          } catch (e, st) {
-                            AppDatabase.logLocalError(
-                                scope: 'payment.crear_venta',
-                                error: e,
-                                stackTrace: st);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text(
-                                        'No se pudo registrar la venta: $e')),
-                              );
-                            }
-                          } finally {
-                            if (mounted) setState(() => _processing = false);
-                          }
-                        },
-                  child: Text((m['descripcion'] as String).toUpperCase()),
+      body: LandscapeCenteredBody(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_processing) const LinearProgressIndicator(minHeight: 3),
+              Text(formatCurrency(cart.total),
+                  style: const TextStyle(
+                      fontSize: 36, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text('Cantidad total a pagar'),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: cart.items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final it = cart.items[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(it.nombre),
+                      subtitle: Text(
+                          '${it.cantidad} x ${formatCurrency(it.precioUnitario)}'),
+                      trailing:
+                          Text(formatCurrency(it.precioUnitario * it.cantidad)),
+                    );
+                  },
                 ),
               ),
-          ],
+              const SizedBox(height: 24),
+              CheckboxListTile(
+                value: _imprimir,
+                onChanged: (v) => setState(() => _imprimir = v ?? true),
+                title: const Text('Imprimir ticket'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 8),
+              for (final m in _mp)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16)),
+                    onPressed: cart.isEmpty || _processing
+                        ? null
+                        : () async {
+                            // Mostrar modal de confirmación según método de pago
+                            final desc =
+                                (m['descripcion'] as String).toLowerCase();
+                            bool confirmed;
+                            if (desc.contains('efectivo')) {
+                              confirmed = await showCashPaymentDialog(
+                                  context, cart.total);
+                            } else {
+                              confirmed = await showTransferPaymentDialog(
+                                  context, cart.total);
+                            }
+                            if (!confirmed || !context.mounted) return;
+
+                            setState(() => _processing = true);
+                            final nav = Navigator.of(context);
+                            final cartModel = context.read<CartModel>();
+                            final items = cart.items
+                                .map((e) => {
+                                      'producto_id': e.productoId,
+                                      'nombre': e.nombre,
+                                      'precio_unitario': e.precioUnitario,
+                                      'cantidad': e.cantidad,
+                                    })
+                                .toList();
+                            // Validar USB conectada
+                            try {
+                              bool usbConnected = false;
+                              try {
+                                usbConnected = await _usb.isConnected().timeout(
+                                    const Duration(seconds: 2),
+                                    onTimeout: () => false);
+                              } catch (_) {
+                                usbConnected =
+                                    false; // en emulador o sin plugin, continuar sin impresión
+                              }
+
+                              if (_imprimir &&
+                                  !usbConnected &&
+                                  context.mounted) {
+                                final cajaId = await _getCajaAbiertaId();
+                                final suppressed = cajaId != null &&
+                                    _suppressNoUsbWarningForCajaIds
+                                        .contains(cajaId);
+                                if (!suppressed) {
+                                  final res = await _showNoUsbPrintDialog();
+                                  if (res == null || res.confirmed != true) {
+                                    return;
+                                  }
+                                  if (res.dontShowAgain && cajaId != null) {
+                                    _suppressNoUsbWarningForCajaIds.add(cajaId);
+                                  }
+                                }
+                              }
+
+                              final marcarImpreso = _imprimir && usbConnected;
+                              final result = await _ventaService.crearVenta(
+                                metodoPagoId: m['id'] as int,
+                                items: items,
+                                marcarImpreso: marcarImpreso,
+                              );
+                              if (marcarImpreso) {
+                                try {
+                                  final ventaId = result['ventaId'] as int;
+                                  final ok = await PrintService()
+                                      .printVentaTicketsForVentaUsbOnly(ventaId)
+                                      .timeout(const Duration(seconds: 10),
+                                          onTimeout: () => false);
+                                  if (!ok && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Fallo la impresión por USB.')),
+                                    );
+                                  }
+                                } catch (e, st) {
+                                  AppDatabase.logLocalError(
+                                      scope: 'payment.print_tickets',
+                                      error: e,
+                                      stackTrace: st);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content:
+                                              Text('Error al imprimir: $e')),
+                                    );
+                                  }
+                                }
+                              }
+                              if (context.mounted) {
+                                cartModel.clear();
+                                nav.pop(true);
+                              }
+                            } catch (e, st) {
+                              AppDatabase.logLocalError(
+                                  scope: 'payment.crear_venta',
+                                  error: e,
+                                  stackTrace: st);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          'No se pudo registrar la venta: $e')),
+                                );
+                              }
+                            } finally {
+                              if (mounted) setState(() => _processing = false);
+                            }
+                          },
+                    child: Text((m['descripcion'] as String).toUpperCase()),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

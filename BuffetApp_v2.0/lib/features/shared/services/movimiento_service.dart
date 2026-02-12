@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 import '../../../data/dao/db.dart';
 
 class MovimientoService {
@@ -77,11 +79,13 @@ class MovimientoService {
 class EventoMovimientoService {
   Future<int> crear({
     required int disciplinaId,
+    required int cuentaId,
     String? eventoId,
     required String tipo,
     String? categoria,
     required double monto,
     required int medioPagoId,
+    DateTime? fecha,
     String? observacion,
     String? dispositivoId,
     String? archivoLocalPath,
@@ -90,18 +94,31 @@ class EventoMovimientoService {
     String? archivoTipo,
     int? archivoSize,
     int? compromisoId,
+    int? entidadPlantelId,
     String? estado,
+    int? esTransferencia,
+    String? transferenciaId,
   }) async {
     try {
       final db = await AppDatabase.instance();
+      
+      // Si no se proporciona fecha, usar hoy
+      final fechaStr = fecha != null
+          ? DateFormat('yyyy-MM-dd').format(fecha)
+          : DateFormat('yyyy-MM-dd').format(DateTime.now());
+      
       return await db.insert('evento_movimiento', {
         'evento_id': eventoId,
         'disciplina_id': disciplinaId,
+        'cuenta_id': cuentaId,
         'tipo': tipo.toUpperCase(),
         'categoria': categoria,
         'monto': monto,
         'medio_pago_id': medioPagoId,
+        'fecha': fechaStr,
         'observacion': observacion,
+        'es_transferencia': esTransferencia ?? 0,
+        'transferencia_id': transferenciaId,
         'dispositivo_id': dispositivoId,
         'archivo_local_path': archivoLocalPath,
         'archivo_remote_url': archivoRemoteUrl,
@@ -109,6 +126,7 @@ class EventoMovimientoService {
         'archivo_tipo': archivoTipo,
         'archivo_size': archivoSize,
         'compromiso_id': compromisoId,
+        'entidad_plantel_id': entidadPlantelId,
         'estado': estado ?? 'CONFIRMADO',
         // created_ts + sync_estado usan DEFAULT
       });
@@ -137,11 +155,15 @@ class EventoMovimientoService {
           em.*,
           mp.descripcion as medio_pago_desc,
           c.nombre as compromiso_nombre,
-          ep.nombre as entidad_plantel_nombre
+          ep_compromiso.nombre as entidad_compromiso_nombre,
+          ep_compromiso.rol as entidad_compromiso_rol,
+          ep_directo.nombre as entidad_directo_nombre,
+          ep_directo.rol as entidad_directo_rol
         FROM evento_movimiento em
         LEFT JOIN metodos_pago mp ON mp.id = em.medio_pago_id
         LEFT JOIN compromisos c ON c.id = em.compromiso_id
-        LEFT JOIN entidades_plantel ep ON ep.id = c.entidad_plantel_id
+        LEFT JOIN entidades_plantel ep_compromiso ON ep_compromiso.id = c.entidad_plantel_id
+        LEFT JOIN entidades_plantel ep_directo ON ep_directo.id = em.entidad_plantel_id
         WHERE em.id = ?
         LIMIT 1
       ''', [id]);
@@ -245,6 +267,7 @@ class EventoMovimientoService {
   Future<void> actualizar({
     required int id,
     required int disciplinaId,
+    required int cuentaId,
     String? eventoId,
     required String tipo,
     String? categoria,
@@ -255,12 +278,14 @@ class EventoMovimientoService {
     String? archivoNombre,
     String? archivoTipo,
     int? archivoSize,
+    int? entidadPlantelId,
   }) async {
     try {
       final db = await AppDatabase.instance();
       await db.update('evento_movimiento', {
         'evento_id': eventoId,
         'disciplina_id': disciplinaId,
+        'cuenta_id': cuentaId,
         'tipo': tipo.toUpperCase(),
         'categoria': categoria,
         'monto': monto,
@@ -270,6 +295,7 @@ class EventoMovimientoService {
         'archivo_nombre': archivoNombre,
         'archivo_tipo': archivoTipo,
         'archivo_size': archivoSize,
+        'entidad_plantel_id': entidadPlantelId,
         'updated_ts': DateTime.now().millisecondsSinceEpoch,
         'sync_estado': 'PENDIENTE', // Marcar como pendiente de sincronización
       }, where: 'id=?', whereArgs: [id]);

@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:buffet_app/data/dao/db.dart';
 import 'package:buffet_app/features/shared/state/app_settings.dart';
+import 'package:buffet_app/features/shared/state/drawer_state.dart';
 import 'package:buffet_app/features/tesoreria/pages/crear_movimiento_page.dart';
 
 // Mock para PathProvider
@@ -28,6 +30,11 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     
+    // Inicializar sqflite ffi para que AppDatabase use una implementación
+    // en memoria/ffi durante tests (evita bloqueos en plataformas nativas).
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+
     // Mock de PathProvider
     PathProviderPlatform.instance = MockPathProviderPlatform();
     
@@ -53,11 +60,16 @@ void main() {
         (tester) async {
       final settings = AppSettings();
       await settings.ensureLoaded();
+      // Asegurar que no haya unidad seleccionada para este caso
+      await settings.setUnidadGestionActivaId(null);
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ChangeNotifierProvider.value(
-            value: settings,
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: settings),
+              ChangeNotifierProvider(create: (_) => DrawerState()),
+            ],
             child: const CrearMovimientoPage(),
           ),
         ),
@@ -67,16 +79,16 @@ void main() {
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      // Esperar a que termine de cargar
-      await tester.pumpAndSettle(const Duration(seconds: 3));
+      // Esperar brevemente a que el widget actualice su estado
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
 
       // Debe mostrar mensaje de seleccionar unidad de gestión
+      expect(find.text('Seleccioná una Unidad de Gestión'), findsOneWidget);
       expect(
-        find.text(
-            'Para cargar movimientos, primero seleccioná una Unidad de Gestión.'),
+        find.textContaining('Para cargar movimientos'),
         findsOneWidget,
       );
-      expect(find.text('Ir a Eventos'), findsOneWidget);
     });
 
     testWidgets('Pantalla debe cargar con unidad de gestión configurada',
@@ -93,8 +105,11 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ChangeNotifierProvider.value(
-            value: settings,
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: settings),
+              ChangeNotifierProvider(create: (_) => DrawerState()),
+            ],
             child: const CrearMovimientoPage(),
           ),
         ),
@@ -104,8 +119,9 @@ void main() {
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-      // Esperar a que termine de cargar
-      await tester.pumpAndSettle(const Duration(seconds: 3));
+      // Esperar brevemente a que el widget actualice su estado
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
 
       // Debe mostrar el formulario
       expect(find.text('Tipo de Movimiento'), findsOneWidget);
@@ -129,14 +145,18 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ChangeNotifierProvider.value(
-            value: settings,
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: settings),
+              ChangeNotifierProvider(create: (_) => DrawerState()),
+            ],
             child: const CrearMovimientoPage(),
           ),
         ),
       );
 
-      await tester.pumpAndSettle(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
 
       // Verificar que está en modo INGRESO
       expect(find.text('💰 Ingreso'), findsOneWidget);
@@ -164,14 +184,18 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: ChangeNotifierProvider.value(
-            value: settings,
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: settings),
+              ChangeNotifierProvider(create: (_) => DrawerState()),
+            ],
             child: const CrearMovimientoPage(),
           ),
         ),
       );
 
-      await tester.pumpAndSettle(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
 
       // Ingresar solo monto
       await tester.enterText(find.byType(TextField).first, '100');

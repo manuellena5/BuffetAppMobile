@@ -161,7 +161,9 @@ class CategoriaMovimientoService {
       }
     }
     
-    return buffer.toString().toUpperCase();
+    // Limitar a 10 caracteres máximo
+    final codigo = buffer.toString().toUpperCase();
+    return codigo.length > 10 ? codigo.substring(0, 10) : codigo;
   }
 
   /// Crea una nueva categoría

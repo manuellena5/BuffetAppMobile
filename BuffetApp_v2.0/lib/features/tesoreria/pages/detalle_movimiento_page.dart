@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/breadcrumb.dart';
 import 'package:open_filex/open_filex.dart';
 import '../../shared/services/movimiento_service.dart';
 import '../../shared/services/tesoreria_sync_service.dart';
@@ -219,13 +220,52 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
   Future<void> _modificar() async {
     if (_movimiento == null) return;
     
-    // TODO: Implementar edición de movimientos
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('La edición de movimientos estará disponible próximamente'),
-        backgroundColor: Colors.orange,
+    // Validar que no esté sincronizado
+    final syncEstado = (_movimiento!['sync_estado'] ?? '').toString().toUpperCase();
+    if (syncEstado == 'SINCRONIZADA') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se puede editar un movimiento sincronizado'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    // Validar que no esté anulado
+    final anulado = (_movimiento!['anulado'] as int?) == 1;
+    if (anulado) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se puede editar un movimiento anulado'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    // Navegar a la pantalla de edición
+    final resultado = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CrearMovimientoPage(
+          movimientoExistente: _movimiento,
+        ),
       ),
     );
+    
+    // Si se editó, recargar datos
+    if (resultado == true) {
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Movimiento actualizado'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _eliminar() async {
@@ -318,7 +358,20 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Detalle del Movimiento'),
+        title: AppBarBreadcrumb(
+          items: [
+            BreadcrumbItem(
+              label: 'Movimientos',
+              icon: Icons.account_balance_wallet,
+              onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+            BreadcrumbItem(
+              label: _movimiento != null 
+                ? _categoriaNombre ?? 'Detalle'
+                : 'Detalle',
+            ),
+          ],
+        ),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
         actions: [
@@ -330,12 +383,14 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
                 tooltip: 'Sincronizar con Supabase',
                 onPressed: _sincronizar,
               ),
-            // Edición deshabilitada temporalmente
-            // IconButton(
-            //   icon: const Icon(Icons.edit),
-            //   tooltip: 'Modificar',
-            //   onPressed: _modificar,
-            // ),
+            // Botón de edición (solo si no está sincronizado ni anulado)
+            if ((_movimiento!['sync_estado'] ?? '').toString().toUpperCase() != 'SINCRONIZADA' &&
+                (_movimiento!['anulado'] as int?) != 1)
+              IconButton(
+                icon: const Icon(Icons.edit),
+                tooltip: 'Modificar',
+                onPressed: _modificar,
+              ),
             IconButton(
               icon: const Icon(Icons.delete),
               tooltip: 'Eliminar',

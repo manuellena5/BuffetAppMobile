@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../data/dao/db.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../shared/format.dart';
+import '../../shared/widgets/responsive_container.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
@@ -96,38 +97,41 @@ class _ProductsPageState extends State<ProductsPage> {
         },
         child: const Icon(Icons.add),
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView.separated(
-          itemCount: _items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (ctx, i) {
-            final p = _items[i];
-            final visible = ((p['visible'] as int?) ?? 1) == 1;
-            return ListTile(
-              leading: _buildLeadingImage(p['imagen'] as String?),
-              title: Text(p['nombre'] as String),
-              subtitle: Text(
-                  '${p['categoria'] ?? ''} • ${formatCurrencyNoDecimals(p['precio_venta'] as num)} • Stock: ${p['stock_actual']}'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () async {
-                      final ok = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => _ProductForm(data: p)));
-                      if (ok == true) _load();
-                    }),
-                IconButton(
-                  tooltip: visible ? 'Ocultar' : 'Mostrar',
-                  icon: Icon(visible ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () =>
-                      _toggleVisible(p['id'] as int, visible ? 1 : 0),
-                ),
-              ]),
-            );
-          },
+      body: LandscapeCenteredBody(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.separated(
+            itemCount: _items.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (ctx, i) {
+              final p = _items[i];
+              final visible = ((p['visible'] as int?) ?? 1) == 1;
+              return ListTile(
+                leading: _buildLeadingImage(p['imagen'] as String?),
+                title: Text(p['nombre'] as String),
+                subtitle: Text(
+                    '${p['categoria'] ?? ''} • ${formatCurrencyNoDecimals(p['precio_venta'] as num)} • Stock: ${p['stock_actual']}'),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () async {
+                        final ok = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => _ProductForm(data: p)));
+                        if (ok == true) _load();
+                      }),
+                  IconButton(
+                    tooltip: visible ? 'Ocultar' : 'Mostrar',
+                    icon:
+                        Icon(visible ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () =>
+                        _toggleVisible(p['id'] as int, visible ? 1 : 0),
+                  ),
+                ]),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -137,12 +141,14 @@ class _ProductsPageState extends State<ProductsPage> {
 Widget _buildLeadingImage(String? imgPath) {
   if (imgPath == null || imgPath.isEmpty) {
     return const CircleAvatar(
-        backgroundColor: Colors.grey, child: Icon(Icons.image, color: Colors.white));
+        backgroundColor: Colors.grey,
+        child: Icon(Icons.image, color: Colors.white));
   }
   final file = File(imgPath);
   if (!file.existsSync()) {
     return const CircleAvatar(
-        backgroundColor: Colors.grey, child: Icon(Icons.image, color: Colors.white));
+        backgroundColor: Colors.grey,
+        child: Icon(Icons.image, color: Colors.white));
   }
   return CircleAvatar(backgroundImage: FileImage(file));
 }
@@ -180,13 +186,13 @@ class _ProductFormState extends State<_ProductForm> {
     if (d != null) {
       _nombre.text = (d['nombre'] as String?) ?? '';
       _codigo.text = (d['codigo_producto'] as String?) ?? '';
-  final pv = d['precio_venta'] as num?;
-  _precio.text = pv == null ? '' : pv.toString();
-  final pc = d['precio_compra'] as num?;
-  _precioCompra.text = pc == null ? '' : pc.toString();
-  final st = d['stock_actual'] as int?;
-  _stock.text = '${st ?? 999}';
-  _contabilizaStock = (st != null && st != 999);
+      final pv = d['precio_venta'] as num?;
+      _precio.text = pv == null ? '' : pv.toString();
+      final pc = d['precio_compra'] as num?;
+      _precioCompra.text = pc == null ? '' : pc.toString();
+      final st = d['stock_actual'] as int?;
+      _stock.text = '${st ?? 999}';
+      _contabilizaStock = (st != null && st != 999);
       _catId = d['categoria_id'] as int? ?? 3;
       _visible = ((d['visible'] as int?) ?? 1) == 1;
       _imagenPath = d['imagen'] as String?;
@@ -330,24 +336,24 @@ class _ProductFormState extends State<_ProductForm> {
     final db = await AppDatabase.instance();
     final codigo = _codigo.text.trim().toUpperCase();
     final nombre = _nombre.text.trim();
-  final precioParsed = parseLooseDouble(_precio.text.trim());
-  final precio = precioParsed.isNaN ? -1 : precioParsed.round();
-  // Precio de compra: opcional, si no está se toma = precio_venta
-  final compraText = _precioCompra.text.trim();
-  int precioCompra;
-  if (compraText.isEmpty) {
-    precioCompra = precio;
-  } else {
-    final compraParsed = parseLooseDouble(compraText);
-    if (compraParsed.isNaN) {
-      if (mounted) {
-        messenger.showSnackBar(
-            const SnackBar(content: Text('Precio de compra inválido')));
+    final precioParsed = parseLooseDouble(_precio.text.trim());
+    final precio = precioParsed.isNaN ? -1 : precioParsed.round();
+    // Precio de compra: opcional, si no está se toma = precio_venta
+    final compraText = _precioCompra.text.trim();
+    int precioCompra;
+    if (compraText.isEmpty) {
+      precioCompra = precio;
+    } else {
+      final compraParsed = parseLooseDouble(compraText);
+      if (compraParsed.isNaN) {
+        if (mounted) {
+          messenger.showSnackBar(
+              const SnackBar(content: Text('Precio de compra inválido')));
+        }
+        return;
       }
-      return;
+      precioCompra = compraParsed.round();
     }
-    precioCompra = compraParsed.round();
-  }
     int stock;
     if (!_contabilizaStock) {
       stock = 999; // no contabiliza => ilimitado
@@ -356,7 +362,8 @@ class _ProductFormState extends State<_ProductForm> {
       if (stock == 999) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Si contabiliza stock, no puede ser 999. Ingrese otro valor.')));
+              content: Text(
+                  'Si contabiliza stock, no puede ser 999. Ingrese otro valor.')));
         }
         return;
       }
@@ -374,14 +381,15 @@ class _ProductFormState extends State<_ProductForm> {
     if (precioCompra > precio) {
       if (mounted) {
         messenger.showSnackBar(const SnackBar(
-            content: Text('El precio de compra no puede ser mayor al de venta')));
+            content:
+                Text('El precio de compra no puede ser mayor al de venta')));
       }
       return;
     }
     if (stock < 0) {
       if (mounted) {
-        messenger.showSnackBar(
-            const SnackBar(content: Text('Stock debe ser >= 0')));
+        messenger
+            .showSnackBar(const SnackBar(content: Text('Stock debe ser >= 0')));
       }
       return;
     }
@@ -446,7 +454,8 @@ class _ProductFormState extends State<_ProductForm> {
     };
     if (widget.data == null) {
       // create: asignar orden_visual = max(orden_visual)+1
-      final r = await db.rawQuery('SELECT COALESCE(MAX(orden_visual),0) as maxo FROM products');
+      final r = await db.rawQuery(
+          'SELECT COALESCE(MAX(orden_visual),0) as maxo FROM products');
       final next = ((r.first['maxo'] as num?)?.toInt() ?? 0) + 1;
       await db.insert('products', {...payload, 'orden_visual': next});
     } else {
@@ -454,237 +463,255 @@ class _ProductFormState extends State<_ProductForm> {
       await db.update('products', payload,
           where: 'id=?', whereArgs: [widget.data!['id']]);
     }
-  if (mounted) nav.pop(true);
+    if (mounted) nav.pop(true);
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_dirty,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        if (!_dirty) {
-          Navigator.pop(context, false);
-          return;
-        }
-        await _showUnsavedChangesModal();
-      },
-      child: Scaffold(
-      appBar: AppBar(
-          title:
-              Text(widget.data == null ? 'Nuevo producto' : 'Editar producto')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _form,
-          child: ListView(
-            children: [
-              // Imagen del producto (preview y selector)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _imagenPath != null && _imagenPath!.isNotEmpty && File(_imagenPath!).existsSync()
-                        ? Image.file(File(_imagenPath!), fit: BoxFit.cover)
-                        : const Icon(Icons.image, color: Colors.grey),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add_a_photo),
-                    label: const Text('Agregar imagen'),
-                    onPressed: () async {
-                      final src = await showModalBottomSheet<ImageSource>(
-                        context: context,
-                        builder: (ctx) => SafeArea(
-                          child: Wrap(children: [
-                            ListTile(
-                              leading: const Icon(Icons.photo_library),
-                              title: const Text('Galería'),
-                              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-                            ),
-                            ListTile(
-                              leading: const Icon(Icons.photo_camera),
-                              title: const Text('Cámara'),
-                              onTap: () => Navigator.pop(ctx, ImageSource.camera),
-                            ),
-                          ]),
+        canPop: !_dirty,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          if (!_dirty) {
+            Navigator.pop(context, false);
+            return;
+          }
+          await _showUnsavedChangesModal();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+              title: Text(
+                  widget.data == null ? 'Nuevo producto' : 'Editar producto')),
+          body: LandscapeCenteredBody(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _form,
+                child: ListView(
+                  children: [
+                    // Imagen del producto (preview y selector)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: _imagenPath != null &&
+                                  _imagenPath!.isNotEmpty &&
+                                  File(_imagenPath!).existsSync()
+                              ? Image.file(File(_imagenPath!),
+                                  fit: BoxFit.cover)
+                              : const Icon(Icons.image, color: Colors.grey),
                         ),
-                      );
-                      if (src == null) return;
-                      final picker = ImagePicker();
-                      final x = await picker.pickImage(source: src, imageQuality: 85);
-                      if (x == null) return;
-                      // Copiar a carpeta de documentos de la app para persistencia
-                      final dir = await getApplicationDocumentsDirectory();
-                      final picsDir = Directory(p.join(dir.path, 'product_images'));
-                      if (!await picsDir.exists()) await picsDir.create(recursive: true);
-                      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${p.basename(x.path)}';
-                      final destPath = p.join(picsDir.path, fileName);
-                      await File(x.path).copy(destPath);
-                      if (!mounted) return;
-                      setState(() => _imagenPath = destPath);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  if (_imagenPath != null && _imagenPath!.isNotEmpty)
-                    TextButton.icon(
-                      onPressed: () => setState(() => _imagenPath = null),
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Quitar'),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add_a_photo),
+                          label: const Text('Agregar imagen'),
+                          onPressed: () async {
+                            final src = await showModalBottomSheet<ImageSource>(
+                              context: context,
+                              builder: (ctx) => SafeArea(
+                                child: Wrap(children: [
+                                  ListTile(
+                                    leading: const Icon(Icons.photo_library),
+                                    title: const Text('Galería'),
+                                    onTap: () =>
+                                        Navigator.pop(ctx, ImageSource.gallery),
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.photo_camera),
+                                    title: const Text('Cámara'),
+                                    onTap: () =>
+                                        Navigator.pop(ctx, ImageSource.camera),
+                                  ),
+                                ]),
+                              ),
+                            );
+                            if (src == null) return;
+                            final picker = ImagePicker();
+                            final x = await picker.pickImage(
+                                source: src, imageQuality: 85);
+                            if (x == null) return;
+                            // Copiar a carpeta de documentos de la app para persistencia
+                            final dir =
+                                await getApplicationDocumentsDirectory();
+                            final picsDir =
+                                Directory(p.join(dir.path, 'product_images'));
+                            if (!await picsDir.exists())
+                              await picsDir.create(recursive: true);
+                            final fileName =
+                                '${DateTime.now().millisecondsSinceEpoch}_${p.basename(x.path)}';
+                            final destPath = p.join(picsDir.path, fileName);
+                            await File(x.path).copy(destPath);
+                            if (!mounted) return;
+                            setState(() => _imagenPath = destPath);
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        if (_imagenPath != null && _imagenPath!.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: () => setState(() => _imagenPath = null),
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Quitar'),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nombre,
-                decoration: const InputDecoration(labelText: 'Nombre'),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _codigo,
-                decoration: const InputDecoration(
-                    labelText: 'Código (máx 4, obligatorio)'),
-                maxLength: 4,
-                onChanged: (v) {
-                  final upper = v.toUpperCase();
-                  if (upper != v) {
-                    final pos = _codigo.selection.base.offset;
-                    _codigo.value = TextEditingValue(
-                      text: upper,
-                      selection: TextSelection.collapsed(
-                        offset: pos < 0 ? upper.length : pos,
-                      ),
-                    );
-                  }
-                },
-                validator: (v) {
-                  final t = (v ?? '').trim();
-                  if (t.isEmpty) return 'Requerido';
-                  if (t.length > 4) return 'Máx 4 caracteres';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 8),
-              // Reordenado: compra primero
-              TextFormField(
-                controller: _precioCompra,
-                decoration: const InputDecoration(labelText: 'Precio de compra (opcional)'),
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  final t = (v ?? '').trim();
-                  if (t.isEmpty) return null; // opcional
-                  final val = parseLooseDouble(t);
-                  if (val.isNaN) return 'Ingrese un número';
-                  final pv = parseLooseDouble(_precio.text.trim());
-                  if (!pv.isNaN && val > pv) {
-                    return 'No puede ser mayor al precio de venta';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 8),
-              // Venta y % ganancia lado a lado
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextFormField(
-                      controller: _precio,
-                      decoration: const InputDecoration(labelText: 'Precio de venta'),
-                      keyboardType: TextInputType.number,
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _nombre,
+                      decoration: const InputDecoration(labelText: 'Nombre'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _codigo,
+                      decoration: const InputDecoration(
+                          labelText: 'Código (máx 4, obligatorio)'),
+                      maxLength: 4,
+                      onChanged: (v) {
+                        final upper = v.toUpperCase();
+                        if (upper != v) {
+                          final pos = _codigo.selection.base.offset;
+                          _codigo.value = TextEditingValue(
+                            text: upper,
+                            selection: TextSelection.collapsed(
+                              offset: pos < 0 ? upper.length : pos,
+                            ),
+                          );
+                        }
+                      },
                       validator: (v) {
-                        if (v == null || v.isEmpty) return 'Ingrese un número';
-                        final val = parseLooseDouble(v);
-                        if (val.isNaN) return 'Ingrese un número';
+                        final t = (v ?? '').trim();
+                        if (t.isEmpty) return 'Requerido';
+                        if (t.length > 4) return 'Máx 4 caracteres';
                         return null;
                       },
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _porcGanancia,
-                      decoration: const InputDecoration(labelText: '% Ganancia'),
+                    const SizedBox(height: 8),
+                    // Reordenado: compra primero
+                    TextFormField(
+                      controller: _precioCompra,
+                      decoration: const InputDecoration(
+                          labelText: 'Precio de compra (opcional)'),
                       keyboardType: TextInputType.number,
                       validator: (v) {
                         final t = (v ?? '').trim();
                         if (t.isEmpty) return null; // opcional
                         final val = parseLooseDouble(t);
                         if (val.isNaN) return 'Ingrese un número';
-                        if (val < 0) return 'Debe ser >= 0';
+                        final pv = parseLooseDouble(_precio.text.trim());
+                        if (!pv.isNaN && val > pv) {
+                          return 'No puede ser mayor al precio de venta';
+                        }
                         return null;
                       },
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    // Venta y % ganancia lado a lado
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _precio,
+                            decoration: const InputDecoration(
+                                labelText: 'Precio de venta'),
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              if (v == null || v.isEmpty)
+                                return 'Ingrese un número';
+                              final val = parseLooseDouble(v);
+                              if (val.isNaN) return 'Ingrese un número';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _porcGanancia,
+                            decoration:
+                                const InputDecoration(labelText: '% Ganancia'),
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              final t = (v ?? '').trim();
+                              if (t.isEmpty) return null; // opcional
+                              final val = parseLooseDouble(t);
+                              if (val.isNaN) return 'Ingrese un número';
+                              if (val < 0) return 'Debe ser >= 0';
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _stock,
+                      decoration: const InputDecoration(
+                          labelText: 'Stock actual (use 999 para ilimitado)'),
+                      keyboardType: TextInputType.number,
+                      enabled: _contabilizaStock,
+                      validator: (v) {
+                        if (!_contabilizaStock) return null; // deshabilitado
+                        if (v == null || v.isEmpty) return 'Ingrese un número';
+                        final iv = int.tryParse(v);
+                        if (iv == null) return 'Ingrese un número';
+                        if (iv == 999)
+                          return 'Use un valor distinto a 999 si contabiliza stock';
+                        if (iv < 0) return 'Stock debe ser >= 0';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      title: const Text('Contabilizar stock'),
+                      subtitle: const Text(
+                          'Si está apagado, no se descuenta stock (999)'),
+                      value: _contabilizaStock,
+                      onChanged: (v) {
+                        setState(() {
+                          _contabilizaStock = v;
+                          if (!v) {
+                            _stock.text = '999';
+                          } else {
+                            if (_stock.text.trim() == '999') _stock.text = '0';
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      initialValue: _catId,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('Comida')),
+                        DropdownMenuItem(value: 2, child: Text('Bebida')),
+                        DropdownMenuItem(value: 3, child: Text('Otros')),
+                      ],
+                      onChanged: (v) => setState(() => _catId = v),
+                      decoration: const InputDecoration(labelText: 'Categoría'),
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      value: _visible,
+                      onChanged: (v) => setState(() => _visible = v),
+                      title: const Text('Visible'),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                        onPressed: _save,
+                        child: Text(widget.data == null ? 'Crear' : 'Guardar')),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _stock,
-                decoration: const InputDecoration(
-                    labelText: 'Stock actual (use 999 para ilimitado)'),
-                keyboardType: TextInputType.number,
-                enabled: _contabilizaStock,
-                validator: (v) {
-                  if (!_contabilizaStock) return null; // deshabilitado
-                  if (v == null || v.isEmpty) return 'Ingrese un número';
-                  final iv = int.tryParse(v);
-                  if (iv == null) return 'Ingrese un número';
-                  if (iv == 999) return 'Use un valor distinto a 999 si contabiliza stock';
-                  if (iv < 0) return 'Stock debe ser >= 0';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: const Text('Contabilizar stock'),
-                subtitle: const Text('Si está apagado, no se descuenta stock (999)'),
-                value: _contabilizaStock,
-                onChanged: (v) {
-                  setState(() {
-                    _contabilizaStock = v;
-                    if (!v) {
-                      _stock.text = '999';
-                    } else {
-                      if (_stock.text.trim() == '999') _stock.text = '0';
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int>(
-                initialValue: _catId,
-                items: const [
-                  DropdownMenuItem(value: 1, child: Text('Comida')),
-                  DropdownMenuItem(value: 2, child: Text('Bebida')),
-                  DropdownMenuItem(value: 3, child: Text('Otros')),
-                ],
-                onChanged: (v) => setState(() => _catId = v),
-                decoration: const InputDecoration(labelText: 'Categoría'),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                value: _visible,
-                onChanged: (v) => setState(() => _visible = v),
-                title: const Text('Visible'),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                  onPressed: _save,
-                  child: Text(widget.data == null ? 'Crear' : 'Guardar')),
-            ],
+            ),
           ),
-        ),
-      ),
-    ));
+        ));
   }
 }

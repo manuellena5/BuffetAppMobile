@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import 'detalle_jugador_page.dart';
 import 'gestionar_jugadores_page.dart';
 
@@ -130,16 +131,21 @@ class _PlantelPageState extends State<PlantelPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Plantel - ${_nombreMes(_mesActual)} $_anioActual'),
-        actions: [
-          IconButton(
-            icon: Icon(_vistaTabla ? Icons.view_module : Icons.table_chart),
-            tooltip: _vistaTabla ? 'Ver tarjetas' : 'Ver tabla',
-            onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
-          ),
-        ],
+    return TesoreriaScaffold(
+      title: 'Plantel - ${_nombreMes(_mesActual)} $_anioActual',
+      currentRouteName: '/plantel',
+      actions: [
+        IconButton(
+          icon: Icon(_vistaTabla ? Icons.view_module : Icons.table_chart),
+          tooltip: _vistaTabla ? 'Ver tarjetas' : 'Ver tabla',
+          onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
+        ),
+      ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _irAGestionar,
+        backgroundColor: Colors.teal,
+        icon: const Icon(Icons.settings),
+        label: const Text('Gestionar'),
       ),
       body: ResponsiveContainer(
         maxWidth: 1000,
@@ -172,12 +178,6 @@ class _PlantelPageState extends State<PlantelPage> {
                 ),
               ),
         ),
-      ),
-      // BLOQUE 3: Acciones
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _irAGestionar,
-        icon: const Icon(Icons.settings),
-        label: const Text('Gestionar'),
       ),
     );
   }

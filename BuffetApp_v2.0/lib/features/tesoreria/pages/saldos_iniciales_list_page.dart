@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../domain/models.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import '../services/saldo_inicial_service.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
@@ -191,21 +192,21 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Saldos Iniciales'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _cargar,
-            tooltip: 'Actualizar',
-          ),
-        ],
-      ),
+    return TesoreriaScaffold(
+      title: 'Saldos Iniciales',
+      currentRouteName: '/saldos_iniciales',
+      appBarColor: Colors.teal,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _cargar,
+          tooltip: 'Actualizar',
+        ),
+      ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ResponsiveContainer(
-              maxWidth: 1000,
+              maxWidth: 1200,
               child: Column(
               children: [
                 // Mostrar unidad activa (no editable)

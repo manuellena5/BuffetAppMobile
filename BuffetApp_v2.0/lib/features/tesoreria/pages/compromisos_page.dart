@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../data/dao/db.dart';
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/format.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/tesoreria_scaffold.dart';
 import 'crear_compromiso_page.dart';
 import 'detalle_compromiso_page.dart';
 
@@ -21,33 +23,91 @@ class _CompromisosPageState extends State<CompromisosPage> {
   
   List<Map<String, dynamic>> _compromisos = [];
   bool _isLoading = true;
+  List<Map<String, dynamic>> _entidades = []; // Para dropdown de entidades
   
-  // Filtros
+  // FASE 22.5: Filtros visibles (no modal)
   int? _unidadGestionId;
+  int? _entidadPlantelId; // Filtro por jugador/DT
+  String? _rolFiltro; // 'DT', 'JUGADOR', 'OTRO', null = todos
   String? _tipoFiltro; // 'INGRESO', 'EGRESO', null = todos
+  bool? _origenAcuerdoFiltro; // true = solo acuerdos, false = solo manuales, null = todos
   bool? _activoFiltro; // true = activos, false = pausados, null = todos
   
   // Vista
-  bool _vistaTabla = false; // false = tarjetas (por defecto), true = tabla
+  bool _vistaTabla = true; // false = tarjetas, true = tabla (por defecto)
 
   @override
   void initState() {
     super.initState();
+    _cargarEntidades();
     _cargarCompromisos();
+  }
+
+  Future<void> _cargarEntidades() async {
+    try {
+      final db = await AppDatabase.instance();
+      final entidades = await db.query(
+        'entidades_plantel',
+        where: 'eliminado = 0',
+        orderBy: 'nombre ASC',
+      );
+      
+      if (mounted) {
+        setState(() {
+          _entidades = entidades.map((e) => Map<String, dynamic>.from(e)).toList();
+        });
+      }
+    } catch (e) {
+      // Error silencioso, los filtros son opcionales
+    }
   }
 
   Future<void> _cargarCompromisos() async {
     setState(() => _isLoading = true);
     
     try {
-      final compromisosRaw = await _compromisosService.listarCompromisos(
-        unidadGestionId: _unidadGestionId,
-        tipo: _tipoFiltro,
-        activo: _activoFiltro,
+      // FASE 22.5: Usar vista completa con JOINs en lugar de enriquecer manualmente
+      final db = await AppDatabase.instance();
+      
+      // Construir query dinámico con filtros
+      final whereConditions = <String>[];
+      final whereArgs = <dynamic>[];
+      
+      if (_unidadGestionId != null) {
+        whereConditions.add('unidad_gestion_id = ?');
+        whereArgs.add(_unidadGestionId);
+      }
+      
+      if (_tipoFiltro != null) {
+        whereConditions.add('tipo = ?');
+        whereArgs.add(_tipoFiltro);
+      }
+      
+      if (_activoFiltro != null) {
+        whereConditions.add('activo = ?');
+        whereArgs.add(_activoFiltro! ? 1 : 0);
+      }
+      
+      if (_entidadPlantelId != null) {
+        whereConditions.add('entidad_plantel_id = ?');
+        whereArgs.add(_entidadPlantelId);
+      }
+      
+      if (_rolFiltro != null) {
+        whereConditions.add('entidad_rol = ?');
+        whereArgs.add(_rolFiltro);
+      }
+      
+      final whereClause = whereConditions.isEmpty ? null : whereConditions.join(' AND ');
+      
+      final compromisosRaw = await db.query(
+        'v_compromisos_completo',
+        where: whereClause,
+        whereArgs: whereArgs.isEmpty ? null : whereArgs,
+        orderBy: 'fecha_inicio DESC',
       );
       
-      // Convertir a Maps mutables para poder enriquecerlos
-      final compromisos = compromisosRaw.map((c) => Map<String, dynamic>.from(c)).toList();
+      var compromisos = compromisosRaw.map((c) => Map<String, dynamic>.from(c)).toList();
       
       // Enriquecer con información de origen (si viene de acuerdo)
       for (final comp in compromisos) {
@@ -60,11 +120,21 @@ class _CompromisosPageState extends State<CompromisosPage> {
         }
       }
       
+      // Filtrar por origen de acuerdo
+      if (_origenAcuerdoFiltro != null) {
+        compromisos = compromisos.where((c) => c['es_de_acuerdo'] == _origenAcuerdoFiltro).toList();
+      }
+      
       setState(() {
         _compromisos = compromisos;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'compromisos_page.cargar_compromisos',
+        error: e.toString(),
+        stackTrace: stack,
+      );
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -81,7 +151,10 @@ class _CompromisosPageState extends State<CompromisosPage> {
   void _limpiarFiltros() {
     setState(() {
       _unidadGestionId = null;
+      _entidadPlantelId = null;
+      _rolFiltro = null;
       _tipoFiltro = null;
+      _origenAcuerdoFiltro = null;
       _activoFiltro = null;
     });
     _cargarCompromisos();
@@ -115,43 +188,48 @@ class _CompromisosPageState extends State<CompromisosPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Compromisos'),
-        actions: [
-          // Toggle vista tabla/tarjetas
-          IconButton(
-            icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
-            onPressed: () {
-              setState(() => _vistaTabla = !_vistaTabla);
-            },
-            tooltip: _vistaTabla ? 'Vista de tarjetas' : 'Vista de tabla',
-          ),
-          // Filtros
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _mostrarFiltros,
-            tooltip: 'Filtros',
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _compromisos.isEmpty
-              ? _buildEmpty()
-              : ResponsiveContainer(
-                  maxWidth: _vistaTabla ? 1400 : 1000,
-                  child: RefreshIndicator(
-                    onRefresh: _cargarCompromisos,
-                    child: _vistaTabla
-                        ? _buildTabla()
-                        : _buildTarjetas(),
-                  ),
-                ),
+    return TesoreriaScaffold(
+      title: 'Acuerdos y Compromisos',
+      currentRouteName: '/compromisos',
+      actions: [
+        // Toggle vista tabla/tarjetas
+        IconButton(
+          icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
+          onPressed: () {
+            setState(() => _vistaTabla = !_vistaTabla);
+          },
+          tooltip: _vistaTabla ? 'Vista de tarjetas' : 'Vista de tabla',
+        ),
+      ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _crearCompromiso,
+        backgroundColor: Colors.teal,
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Compromiso'),
+      ),
+      body: Column(
+        children: [
+          // FASE 22.5: Filtros visibles
+          _buildFiltrosVisibles(),
+          const Divider(height: 1),
+          
+          // Contenido principal
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _compromisos.isEmpty
+                    ? _buildEmpty()
+                    : ResponsiveContainer(
+                        maxWidth: _vistaTabla ? 1400 : 1000,
+                        child: RefreshIndicator(
+                          onRefresh: _cargarCompromisos,
+                          child: _vistaTabla
+                              ? _buildTabla()
+                              : _buildTarjetas(),
+                        ),
+                      ),
+          ),
+        ],
       ),
     );
   }
@@ -177,6 +255,178 @@ class _CompromisosPageState extends State<CompromisosPage> {
     );
   }
 
+  /// FASE 22.5: Sección de filtros visibles (dropdowns en lugar de modal)
+  Widget _buildFiltrosVisibles() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.grey.shade100,
+      child: ResponsiveContainer(
+        maxWidth: 1400,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Fila de dropdowns
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                // Entidad
+                SizedBox(
+                  width: 200,
+                  child: DropdownButtonFormField<int?>(
+                    value: _entidadPlantelId,
+                    decoration: const InputDecoration(
+                      labelText: 'Entidad',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(value: null, child: Text('Todos')),
+                      ..._entidades.map((e) => DropdownMenuItem<int?>(
+                        value: e['id'] as int,
+                        child: Text(e['nombre'] as String),
+                      )),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _entidadPlantelId = val);
+                    },
+                  ),
+                ),
+                
+                // Rol
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<String?>(
+                    value: _rolFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Rol',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: 'DT', child: Text('DT')),
+                      DropdownMenuItem(value: 'JUGADOR', child: Text('Jugador')),
+                      DropdownMenuItem(value: 'OTRO', child: Text('Otro')),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _rolFiltro = val);
+                    },
+                  ),
+                ),
+                
+                // Tipo
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<String?>(
+                    value: _tipoFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
+                      DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _tipoFiltro = val);
+                    },
+                  ),
+                ),
+                
+                // Estado (activo/pausado)
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<bool?>(
+                    value: _activoFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Estado',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: true, child: Text('Activo')),
+                      DropdownMenuItem(value: false, child: Text('Pausado')),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _activoFiltro = val);
+                    },
+                  ),
+                ),
+                
+                // Origen acuerdo
+                SizedBox(
+                  width: 180,
+                  child: DropdownButtonFormField<bool?>(
+                    value: _origenAcuerdoFiltro,
+                    decoration: const InputDecoration(
+                      labelText: 'Origen',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Todos')),
+                      DropdownMenuItem(value: true, child: Text('Solo acuerdos')),
+                      DropdownMenuItem(value: false, child: Text('Solo manuales')),
+                    ],
+                    onChanged: (val) {
+                      setState(() => _origenAcuerdoFiltro = val);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Botones de acción
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _aplicarFiltros,
+                  icon: const Icon(Icons.filter_list),
+                  label: const Text('Filtrar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _limpiarFiltros,
+                  icon: const Icon(Icons.clear),
+                  label: const Text('Limpiar'),
+                ),
+                const Spacer(),
+                Text(
+                  '${_compromisos.length} resultado${_compromisos.length != 1 ? 's' : ''}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTabla() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -185,6 +435,8 @@ class _CompromisosPageState extends State<CompromisosPage> {
           columns: const [
             DataColumn(label: Text('Nombre')),
             DataColumn(label: Text('Tipo')),
+            DataColumn(label: Text('Entidad')), // FASE 22.5
+            DataColumn(label: Text('Rol')),      // FASE 22.5
             DataColumn(label: Text('Monto')),
             DataColumn(label: Text('Frecuencia')),
             DataColumn(label: Text('Próximo Vencimiento')),
@@ -206,11 +458,17 @@ class _CompromisosPageState extends State<CompromisosPage> {
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
     final esDeAcuerdo = c['es_de_acuerdo'] == true;
     
+    // FASE 22.5: Obtener info de entidad desde la vista (ya viene con JOIN)
+    final entidadNombre = c['entidad_nombre'] as String? ?? '—';
+    final rolNombre = c['entidad_rol'] as String? ?? '—';
+    
     return DataRow(
       onSelectChanged: (_) => _verDetalle(c['id'] as int),
       cells: [
         DataCell(Text(c['nombre'] ?? '')),
         DataCell(_buildTipoBadge(tipo)),
+        DataCell(Text(entidadNombre)),  // FASE 22.5
+        DataCell(Text(rolNombre)),      // FASE 22.5
         DataCell(Text(Format.money(c['monto'] ?? 0))),
         DataCell(Text(c['frecuencia'] ?? '')),
         DataCell(_buildProximoVencimiento(c['id'] as int)),
@@ -520,7 +778,6 @@ class _CompromisosPageState extends State<CompromisosPage> {
 
         final pagado = snapshot.data!['pagado'] ?? 0.0;
         final remanente = snapshot.data!['remanente'] ?? 0.0;
-        final total = pagado + remanente;
 
         return Container(
           padding: const EdgeInsets.all(12),
@@ -596,110 +853,6 @@ class _CompromisosPageState extends State<CompromisosPage> {
     final pagado = await _compromisosService.calcularMontoPagado(compromisoId);
     final remanente = await _compromisosService.calcularMontoRemanente(compromisoId);
     return {'pagado': pagado, 'remanente': remanente};
-  }
-
-  void _mostrarFiltros() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filtros'),
-        content: StatefulBuilder(
-          builder: (context, setDialogState) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Tipo
-              const Text('Tipo:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<String?>(
-                      title: const Text('Todos'),
-                      value: null,
-                      groupValue: _tipoFiltro,
-                      onChanged: (val) => setDialogState(() => _tipoFiltro = val),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<String?>(
-                      title: const Text('Ingresos'),
-                      value: 'INGRESO',
-                      groupValue: _tipoFiltro,
-                      onChanged: (val) => setDialogState(() => _tipoFiltro = val),
-                    ),
-                  ),
-                  Expanded(
-                    child: RadioListTile<String?>(
-                      title: const Text('Egresos'),
-                      value: 'EGRESO',
-                      groupValue: _tipoFiltro,
-                      onChanged: (val) => setDialogState(() => _tipoFiltro = val),
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Estado
-              const Text('Estado:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<bool?>(
-                      title: const Text('Todos'),
-                      value: null,
-                      groupValue: _activoFiltro,
-                      onChanged: (val) => setDialogState(() => _activoFiltro = val),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: RadioListTile<bool?>(
-                      title: const Text('Activos'),
-                      value: true,
-                      groupValue: _activoFiltro,
-                      onChanged: (val) => setDialogState(() => _activoFiltro = val),
-                    ),
-                  ),
-                  Expanded(
-                    child: RadioListTile<bool?>(
-                      title: const Text('Pausados'),
-                      value: false,
-                      groupValue: _activoFiltro,
-                      onChanged: (val) => setDialogState(() => _activoFiltro = val),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _limpiarFiltros();
-            },
-            child: const Text('Limpiar'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _aplicarFiltros();
-            },
-            child: const Text('Aplicar'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _crearCompromiso() async {

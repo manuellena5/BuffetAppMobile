@@ -682,403 +682,492 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-                children: [
-                  // Header "profile" del evento
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isLandscape = constraints.maxWidth > 600;
+                  final maxContentWidth =
+                      isLandscape ? 600.0 : constraints.maxWidth;
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
                     children: [
-                      Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              theme.colorScheme.primary.withValues(alpha: 0.90),
-                              theme.colorScheme.primaryContainer,
-                            ],
-                          ),
-                        ),
-                        child: Icon(
-                          _iconForDisciplina(widget.disciplina),
-                          color: theme.colorScheme.onPrimary,
-                          size: 40,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: chip.bg,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                    color: chip.fg.withValues(alpha: 0.25)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                      Center(
+                        child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxWidth: maxContentWidth),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Header "profile" del evento
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (eventoSync == _EventoSync.parcial) ...[
-                                    Container(
-                                        width: 6,
-                                        height: 6,
-                                        decoration: BoxDecoration(
-                                            color: chip.fg,
-                                            shape: BoxShape.circle)),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  Text(
-                                    chip.label,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                        color: chip.fg,
-                                        fontWeight: FontWeight.w800),
+                                  Container(
+                                    width: 96,
+                                    height: 96,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          theme.colorScheme.primary
+                                              .withValues(alpha: 0.90),
+                                          theme.colorScheme.primaryContainer,
+                                        ],
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      _iconForDisciplina(widget.disciplina),
+                                      color: theme.colorScheme.onPrimary,
+                                      size: 40,
+                                    ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              widget.disciplina,
-                              style: theme.textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.w900),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(Icons.calendar_today,
-                                    size: 18,
-                                    color: theme.colorScheme.onSurfaceVariant),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _fechaHuman(widget.fecha),
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Resumen general
-                  Text(
-                    'Resumen General',
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Total global
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.primary.withValues(alpha: 0.75),
-                        ],
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total Ventas Global',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.90),
-                              fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          formatCurrency(_totalGlobal),
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                              color: Colors.white, fontWeight: FontWeight.w900),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Grid 2x2
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Efectivo',
-                          icon: Icons.payments,
-                          iconColor: Colors.green,
-                          value: formatCurrencyNoDecimals(_totalEfectivo),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Transf.',
-                          icon: Icons.credit_card,
-                          iconColor: Colors.purple,
-                          value: formatCurrencyNoDecimals(_totalTransfer),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Tickets',
-                          icon: Icons.confirmation_number,
-                          iconColor: Colors.orange,
-                          value: '$_ticketsEmitidos',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Diferencia',
-                          icon: Icons.difference,
-                          iconColor: Colors.blueGrey,
-                          value: (_diferenciaGlobal >= 0)
-                              ? '+${formatCurrency(_diferenciaGlobal)}'
-                              : '-${formatCurrency(_diferenciaGlobal.abs())}',
-                          valueColor: _diferenciaGlobal >= 0
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  // Cajas del evento
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Cajas del Evento',
-                          style: theme.textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${_cajas.length} Cajas',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w800),
-                        ),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  if (_cajas.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        'No hay cajas para este evento.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    )
-                  else
-                    ..._cajas.map((c) {
-                      final cajaChip = _cajaChip(c, theme);
-                      final alias = c.aliasCaja?.trim() ?? '';
-                      final title = alias.isNotEmpty
-                          ? '${c.codigoCaja} • $alias'
-                          : (c.puntoVentaCodigo ?? c.codigoCaja);
-
-                      final sub = c.cerrada
-                          ? 'Cerrada ${c.horaCierre ?? ''}'.trim()
-                          : 'En curso • Abierta ${c.horaApertura ?? ''}'.trim();
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Card(
-                          elevation: 1,
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => CajaPage(cajaId: c.id),
-                                ),
-                              );
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme
-                                              .surfaceContainerHighest
-                                              .withValues(alpha: 0.35),
-                                          borderRadius:
-                                              BorderRadius.circular(999),
-                                        ),
-                                        child: const Icon(Icons.point_of_sale),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(title,
-                                                style: theme
-                                                    .textTheme.titleMedium
-                                                    ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w900)),
-                                            const SizedBox(height: 4),
-                                            Text(sub,
-                                                style: theme.textTheme.bodySmall
-                                                    ?.copyWith(
-                                                        color: theme.colorScheme
-                                                            .onSurfaceVariant,
-                                                        fontWeight:
-                                                            FontWeight.w600)),
-                                          ],
-                                        ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                              formatCurrencyNoDecimals(c.total),
-                                              style: theme.textTheme.titleMedium
-                                                  ?.copyWith(
-                                                      fontWeight:
-                                                          FontWeight.w900)),
-                                          const SizedBox(height: 4),
-                                          Row(
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: chip.bg,
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                            border: Border.all(
+                                                color: chip.fg
+                                                    .withValues(alpha: 0.25)),
+                                          ),
+                                          child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
+                                              if (eventoSync ==
+                                                  _EventoSync.parcial) ...[
+                                                Container(
+                                                    width: 6,
+                                                    height: 6,
+                                                    decoration: BoxDecoration(
+                                                        color: chip.fg,
+                                                        shape:
+                                                            BoxShape.circle)),
+                                                const SizedBox(width: 8),
+                                              ],
                                               Text(
-                                                'Ef: ${formatCurrencyNoDecimals(c.totalEfectivo)}',
-                                                style: theme.textTheme.bodySmall
+                                                chip.label,
+                                                style: theme
+                                                    .textTheme.labelSmall
                                                     ?.copyWith(
-                                                        color: theme.colorScheme
-                                                            .onSurfaceVariant,
+                                                        color: chip.fg,
                                                         fontWeight:
-                                                            FontWeight.w700),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Text(
-                                                'Tr: ${formatCurrencyNoDecimals(c.totalTransfer)}',
-                                                style: theme.textTheme.bodySmall
-                                                    ?.copyWith(
-                                                        color: theme.colorScheme
-                                                            .onSurfaceVariant,
-                                                        fontWeight:
-                                                            FontWeight.w700),
+                                                            FontWeight.w800),
                                               ),
                                             ],
                                           ),
-                                          const SizedBox(height: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 10, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: cajaChip.bg,
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          widget.disciplina,
+                                          style: theme.textTheme.headlineSmall
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.w900),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Icon(Icons.calendar_today,
+                                                size: 18,
+                                                color: theme.colorScheme
+                                                    .onSurfaceVariant),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _fechaHuman(widget.fecha),
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(
+                                                      color: theme.colorScheme
+                                                          .onSurfaceVariant,
+                                                      fontWeight:
+                                                          FontWeight.w600),
                                             ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(cajaChip.icon,
-                                                    size: 14,
-                                                    color: cajaChip.fg),
-                                                const SizedBox(width: 6),
-                                                Text(cajaChip.label,
-                                                    style: theme
-                                                        .textTheme.labelSmall
-                                                        ?.copyWith(
-                                                            color: cajaChip.fg,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w800)),
-                                              ],
-                                            ),
-                                          )
-                                        ],
-                                      )
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              // Resumen general
+                              Text(
+                                'Resumen General',
+                                style: theme.textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Total global
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      theme.colorScheme.primary,
+                                      theme.colorScheme.primary
+                                          .withValues(alpha: 0.75),
                                     ],
                                   ),
-                                  const SizedBox(height: 12),
-                                  Divider(
-                                      height: 1,
-                                      color: theme.dividerColor
-                                          .withValues(alpha: 0.6)),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Ing: ${formatCurrencyNoDecimals(c.ingresos)}',
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                                color: theme.colorScheme
-                                                    .onSurfaceVariant,
-                                                fontWeight: FontWeight.w700),
-                                      ),
-                                      Text(
-                                        'Ret: ${formatCurrencyNoDecimals(c.retiros)}',
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                                color: theme.colorScheme
-                                                    .onSurfaceVariant,
-                                                fontWeight: FontWeight.w700),
-                                      ),
-                                      Icon(Icons.chevron_right,
-                                          color: theme
-                                              .colorScheme.onSurfaceVariant),
-                                    ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Total Ventas Global',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.90),
+                                              fontWeight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      formatCurrency(_totalGlobal),
+                                      style: theme.textTheme.headlineMedium
+                                          ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // Grid 2x2
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Efectivo',
+                                      icon: Icons.payments,
+                                      iconColor: Colors.green,
+                                      value: formatCurrencyNoDecimals(
+                                          _totalEfectivo),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Transf.',
+                                      icon: Icons.credit_card,
+                                      iconColor: Colors.purple,
+                                      value: formatCurrencyNoDecimals(
+                                          _totalTransfer),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Tickets',
+                                      icon: Icons.confirmation_number,
+                                      iconColor: Colors.orange,
+                                      value: '$_ticketsEmitidos',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Diferencia',
+                                      icon: Icons.difference,
+                                      iconColor: Colors.blueGrey,
+                                      value: (_diferenciaGlobal >= 0)
+                                          ? '+${formatCurrency(_diferenciaGlobal)}'
+                                          : '-${formatCurrency(_diferenciaGlobal.abs())}',
+                                      valueColor: _diferenciaGlobal >= 0
+                                          ? Colors.green.shade700
+                                          : Colors.red.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 18),
+
+                              // Cajas del evento
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Cajas del Evento',
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                              fontWeight: FontWeight.w900),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme.surfaceContainerHighest
+                                          .withValues(alpha: 0.35),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${_cajas.length} Cajas',
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                              color: theme
+                                                  .colorScheme.onSurfaceVariant,
+                                              fontWeight: FontWeight.w800),
+                                    ),
                                   )
                                 ],
                               ),
-                            ),
+                              const SizedBox(height: 10),
+
+                              if (_cajas.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'No hay cajas para este evento.',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant),
+                                  ),
+                                )
+                              else
+                                ..._cajas.map((c) {
+                                  final cajaChip = _cajaChip(c, theme);
+                                  final alias = c.aliasCaja?.trim() ?? '';
+                                  final title = alias.isNotEmpty
+                                      ? '${c.codigoCaja} • $alias'
+                                      : (c.puntoVentaCodigo ?? c.codigoCaja);
+
+                                  final sub = c.cerrada
+                                      ? 'Cerrada ${c.horaCierre ?? ''}'.trim()
+                                      : 'En curso • Abierta ${c.horaApertura ?? ''}'
+                                          .trim();
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Card(
+                                      elevation: 1,
+                                      clipBehavior: Clip.antiAlias,
+                                      child: InkWell(
+                                        onTap: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  CajaPage(cajaId: c.id),
+                                            ),
+                                          );
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(14),
+                                          child: Column(
+                                            children: [
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                    width: 40,
+                                                    height: 40,
+                                                    decoration: BoxDecoration(
+                                                      color: theme.colorScheme
+                                                          .surfaceContainerHighest
+                                                          .withValues(
+                                                              alpha: 0.35),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              999),
+                                                    ),
+                                                    child: const Icon(
+                                                        Icons.point_of_sale),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(title,
+                                                            style: theme
+                                                                .textTheme
+                                                                .titleMedium
+                                                                ?.copyWith(
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w900)),
+                                                        const SizedBox(
+                                                            height: 4),
+                                                        Text(sub,
+                                                            style: theme
+                                                                .textTheme
+                                                                .bodySmall
+                                                                ?.copyWith(
+                                                                    color: theme
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.end,
+                                                    children: [
+                                                      Text(
+                                                          formatCurrencyNoDecimals(
+                                                              c.total),
+                                                          style: theme.textTheme
+                                                              .titleMedium
+                                                              ?.copyWith(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w900)),
+                                                      const SizedBox(height: 4),
+                                                      Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Text(
+                                                            'Ef: ${formatCurrencyNoDecimals(c.totalEfectivo)}',
+                                                            style: theme
+                                                                .textTheme
+                                                                .bodySmall
+                                                                ?.copyWith(
+                                                                    color: theme
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 10),
+                                                          Text(
+                                                            'Tr: ${formatCurrencyNoDecimals(c.totalTransfer)}',
+                                                            style: theme
+                                                                .textTheme
+                                                                .bodySmall
+                                                                ?.copyWith(
+                                                                    color: theme
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 10,
+                                                                vertical: 6),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: cajaChip.bg,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                                      999),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            Icon(cajaChip.icon,
+                                                                size: 14,
+                                                                color: cajaChip
+                                                                    .fg),
+                                                            const SizedBox(
+                                                                width: 6),
+                                                            Text(cajaChip.label,
+                                                                style: theme
+                                                                    .textTheme
+                                                                    .labelSmall
+                                                                    ?.copyWith(
+                                                                        color: cajaChip
+                                                                            .fg,
+                                                                        fontWeight:
+                                                                            FontWeight.w800)),
+                                                          ],
+                                                        ),
+                                                      )
+                                                    ],
+                                                  )
+                                                ],
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Divider(
+                                                  height: 1,
+                                                  color: theme.dividerColor
+                                                      .withValues(alpha: 0.6)),
+                                              const SizedBox(height: 10),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Ing: ${formatCurrencyNoDecimals(c.ingresos)}',
+                                                    style: theme
+                                                        .textTheme.bodySmall
+                                                        ?.copyWith(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w700),
+                                                  ),
+                                                  Text(
+                                                    'Ret: ${formatCurrencyNoDecimals(c.retiros)}',
+                                                    style: theme
+                                                        .textTheme.bodySmall
+                                                        ?.copyWith(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w700),
+                                                  ),
+                                                  Icon(Icons.chevron_right,
+                                                      color: theme.colorScheme
+                                                          .onSurfaceVariant),
+                                                ],
+                                              )
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                            ],
                           ),
                         ),
-                      );
-                    }),
-                ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
       bottomNavigationBar: _loading
@@ -1115,10 +1204,9 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _syncing ? null : _syncEvento,
+                      onPressed: null,
                       icon: const Icon(Icons.cloud_upload),
-                      label: Text(
-                          _syncing ? 'Sincronizando…' : 'Sincronizar Evento'),
+                      label: const Text('Sincronizar Evento (próximamente)'),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(

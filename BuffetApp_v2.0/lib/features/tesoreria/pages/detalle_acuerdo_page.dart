@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/breadcrumb.dart';
 
 import '../../../features/shared/services/acuerdos_service.dart';
 import '../../../features/shared/services/compromisos_service.dart';
@@ -179,36 +180,138 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
   }
 
   Future<void> _finalizarAcuerdo() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Finalizar Acuerdo'),
-        content: Text(
-          '¿Finalizar el acuerdo "${_acuerdo!['nombre']}"?\n\n'
-          'Esto marcará el acuerdo como inactivo y no se generarán más compromisos.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Finalizar'),
-          ),
-        ],
-      ),
-    );
-    
-    if (confirm != true) return;
-    
     try {
-      await AcuerdosService.finalizarAcuerdo(widget.acuerdoId);
+      // FASE 22.6: Consultar cuotas esperadas de compromisos asociados a este acuerdo
+      final db = await AppDatabase.instance();
+      
+      // Obtener IDs de compromisos asociados al acuerdo
+      final compromisosAsociados = await db.query(
+        'compromisos',
+        columns: ['id'],
+        where: 'acuerdo_id = ? AND eliminado = 0',
+        whereArgs: [widget.acuerdoId],
+      );
+      
+      final compromisoIds = compromisosAsociados.map((c) => c['id'] as int).toList();
+      
+      // Consultar cuotas ESPERADO de esos compromisos
+      final cuotasEsperadas = compromisoIds.isEmpty ? <Map<String, dynamic>>[] : await db.query(
+        'compromiso_cuotas',
+        where: 'compromiso_id IN (${List.filled(compromisoIds.length, '?').join(',')}) AND estado = ?',
+        whereArgs: [...compromisoIds, 'ESPERADO'],
+      );
+      
+      // Diálogo con opciones si hay cuotas ESPERADO
+      if (cuotasEsperadas.isNotEmpty) {
+        final accion = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Finalizar Acuerdo'),
+            content: Text(
+              '¿Desea finalizar el acuerdo "${_acuerdo!['nombre']}"?\n\n'
+              'Este acuerdo tiene ${cuotasEsperadas.length} cuota${cuotasEsperadas.length > 1 ? 's' : ''} en estado ESPERADO.\n\n'
+              '¿Qué desea hacer con ellas?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'SOLO_FINALIZAR'),
+                child: const Text('Solo finalizar acuerdo'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, 'FINALIZAR_Y_CANCELAR'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                child: const Text('Finalizar y cancelar cuotas'),
+              ),
+            ],
+          ),
+        );
+        
+        if (accion == null) return; // Usuario canceló
+        
+        // Finalizar acuerdo
+        await AcuerdosService.finalizarAcuerdo(widget.acuerdoId);
+        
+        // Si eligió cancelar cuotas, hacerlo
+        if (accion == 'FINALIZAR_Y_CANCELAR') {
+          int cancelados = 0;
+          
+          for (final cuota in cuotasEsperadas) {
+            final cuotaId = cuota['id'] as int;
+            
+            try {
+              // Cambiar estado a CANCELADO
+              await db.update(
+                'compromiso_cuotas',
+                {
+                  'estado': 'CANCELADO',
+                  'observacion_cancelacion': 'Cancelada por finalización de acuerdo',
+                  'updated_ts': DateTime.now().millisecondsSinceEpoch,
+                },
+                where: 'id = ?',
+                whereArgs: [cuotaId],
+              );
+              cancelados++;
+            } catch (e) {
+              // Continuar con las demás aunque falle una
+              await AppDatabase.logLocalError(
+                scope: 'detalle_acuerdo_page.cancelar_cuotas',
+                error: e.toString(),
+                payload: {'cuota_id': cuotaId},
+              );
+            }
+          }
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Acuerdo finalizado. $cancelados cuota${cancelados > 1 ? 's' : ''} cancelada${cancelados > 1 ? 's' : ''}.')),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Acuerdo finalizado. Cuotas ESPERADO permanecen activas.')),
+            );
+          }
+        }
+      } else {
+        // No hay compromisos ESPERADO, solo confirmar finalización
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Finalizar Acuerdo'),
+            content: Text(
+              '¿Finalizar el acuerdo "${_acuerdo!['nombre']}"?\n\n'
+              'Esto marcará el acuerdo como inactivo y no se generarán más compromisos.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Finalizar'),
+              ),
+            ],
+          ),
+        );
+        
+        if (confirm != true) return;
+        
+        await AcuerdosService.finalizarAcuerdo(widget.acuerdoId);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Acuerdo finalizado')),
+          );
+        }
+      }
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Acuerdo finalizado')),
-        );
         _cargarDatos();
       }
     } catch (e, stack) {
@@ -265,14 +368,175 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
       _cargarDatos();
     }
   }
+  
+  Future<void> _eliminarAcuerdo() async {
+    try {
+      // Primero validar si se puede eliminar
+      final resultado = await AcuerdosService.eliminarAcuerdo(widget.acuerdoId);
+      
+      final puedeEliminar = resultado['puede_eliminar'] as bool;
+      
+      if (!puedeEliminar) {
+        // Mostrar diálogo explicando por qué no se puede eliminar
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 32),
+                SizedBox(width: 12),
+                Text('No se puede eliminar'),
+              ],
+            ),
+            content: Text(
+              resultado['razon'] as String? ?? 'No se puede eliminar el acuerdo',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      
+      // Mostrar diálogo de confirmación
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.orange, size: 32),
+              SizedBox(width: 12),
+              Text('Eliminar Acuerdo'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Estás seguro de que querés eliminar el acuerdo "${_acuerdo!['nombre']}"?',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Esta acción:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Text('• Marcará el acuerdo como eliminado'),
+              const Text('• Eliminará todos los compromisos ESPERADO asociados'),
+              const Text('• NO podrá deshacerse'),
+              const SizedBox(height: 12),
+              const Text(
+                'Los compromisos ya confirmados y sus movimientos se conservan para auditoría.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        ),
+      );
+      
+      if (confirmar != true) return;
+      
+      // Ya se eliminó en la validación, solo mostrar confirmación
+      if (!mounted) return;
+      
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              SizedBox(width: 12),
+              Text('Acuerdo Eliminado'),
+            ],
+          ),
+          content: const Text(
+            'El acuerdo se eliminó correctamente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Aceptar'),
+            ),
+          ],
+        ),
+      );
+      
+      if (mounted) {
+        // Volver a la lista de acuerdos
+        Navigator.pop(context, true);
+      }
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'detalle_acuerdo_page.eliminar_acuerdo',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'acuerdo_id': widget.acuerdoId},
+      );
+      
+      if (mounted) {
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 32),
+                SizedBox(width: 12),
+                Text('Error'),
+              ],
+            ),
+            content: Text('No se pudo eliminar el acuerdo: ${e.toString()}'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Detalle de Acuerdo'),
+        title: AppBarBreadcrumb(
+          items: [
+            BreadcrumbItem(
+              label: 'Acuerdos',
+              icon: Icons.description,
+              onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+            BreadcrumbItem(
+              label: _acuerdo != null 
+                ? (_acuerdo!['nombre'] as String? ?? 'Detalle')
+                : 'Detalle',
+            ),
+          ],
+        ),
         actions: [
-          if (_acuerdo != null && (_acuerdo!['activo'] as int) == 1)
+          if (_acuerdo != null)
             PopupMenuButton<String>(
               onSelected: (value) {
                 switch (value) {
@@ -282,30 +546,48 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
                   case 'finalizar':
                     _finalizarAcuerdo();
                     break;
+                  case 'eliminar':
+                    _eliminarAcuerdo();
+                    break;
                 }
               },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(
-                  value: 'editar',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit),
-                      SizedBox(width: 8),
-                      Text('Editar'),
-                    ],
+              itemBuilder: (ctx) {
+                final activo = (_acuerdo!['activo'] as int?) == 1;
+                return [
+                  if (activo)
+                    const PopupMenuItem(
+                      value: 'editar',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit),
+                          SizedBox(width: 8),
+                          Text('Editar'),
+                        ],
+                      ),
+                    ),
+                  if (activo)
+                    const PopupMenuItem(
+                      value: 'finalizar',
+                      child: Row(
+                        children: [
+                          Icon(Icons.stop),
+                          SizedBox(width: 8),
+                          Text('Finalizar'),
+                        ],
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'eliminar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Eliminar', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'finalizar',
-                  child: Row(
-                    children: [
-                      Icon(Icons.stop),
-                      SizedBox(width: 8),
-                      Text('Finalizar'),
-                    ],
-                  ),
-                ),
-              ],
+                ];
+              },
             ),
         ],
       ),
@@ -351,12 +633,11 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
     final unidadNombre = _acuerdo!['_unidad_nombre']?.toString() ?? 'Desconocida';
     final entidadNombre = _acuerdo!['_entidad_nombre']?.toString();
     final frecuencia = _acuerdo!['frecuencia']?.toString() ?? '-';
+    final frecuenciaDias = _acuerdo!['frecuencia_dias'] as int?;
     
     final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
         ? (_acuerdo!['monto_total'] as num?)?.toDouble() ?? 0.0
         : (_acuerdo!['monto_periodico'] as num?)?.toDouble() ?? 0.0;
-    
-    final cuotas = _acuerdo!['cuotas'] as int?;
     
     return Card(
       child: Padding(
@@ -396,19 +677,42 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
             ),
             const Divider(height: 24),
             
-            _buildInfoRow('Unidad de Gestión', unidadNombre, Icons.business),
-            if (entidadNombre != null)
-              _buildInfoRow('Entidad', entidadNombre, Icons.person),
-            _buildInfoRow('Tipo', tipo, Icons.category),
-            _buildInfoRow('Categoría', _categoriaNombre ?? categoria, Icons.label),
-            _buildInfoRow('Modalidad', _modalidadLabel(modalidad), Icons.payment),
-            _buildInfoRow('Monto', Format.money(montoDisplay), Icons.attach_money),
-            if (cuotas != null)
-              _buildInfoRow('Cuotas', cuotas.toString(), Icons.format_list_numbered),
-            _buildInfoRow('Frecuencia', frecuencia, Icons.schedule),
-            _buildInfoRow('Fecha Inicio', fechaInicio, Icons.calendar_today),
-            if (fechaFin != null)
-              _buildInfoRow('Fecha Fin', fechaFin, Icons.event),
+            // Layout en 2 columnas
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Columna izquierda
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoRow('Unidad de Gestión', unidadNombre, Icons.business),
+                      if (entidadNombre != null)
+                        _buildInfoRow('Entidad', entidadNombre, Icons.person),
+                      _buildInfoRow('Tipo', tipo, Icons.category),
+                      _buildInfoRow('Categoría', _categoriaNombre ?? categoria, Icons.label),
+                      _buildInfoRow('Fecha Inicio', fechaInicio, Icons.calendar_today),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Columna derecha
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoRow('Modalidad', _modalidadLabel(modalidad), Icons.payment),
+                      _buildInfoRow('Monto', Format.money(montoDisplay), Icons.attach_money),
+                      _buildInfoRow('Frecuencia', frecuencia, Icons.schedule),
+                      if (frecuenciaDias != null)
+                        _buildInfoRow('Semanal', frecuenciaDias == 7 ? 'Sí' : 'No', Icons.event_repeat),
+                      if (fechaFin != null)
+                        _buildInfoRow('Fecha Fin', fechaFin, Icons.event),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             
             if (observaciones != null && observaciones.isNotEmpty) ...[
               const Divider(height: 24),

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:buffet_app/data/dao/db.dart';
 import 'package:buffet_app/features/tesoreria/services/saldo_inicial_service.dart';
-import 'package:buffet_app/domain/models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

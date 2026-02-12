@@ -1,4 +1,7 @@
+import 'package:sqflite/sqflite.dart';
+import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
+import '../../../domain/paginated_result.dart';
 
 /// FASE 17.3: Servicio para gestionar entidades del plantel (jugadores, cuerpo técnico)
 /// y calcular su situación económica a partir de compromisos asociados.
@@ -107,6 +110,94 @@ class PlantelService {
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'nombre ASC',
     );
+  }
+
+  /// FASE 31: Obtener entidades de plantel con paginación
+  /// 
+  /// [unidadGestionId] - ID de la unidad de gestión (obligatorio)
+  /// [page] - Número de página (base 1, default: 1)
+  /// [pageSize] - Items por página (default: 50)
+  /// [tipo] - Filtro opcional por tipo (JUGADOR/DT/OTRO)
+  /// [activo] - Filtro opcional por estado activo (true/false)
+  /// [searchText] - Búsqueda en nombre/apellido/DNI (opcional)
+  Future<PaginatedResult<Map<String, dynamic>>> getEntidadesPaginadas({
+    required int unidadGestionId,
+    int page = 1,
+    int pageSize = 50,
+    String? tipo,
+    bool? activo,
+    String? searchText,
+  }) async {
+    try {
+      final db = await AppDatabase.instance();
+      
+      // Construir WHERE clause
+      final whereConditions = <String>['unidad_gestion_id = ?'];
+      final whereArgs = <dynamic>[unidadGestionId];
+
+      if (tipo != null && tipo.isNotEmpty) {
+        whereConditions.add('tipo = ?');
+        whereArgs.add(tipo);
+      }
+
+      if (activo != null) {
+        whereConditions.add('activo = ?');
+        whereArgs.add(activo ? 1 : 0);
+      }
+
+      if (searchText != null && searchText.isNotEmpty) {
+        whereConditions.add('(nombre LIKE ? OR apellido LIKE ? OR dni LIKE ?)');
+        final searchPattern = '%$searchText%';
+        whereArgs.add(searchPattern);
+        whereArgs.add(searchPattern);
+        whereArgs.add(searchPattern);
+      }
+
+      final whereClause = whereConditions.join(' AND ');
+
+      // Contar total de registros
+      final countResult = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM entidades_plantel WHERE $whereClause',
+        whereArgs,
+      );
+      final totalCount = Sqflite.firstIntValue(countResult) ?? 0;
+
+      if (totalCount == 0) {
+        return PaginatedResult.empty();
+      }
+
+      // Obtener items de la página actual
+      final offset = (page - 1) * pageSize;
+      final items = await db.query(
+        'entidades_plantel',
+        where: whereClause,
+        whereArgs: whereArgs,
+        orderBy: 'apellido ASC, nombre ASC',
+        limit: pageSize,
+        offset: offset,
+      );
+
+      final entidades = items.map((row) => Map<String, dynamic>.from(row)).toList();
+
+      return PaginatedResult<Map<String, dynamic>>(
+        items: entidades,
+        totalCount: totalCount,
+        pageSize: pageSize,
+        currentPage: page,
+      );
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel_service.get_paginadas',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {
+          'unidad_gestion_id': unidadGestionId,
+          'page': page,
+          'page_size': pageSize,
+        },
+      );
+      return PaginatedResult.empty();
+    }
   }
 
   /// Actualiza los datos de una entidad.
@@ -236,10 +327,9 @@ class PlantelService {
 
   /// Calcula el estado mensual de una entidad para un mes específico.
   /// Retorna un mapa con:
-  /// - totalComprometido: suma de montos de compromisos activos
-  /// - pagado: suma de movimientos CONFIRMADO del mes
-  /// - esperado: movimientos ESPERADO calculados dinámicamente
-  /// - atrasado: movimientos que debieron confirmarse antes del mes actual
+  /// - totalEsperado: suma de cuotas ESPERADO con fecha_programada en el mes
+  /// - pagado: suma de cuotas CONFIRMADO con fecha_programada en el mes
+  /// - atrasado: cuotas ESPERADO con fecha_programada < hoy
   Future<Map<String, dynamic>> calcularEstadoMensualPorEntidad(
     int entidadId,
     int year,
@@ -247,40 +337,67 @@ class PlantelService {
   ) async {
     final db = await AppDatabase.instance();
 
-    // Total comprometido mensual
-    final totalComprometido = await calcularTotalMensualPorEntidad(entidadId);
-
     // Primer y último día del mes
     final primerDia = DateTime(year, month, 1);
     final ultimoDia = DateTime(year, month + 1, 0);
 
     final fechaDesde = '${primerDia.year}-${primerDia.month.toString().padLeft(2, '0')}-${primerDia.day.toString().padLeft(2, '0')}';
     final fechaHasta = '${ultimoDia.year}-${ultimoDia.month.toString().padLeft(2, '0')}-${ultimoDia.day.toString().padLeft(2, '0')}';
+    final hoy = DateTime.now();
+    final fechaHoy = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
 
-    // Movimientos CONFIRMADO del mes (de todos los compromisos de esta entidad)
-    final pagado = await db.rawQuery(
+    // Total ESPERADO del mes: suma de cuotas con fecha_programada en el mes y estado ESPERADO
+    final esperadoResult = await db.rawQuery(
       '''
-      SELECT COALESCE(SUM(em.monto), 0) as total
-      FROM evento_movimiento em
-      INNER JOIN compromisos c ON em.compromiso_id = c.id
+      SELECT COALESCE(SUM(cc.monto_esperado), 0) as total
+      FROM compromiso_cuotas cc
+      INNER JOIN compromisos c ON cc.compromiso_id = c.id
       WHERE c.entidad_plantel_id = ?
-        AND em.estado = 'CONFIRMADO'
-        AND date(em.created_ts / 1000, 'unixepoch') BETWEEN ? AND ?
+        AND cc.estado = 'ESPERADO'
+        AND cc.fecha_programada BETWEEN ? AND ?
       ''',
       [entidadId, fechaDesde, fechaHasta],
     );
 
-    final pagadoTotal = (pagado.first['total'] as num).toDouble();
+    final esperado = (esperadoResult.first['total'] as num).toDouble();
 
-    // Nota: Los movimientos ESPERADO se calculan dinámicamente con MovimientosProyectadosService
-    // Acá solo retornamos la diferencia
-    final esperado = totalComprometido - pagadoTotal;
-    final atrasado = esperado > 0 && DateTime.now().isAfter(ultimoDia) ? esperado : 0.0;
+    // Total PAGADO del mes: suma de cuotas CONFIRMADO con fecha_programada en el mes
+    final pagadoResult = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(cc.monto_real), 0) as total
+      FROM compromiso_cuotas cc
+      INNER JOIN compromisos c ON cc.compromiso_id = c.id
+      WHERE c.entidad_plantel_id = ?
+        AND cc.estado = 'CONFIRMADO'
+        AND cc.fecha_programada BETWEEN ? AND ?
+      ''',
+      [entidadId, fechaDesde, fechaHasta],
+    );
+
+    final pagado = (pagadoResult.first['total'] as num).toDouble();
+
+    // Total ATRASADO: cuotas ESPERADO con fecha_programada < hoy
+    final atrasadoResult = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(cc.monto_esperado), 0) as total
+      FROM compromiso_cuotas cc
+      INNER JOIN compromisos c ON cc.compromiso_id = c.id
+      WHERE c.entidad_plantel_id = ?
+        AND cc.estado = 'ESPERADO'
+        AND cc.fecha_programada < ?
+      ''',
+      [entidadId, fechaHoy],
+    );
+
+    final atrasado = (atrasadoResult.first['total'] as num).toDouble();
+
+    // Total comprometido para el mes (esperado + pagado)
+    final totalComprometido = esperado + pagado;
 
     return {
       'totalComprometido': totalComprometido,
-      'pagado': pagadoTotal,
-      'esperado': esperado > 0 ? esperado : 0.0,
+      'pagado': pagado,
+      'esperado': esperado,
       'atrasado': atrasado,
     };
   }
@@ -337,6 +454,114 @@ class PlantelService {
       ''',
       whereArgs,
     );
+  }
+
+  /// Obtiene todos los movimientos asociados a una entidad del plantel.
+  /// Incluye:
+  /// - Movimientos directamente asociados (entidad_plantel_id)
+  /// - Movimientos vinculados a través de compromisos
+  Future<List<Map<String, dynamic>>> obtenerMovimientosPorEntidad(
+    int entidadId, {
+    DateTime? desde,
+    DateTime? hasta,
+    int limit = 100,
+  }) async {
+    final db = await AppDatabase.instance();
+
+    final where = <String>[];
+    final whereArgs = <dynamic>[];
+
+    // Condición: movimientos directos O movimientos de compromisos de esta entidad
+    where.add('(em.entidad_plantel_id = ? OR c.entidad_plantel_id = ?)');
+    whereArgs.add(entidadId);
+    whereArgs.add(entidadId);
+
+    // Solo confirmados (no esperados ni cancelados)
+    where.add('em.estado = ?');
+    whereArgs.add('CONFIRMADO');
+
+    // No eliminados
+    where.add('(em.eliminado IS NULL OR em.eliminado = 0)');
+
+    if (desde != null) {
+      final fechaDesde = '${desde.year}-${desde.month.toString().padLeft(2, '0')}-${desde.day.toString().padLeft(2, '0')}';
+      where.add('em.fecha >= ?');
+      whereArgs.add(fechaDesde);
+    }
+
+    if (hasta != null) {
+      final fechaHasta = '${hasta.year}-${hasta.month.toString().padLeft(2, '0')}-${hasta.day.toString().padLeft(2, '0')}';
+      where.add('em.fecha <= ?');
+      whereArgs.add(fechaHasta);
+    }
+
+    return await db.rawQuery(
+      '''
+      SELECT 
+        em.*,
+        c.nombre as compromiso_nombre,
+        c.categoria as compromiso_categoria,
+        c.tipo as compromiso_tipo,
+        mp.descripcion as medio_pago_desc
+      FROM evento_movimiento em
+      LEFT JOIN compromisos c ON em.compromiso_id = c.id
+      LEFT JOIN metodos_pago mp ON em.medio_pago_id = mp.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY em.fecha DESC, em.created_ts DESC
+      LIMIT ?
+      ''',
+      [...whereArgs, limit],
+    );
+  }
+
+  /// Calcula los montos de movimientos directamente asociados a una entidad en un mes específico.
+  /// Retorna un mapa con ingresos y egresos totales.
+  Future<Map<String, double>> calcularMovimientosAsociadosPorEntidad(
+    int entidadId,
+    int year,
+    int month,
+  ) async {
+    final db = await AppDatabase.instance();
+
+    final primerDia = DateTime(year, month, 1);
+    final ultimoDia = DateTime(year, month + 1, 0, 23, 59, 59);
+    final fechaInicio = DateFormat('yyyy-MM-dd').format(primerDia);
+    final fechaFin = DateFormat('yyyy-MM-dd').format(ultimoDia);
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT 
+        tipo,
+        SUM(monto) as total
+      FROM evento_movimiento
+      WHERE entidad_plantel_id = ?
+        AND fecha BETWEEN ? AND ?
+        AND estado = 'CONFIRMADO'
+        AND (eliminado IS NULL OR eliminado = 0)
+      GROUP BY tipo
+      ''',
+      [entidadId, fechaInicio, fechaFin],
+    );
+
+    double ingresos = 0.0;
+    double egresos = 0.0;
+
+    for (final row in rows) {
+      final tipo = row['tipo']?.toString() ?? '';
+      final total = (row['total'] as num?)?.toDouble() ?? 0.0;
+
+      if (tipo == 'INGRESO') {
+        ingresos = total;
+      } else if (tipo == 'EGRESO') {
+        egresos = total;
+      }
+    }
+
+    return {
+      'ingresos': ingresos,
+      'egresos': egresos,
+      'neto': ingresos - egresos,
+    };
   }
 
   /// Calcula un resumen general del plantel completo para un mes específico.

@@ -26,6 +26,12 @@ class PlantelImportExportService {
 
   /// Roles válidos para validación
   static const rolesValidos = ['JUGADOR', 'DT', 'AYUDANTE', 'PF', 'OTRO'];
+  
+  /// Posiciones válidas para jugadores
+  static const posicionesValidas = ['ARQUERO', 'DEFENSOR', 'MEDIOCAMPISTA', 'DELANTERO', 'STAFF_CT'];
+  
+  /// Tipos de contratación válidos para jugadores
+  static const tiposContratacionValidos = ['LOCAL', 'REFUERZO', 'OTRO'];
 
   /// Genera un archivo Excel de template con instrucciones y ejemplos.
   /// Retorna la ruta del archivo generado.
@@ -51,8 +57,10 @@ class PlantelImportExportService {
       sheet.cell(CellIndex.indexByString('A4')).value = '2. Columnas requeridas: Nombre, Rol';
       sheet.cell(CellIndex.indexByString('A5')).value = '3. Roles válidos: JUGADOR, DT, AYUDANTE, PF, OTRO';
       sheet.cell(CellIndex.indexByString('A6')).value = '4. Tipo Contratación: LOCAL, REFUERZO, OTRO (solo para jugadores)';
-      sheet.cell(CellIndex.indexByString('A7')).value = '5. Fecha Nacimiento formato: DD/MM/YYYY (ejemplo: 15/03/1995)';
-      sheet.cell(CellIndex.indexByString('A8')).value = '6. Nombres duplicados serán ignorados';
+      sheet.cell(CellIndex.indexByString('A7')).value = '5. Posiciones: ARQUERO, DEFENSOR, MEDIOCAMPISTA, DELANTERO, STAFF_CT (solo jugadores)';
+      sheet.cell(CellIndex.indexByString('A8')).value = '6. Fecha Nacimiento formato: DD/MM/YYYY (ejemplo: 15/03/1995)';
+      sheet.cell(CellIndex.indexByString('A9')).value = '7. Nombres duplicados serán ignorados';
+      sheet.cell(CellIndex.indexByString('A10')).value = '8. Consulte la hoja "_Valores" para ver todos los valores permitidos';
 
       // Hoja de jugadores con ejemplos
       final jugadoresSheet = excel['Jugadores'];
@@ -92,6 +100,30 @@ class PlantelImportExportService {
       jugadoresSheet.cell(CellIndex.indexByString('G3')).value = '';
       jugadoresSheet.cell(CellIndex.indexByString('H3')).value = '';
       jugadoresSheet.cell(CellIndex.indexByString('I3')).value = 'Director Técnico';
+
+      // Crear hoja oculta con valores válidos para dropdowns
+      final valoresSheet = excel['_Valores'];
+      
+      // Columna A: Roles válidos
+      valoresSheet.cell(CellIndex.indexByString('A1')).value = 'Roles';
+      for (var i = 0; i < rolesValidos.length; i++) {
+        valoresSheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: i + 1)).value = rolesValidos[i];
+      }
+      
+      // Columna B: Tipos de contratación
+      valoresSheet.cell(CellIndex.indexByString('B1')).value = 'Tipos Contratación';
+      for (var i = 0; i < tiposContratacionValidos.length; i++) {
+        valoresSheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: i + 1)).value = tiposContratacionValidos[i];
+      }
+      
+      // Columna C: Posiciones
+      valoresSheet.cell(CellIndex.indexByString('C1')).value = 'Posiciones';
+      for (var i = 0; i < posicionesValidas.length; i++) {
+        valoresSheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: i + 1)).value = posicionesValidas[i];
+      }
+      
+      // Nota: Excel package no soporta data validation directamente
+      // Las listas quedan como referencia para el usuario
 
       // Guardar
       final dir = await getTemporaryDirectory();
@@ -162,10 +194,26 @@ class PlantelImportExportService {
           // Saltar filas vacías
           if (nombre == null || nombre.isEmpty) continue;
 
-          // Validar rol
+          // Validar rol (marcar error pero no bloquear)
+          bool rolInvalido = false;
           if (rol == null || !rolesValidos.contains(rol)) {
-            errores.add('Fila ${i + 1}: Rol inválido "$rol". Debe ser: ${rolesValidos.join(", ")}');
-            continue;
+            rolInvalido = true;
+          }
+          
+          // Validar tipo de contratación (solo para JUGADOR y si no es vacío)
+          bool tipoContratacionInvalido = false;
+          if (rol == 'JUGADOR' && tipoContratacion != null && tipoContratacion.isNotEmpty) {
+            if (!tiposContratacionValidos.contains(tipoContratacion)) {
+              tipoContratacionInvalido = true;
+            }
+          }
+          
+          // Validar posición (solo para JUGADOR)
+          bool posicionInvalida = false;
+          if (rol == 'JUGADOR' && posicion != null && posicion.isNotEmpty) {
+            if (!posicionesValidas.contains(posicion)) {
+              posicionInvalida = true;
+            }
           }
 
           // Parsear fecha de nacimiento
@@ -197,7 +245,11 @@ class PlantelImportExportService {
             'tipo_contratacion': (tipoContratacion != null && tipoContratacion.isNotEmpty) ? tipoContratacion : null,
             'posicion': (posicion != null && posicion.isNotEmpty) ? posicion : null,
             'observaciones': observaciones,
-            'fila_excel': i + 1, // Para referencia en errores
+            'fila_excel': i + 1,
+            // Marcadores de errores
+            'rol_invalido': rolInvalido,
+            'tipo_contratacion_invalido': tipoContratacionInvalido,
+            'posicion_invalida': posicionInvalida,
           });
         } catch (e) {
           errores.add('Fila ${i + 1}: Error al leer datos - ${e.toString()}');

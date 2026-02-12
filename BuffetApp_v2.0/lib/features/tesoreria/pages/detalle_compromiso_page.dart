@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
-
+import '../../shared/widgets/breadcrumb.dart';
 
 import '../../../features/shared/format.dart';
 import '../../../features/shared/services/compromisos_service.dart';
-import '../../../features/shared/services/acuerdos_service.dart';
 import '../../../data/dao/db.dart';
 import '../services/categoria_movimiento_service.dart';
 import 'editar_compromiso_page.dart';
@@ -227,8 +226,26 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Detalle de Compromiso'),
+        title: AppBarBreadcrumb(
+          items: [
+            BreadcrumbItem(
+              label: 'Compromisos',
+              icon: Icons.assignment,
+              onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            ),
+            BreadcrumbItem(
+              label: _compromiso != null 
+                ? (_compromiso!['nombre'] as String? ?? 'Detalle')
+                : 'Detalle',
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _cargarDatos,
+            tooltip: 'Actualizar',
+          ),
           if (_compromiso != null && _compromiso!['eliminado'] == 0) ...[
             IconButton(
               icon: const Icon(Icons.edit),
@@ -400,8 +417,10 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
 
   Widget _buildEstadoCard() {
     final comp = _compromiso!;
-    final cuotasTotales = comp['cuotas'] as int?;
-    final cuotasConfirmadas = comp['cuotas_confirmadas'] as int? ?? 0;
+    // FASE 22.1: Usar _cuotas.length para mostrar cuotas generadas realmente
+    final cuotasTotales = _cuotas.isNotEmpty ? _cuotas.length : (comp['cuotas'] as int?);
+    // Contar cuotas confirmadas desde _cuotas
+    final cuotasConfirmadas = _cuotas.where((c) => c['estado'] == 'CONFIRMADO').length;
     final activo = comp['activo'] == 1;
     final eliminado = comp['eliminado'] == 1;
     

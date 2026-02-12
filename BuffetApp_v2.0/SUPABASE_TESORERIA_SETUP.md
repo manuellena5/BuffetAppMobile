@@ -303,4 +303,232 @@ ON CONFLICT (id) DO NOTHING;
 ---
 
 **Última actualización:** Enero 14, 2026  
-**Fase:** 12 - Sincronización Tesorería con Supabase
+**Fase:** 12 - Sincronización Tesorería con Supabase  
+**Fase 20:** Gestión de Cuentas de Fondos
+
+---
+
+## 📦 FASE 20: Gestión de Cuentas de Fondos
+
+### 🎯 Nuevas Tablas Requeridas
+
+Para soportar la gestión de cuentas (bancos, billeteras digitales, cajas, inversiones), necesitás agregar:
+
+1. **`cuentas_fondos`** - Definición de cuentas (bancos, billeteras, cajas físicas, inversiones)
+2. **Modificar `evento_movimiento`** - Agregar columnas `cuenta_id`, `es_transferencia`, `transferencia_id`
+
+### 🚀 Script de Instalación Fase 20
+
+En el SQL Editor de Supabase, ejecutá:
+
+```sql
+-- ============================================
+-- FASE 20: CUENTAS DE FONDOS
+-- ============================================
+
+-- 1. Crear tabla cuentas_fondos
+CREATE TABLE IF NOT EXISTS public.cuentas_fondos (
+    id SERIAL PRIMARY KEY,
+    unidad_gestion_id INTEGER NOT NULL REFERENCES public.unidades_gestion(id) ON DELETE RESTRICT,
+    nombre TEXT NOT NULL,
+    tipo TEXT NOT NULL CHECK (tipo IN ('BANCO', 'BILLETERA', 'CAJA', 'INVERSION')),
+    saldo_inicial NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    tiene_comision BOOLEAN NOT NULL DEFAULT FALSE,
+    comision_porcentaje NUMERIC(5, 2),
+    banco_nombre TEXT,
+    cbu_alias TEXT,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    observaciones TEXT,
+    archivo_local_path TEXT,
+    archivo_remote_url TEXT,
+    archivo_nombre TEXT,
+    archivo_tipo TEXT,
+    archivo_size INTEGER,
+    dispositivo_id TEXT,
+    eliminado BOOLEAN NOT NULL DEFAULT FALSE,
+    sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE', 'SINCRONIZADA', 'ERROR')),
+    created_ts BIGINT NOT NULL,
+    updated_ts BIGINT NOT NULL
+);
+
+-- Índices para cuentas_fondos
+CREATE INDEX IF NOT EXISTS idx_cuentas_fondos_unidad ON public.cuentas_fondos(unidad_gestion_id);
+CREATE INDEX IF NOT EXISTS idx_cuentas_fondos_tipo ON public.cuentas_fondos(tipo);
+CREATE INDEX IF NOT EXISTS idx_cuentas_fondos_activo ON public.cuentas_fondos(activo) WHERE eliminado = FALSE;
+
+-- 2. Modificar evento_movimiento (agregar columnas)
+ALTER TABLE public.evento_movimiento
+  ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES public.cuentas_fondos(id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS es_transferencia INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS transferencia_id TEXT;
+
+-- Índices para las nuevas columnas
+CREATE INDEX IF NOT EXISTS idx_evento_movimiento_cuenta ON public.evento_movimiento(cuenta_id);
+CREATE INDEX IF NOT EXISTS idx_evento_movimiento_transferencia ON public.evento_movimiento(transferencia_id) WHERE es_transferencia = 1;
+
+-- 3. Actualizar CHECK de categorías de evento_movimiento (agregar nuevas categorías)
+-- Primero, eliminar el constraint viejo si existe
+ALTER TABLE public.evento_movimiento DROP CONSTRAINT IF EXISTS evento_movimiento_categoria_check;
+
+-- Agregar nuevo constraint con las categorías actualizadas
+ALTER TABLE public.evento_movimiento
+  ADD CONSTRAINT evento_movimiento_categoria_check CHECK (
+    categoria IN (
+      -- Ingresos existentes
+      'CUOTA_SOCIO', 'BONO_CONTRIBUCION', 'ALQUILER_CANCHA', 
+      'SPONSORS', 'SORTEOS', 'EVENTOS_ESPECIALES', 'OTROS_ING',
+      -- Egresos existentes
+      'SUELDOS_CUERPO_TECNICO', 'PAGO_PROVEEDORES', 'INSUMOS_DEPORT', 
+      'MANTENIMIENTO', 'GASTOS_VARIOS', 'SERVICIOS', 'ARBITRAJES_JUECES',
+      -- NUEVAS (FASE 20)
+      'TRANSFERENCIA',   -- Transferencia entre cuentas
+      'COM_BANC',        -- Comisión bancaria
+      'INT_PF'           -- Interés de plazo fijo
+    )
+  );
+
+-- Verificación
+SELECT 
+    'cuentas_fondos' AS tabla,
+    COUNT(*) AS registros
+FROM public.cuentas_fondos
+UNION ALL
+SELECT 
+    'evento_movimiento (con cuenta_id)',
+    COUNT(*) 
+FROM public.evento_movimiento 
+WHERE cuenta_id IS NOT NULL;
+```
+
+### ✅ Verificar Instalación Fase 20
+
+Ejecutá para confirmar:
+
+```sql
+-- 1. Verificar que la tabla existe
+SELECT 
+    table_name,
+    column_name,
+    data_type
+FROM information_schema.columns
+WHERE table_schema = 'public' 
+  AND table_name = 'cuentas_fondos'
+ORDER BY ordinal_position;
+
+-- 2. Verificar índices
+SELECT 
+    indexname,
+    indexdef
+FROM pg_indexes 
+WHERE schemaname = 'public' 
+  AND tablename = 'cuentas_fondos'
+ORDER BY indexname;
+
+-- 3. Verificar columnas nuevas en evento_movimiento
+SELECT 
+    column_name,
+    data_type,
+    is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' 
+  AND table_name = 'evento_movimiento'
+  AND column_name IN ('cuenta_id', 'es_transferencia', 'transferencia_id');
+
+-- 4. Verificar categorías nuevas (debería incluir TRANSFERENCIA, COM_BANC, INT_PF)
+SELECT 
+    conname,
+    pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'public.evento_movimiento'::regclass
+  AND conname LIKE '%categoria%';
+```
+
+### 🔄 Flujo de Sincronización de Cuentas
+
+**Desde la app móvil:**
+1. Usuario crea/edita una cuenta en la app
+2. Registro queda en SQLite local con `sync_estado = 'PENDIENTE'`
+3. Usuario sincroniza manualmente
+4. App sube registro a Supabase (tabla `cuentas_fondos`)
+5. Si exitoso: `sync_estado = 'SINCRONIZADA'`
+
+**Transferencias:**
+- Cada transferencia genera **2 movimientos** en `evento_movimiento`:
+  - 1 EGRESO en cuenta origen
+  - 1 INGRESO en cuenta destino
+- Ambos comparten el mismo `transferencia_id` (UUID v4)
+- Ambos tienen `es_transferencia = 1`
+
+### 📊 Consultas Útiles (Cuentas)
+
+```sql
+-- Ver todas las cuentas activas con saldos
+SELECT 
+    cf.id,
+    cf.nombre,
+    cf.tipo,
+    cf.saldo_inicial,
+    COUNT(em.id) AS total_movimientos,
+    COALESCE(SUM(CASE WHEN em.tipo = 'INGRESO' THEN em.monto ELSE 0 END), 0) AS total_ingresos,
+    COALESCE(SUM(CASE WHEN em.tipo = 'EGRESO' THEN em.monto ELSE 0 END), 0) AS total_egresos,
+    cf.saldo_inicial + 
+      COALESCE(SUM(CASE WHEN em.tipo = 'INGRESO' THEN em.monto ELSE 0 END), 0) -
+      COALESCE(SUM(CASE WHEN em.tipo = 'EGRESO' THEN em.monto ELSE 0 END), 0) AS saldo_actual
+FROM public.cuentas_fondos cf
+LEFT JOIN public.evento_movimiento em ON em.cuenta_id = cf.id AND em.eliminado = FALSE
+WHERE cf.eliminado = FALSE AND cf.activo = TRUE
+GROUP BY cf.id, cf.nombre, cf.tipo, cf.saldo_inicial
+ORDER BY cf.nombre;
+
+-- Ver transferencias (movimientos vinculados)
+SELECT 
+    em.transferencia_id,
+    em.tipo,
+    cf.nombre AS cuenta,
+    em.monto,
+    em.created_ts
+FROM public.evento_movimiento em
+JOIN public.cuentas_fondos cf ON cf.id = em.cuenta_id
+WHERE em.es_transferencia = 1 
+  AND em.eliminado = FALSE
+ORDER BY em.transferencia_id, em.tipo DESC;
+
+-- Comisiones bancarias por cuenta
+SELECT 
+    cf.nombre AS cuenta,
+    COUNT(*) AS total_comisiones,
+    SUM(em.monto) AS total_monto_comisiones
+FROM public.evento_movimiento em
+JOIN public.cuentas_fondos cf ON cf.id = em.cuenta_id
+WHERE em.categoria = 'COM_BANC' 
+  AND em.eliminado = FALSE
+GROUP BY cf.id, cf.nombre
+ORDER BY total_monto_comisiones DESC;
+```
+
+### 🧪 Probar Sincronización de Cuentas
+
+1. En la app móvil, andá a **Tesorería → Cuentas de Fondos**
+2. Creá una cuenta de prueba (ej: Banco Nación)
+3. Registrá algunos movimientos vinculados a esa cuenta
+4. Creá una transferencia entre dos cuentas
+5. Sincronizá desde **"Pendientes de Sincronizar"**
+6. Verificá en Supabase:
+
+```sql
+-- Ver última cuenta sincronizada
+SELECT * FROM public.cuentas_fondos 
+ORDER BY created_ts DESC 
+LIMIT 1;
+
+-- Ver movimientos de esa cuenta
+SELECT * FROM public.evento_movimiento 
+WHERE cuenta_id = (SELECT id FROM public.cuentas_fondos ORDER BY created_ts DESC LIMIT 1)
+ORDER BY created_ts DESC;
+```
+
+---
+
+**Última actualización:** Enero 15, 2026  
+**Fase:** 12 - Sincronización Tesorería con Supabase  
+**Fase 20:** Gestión de Cuentas de Fondos ✅ COMPLETA
