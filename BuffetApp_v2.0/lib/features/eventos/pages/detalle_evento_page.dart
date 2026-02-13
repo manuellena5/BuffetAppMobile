@@ -40,6 +40,8 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
   double _totalGlobal = 0;
   double _totalEfectivo = 0;
   double _totalTransfer = 0;
+  double _totalIngresos = 0;
+  double _totalRetiros = 0;
   int _ticketsEmitidos = 0;
   double _diferenciaGlobal = 0;
 
@@ -99,28 +101,6 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
         .toList(growable: false);
   }
 
-  Future<void> _previewEventoPdf() async {
-    final modo = await _pickPdfModo();
-    if (modo == null) return;
-
-    final cajaIds = _closedCajaIds();
-    if (cajaIds.isEmpty) {
-      await _showInfoDialog(
-        title: 'Nada para imprimir',
-        message:
-            'Este evento no tiene cajas cerradas.\nSolo se imprimen reportes de cajas cerradas.',
-      );
-      return;
-    }
-
-    await PrintService().printEventoPdf(
-      fecha: widget.fecha,
-      disciplina: widget.disciplina,
-      cajaIds: cajaIds,
-      detallePorCaja: modo == _PdfModo.detallePorCaja,
-    );
-  }
-
   Future<void> _showPrinterNotConnectedDialog() async {
     if (!mounted) return;
     await showDialog<void>(
@@ -132,13 +112,6 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await _previewEventoPdf();
-            },
-            child: const Text('Previsualizar PDF'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -239,10 +212,16 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
         c.ingresos = extra.ingresosPorCaja[c.id] ?? 0.0;
         c.retiros = extra.retirosPorCaja[c.id] ?? 0.0;
         c.diferencia = extra.diferenciaPorCaja[c.id] ?? 0.0;
+        c.fondo = extra.fondoPorCaja[c.id] ?? 0.0;
       }
 
       final difGlobal =
           extra.diferenciaPorCaja.values.fold<double>(0.0, (a, b) => a + b);
+
+      final ingGlobal =
+          extra.ingresosPorCaja.values.fold<double>(0.0, (a, b) => a + b);
+      final retGlobal =
+          extra.retirosPorCaja.values.fold<double>(0.0, (a, b) => a + b);
 
       if (!mounted) return;
       setState(() {
@@ -250,6 +229,8 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
         _totalGlobal = total;
         _totalEfectivo = efectivo;
         _totalTransfer = transfer;
+        _totalIngresos = ingGlobal;
+        _totalRetiros = retGlobal;
         _ticketsEmitidos = emitidos;
         _diferenciaGlobal = difGlobal;
         _loading = false;
@@ -396,9 +377,10 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
       GROUP BY caja_id
     ''', cajaIds);
 
-    // diferencia ya existe en caja_diaria (si está cerrada). Si no existe, cae a 0.
+    // diferencia y fondo_inicial de caja_diaria
     final dif = await db.rawQuery('''
-      SELECT id as caja_id, COALESCE(diferencia,0) as diferencia
+      SELECT id as caja_id, COALESCE(diferencia,0) as diferencia,
+             COALESCE(fondo_inicial,0) as fondo_inicial
       FROM caja_diaria
       WHERE id IN ($placeholders)
     ''', cajaIds);
@@ -434,10 +416,12 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
     }
 
     final difMap = <int, double>{};
+    final fondoMap = <int, double>{};
     for (final r in dif) {
       final id = (r['caja_id'] as num?)?.toInt();
       if (id == null) continue;
       difMap[id] = (r['diferencia'] as num?)?.toDouble() ?? 0.0;
+      fondoMap[id] = (r['fondo_inicial'] as num?)?.toDouble() ?? 0.0;
     }
 
     return _PerCajaStats(
@@ -447,6 +431,7 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
       diferenciaPorCaja: difMap,
       efectivoPorCaja: efMap,
       transferenciaPorCaja: trMap,
+      fondoPorCaja: fondoMap,
     );
   }
 
@@ -671,11 +656,6 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
               );
             },
           ),
-          IconButton(
-            tooltip: 'Previsualizar PDF',
-            icon: const Icon(Icons.picture_as_pdf),
-            onPressed: _loading ? null : _previewEventoPdf,
-          ),
         ],
       ),
       body: _loading
@@ -799,77 +779,162 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
 
                               const SizedBox(height: 20),
 
-                              // Resumen general
-                              Text(
-                                'Resumen General',
-                                style: theme.textTheme.titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.w900),
-                              ),
-                              const SizedBox(height: 10),
-
-                              // Total global
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      theme.colorScheme.primary,
-                                      theme.colorScheme.primary
-                                          .withValues(alpha: 0.75),
+                              // ───────────────────────────────────────
+                              // 1️⃣ BLOQUE PRINCIPAL – RESULTADO DEL EVENTO
+                              // ───────────────────────────────────────
+                              () {
+                                final resultadoNeto = _totalEfectivo + _totalTransfer + _totalIngresos - _totalRetiros;
+                                final isPositive = resultadoNeto >= 0;
+                                return Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(20),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: isPositive
+                                          ? [Colors.green.shade700, Colors.green.shade500]
+                                          : [Colors.red.shade700, Colors.red.shade400],
+                                    ),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            isPositive ? Icons.trending_up : Icons.trending_down,
+                                            color: Colors.white.withValues(alpha: 0.85),
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Resultado Neto del Evento',
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              color: Colors.white.withValues(alpha: 0.90),
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          formatCurrency(resultadoNeto),
+                                          style: theme.textTheme.headlineMedium?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 32,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          'Ingresos totales – Retiros',
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: Colors.white.withValues(alpha: 0.70),
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Total Ventas Global',
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.90),
-                                              fontWeight: FontWeight.w700),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      formatCurrency(_totalGlobal),
-                                      style: theme.textTheme.headlineMedium
-                                          ?.copyWith(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                                );
+                              }(),
 
                               const SizedBox(height: 12),
 
-                              // Grid 2x2
+                              // Sub-cards: Total Vendido | Otros Ingresos | Retiros
                               Row(
                                 children: [
                                   Expanded(
                                     child: _StatCard(
-                                      title: 'Efectivo',
-                                      icon: Icons.payments,
-                                      iconColor: Colors.green,
-                                      value: formatCurrencyNoDecimals(
-                                          _totalEfectivo),
+                                      title: 'Total Vendido',
+                                      icon: Icons.shopping_bag,
+                                      iconColor: theme.colorScheme.primary,
+                                      value: formatCurrencyNoDecimals(_totalGlobal),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: _StatCard(
-                                      title: 'Transf.',
-                                      icon: Icons.credit_card,
-                                      iconColor: Colors.purple,
-                                      value: formatCurrencyNoDecimals(
-                                          _totalTransfer),
+                                      title: 'Otros Ing.',
+                                      icon: Icons.add_circle_outline,
+                                      iconColor: Colors.teal,
+                                      value: formatCurrencyNoDecimals(_totalIngresos),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Retiros',
+                                      icon: Icons.remove_circle_outline,
+                                      iconColor: Colors.red.shade400,
+                                      value: formatCurrencyNoDecimals(_totalRetiros),
                                     ),
                                   ),
                                 ],
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              // ───────────────────────────────────────
+                              // 2️⃣ BLOQUE FINANCIERO – Distribución del Dinero
+                              // ───────────────────────────────────────
+                              Text(
+                                'Distribución del Dinero',
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              const SizedBox(height: 10),
+                              () {
+                                final varEfectivo = _totalEfectivo + _totalIngresos - _totalRetiros;
+                                final varTransfer = _totalTransfer;
+                                final totalVar = varEfectivo + varTransfer;
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'Var. Efectivo',
+                                        icon: Icons.payments,
+                                        iconColor: Colors.green,
+                                        value: '${varEfectivo >= 0 ? '+' : ''}${formatCurrencyNoDecimals(varEfectivo)}',
+                                        valueColor: varEfectivo >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'Var. Transf.',
+                                        icon: Icons.account_balance,
+                                        iconColor: Colors.purple,
+                                        value: '${varTransfer >= 0 ? '+' : ''}${formatCurrencyNoDecimals(varTransfer)}',
+                                        valueColor: varTransfer >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'Total Var.',
+                                        icon: Icons.account_balance_wallet,
+                                        iconColor: Colors.indigo,
+                                        value: '${totalVar >= 0 ? '+' : ''}${formatCurrencyNoDecimals(totalVar)}',
+                                        valueColor: totalVar >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }(),
+
+                              const SizedBox(height: 20),
+
+                              // ───────────────────────────────────────
+                              // 3️⃣ BLOQUE OPERATIVO – Control
+                              // ───────────────────────────────────────
+                              Text(
+                                'Control Operativo',
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
                               ),
                               const SizedBox(height: 10),
                               Row(
@@ -882,24 +947,35 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       value: '$_ticketsEmitidos',
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _StatCard(
+                                      title: 'Cajas',
+                                      icon: Icons.point_of_sale,
+                                      iconColor: Colors.blueGrey,
+                                      value: '${_cajas.length}',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: _StatCard(
                                       title: 'Diferencia',
-                                      icon: Icons.difference,
-                                      iconColor: Colors.blueGrey,
-                                      value: (_diferenciaGlobal >= 0)
-                                          ? '+${formatCurrency(_diferenciaGlobal)}'
-                                          : '-${formatCurrency(_diferenciaGlobal.abs())}',
-                                      valueColor: _diferenciaGlobal >= 0
+                                      icon: Icons.balance,
+                                      iconColor: _diferenciaGlobal == 0
+                                          ? Colors.green
+                                          : (_diferenciaGlobal > 0 ? Colors.blue : Colors.red),
+                                      value: _diferenciaGlobal >= 0
+                                          ? '+${formatCurrencyNoDecimals(_diferenciaGlobal)}'
+                                          : formatCurrencyNoDecimals(_diferenciaGlobal),
+                                      valueColor: _diferenciaGlobal == 0
                                           ? Colors.green.shade700
-                                          : Colors.red.shade700,
+                                          : (_diferenciaGlobal > 0 ? Colors.blue : Colors.red.shade700),
                                     ),
                                   ),
                                 ],
                               ),
 
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 24),
 
                               // Cajas del evento
                               Row(
@@ -957,6 +1033,27 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       : 'En curso • Abierta ${c.horaApertura ?? ''}'
                                           .trim();
 
+                                  final cajaEsp = c.fondo + c.totalEfectivo + c.ingresos - c.retiros;
+
+                                  Widget _cajaDetailRow(String label, String value, {Color? valueColor, bool bold = false}) {
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 2),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(label, style: theme.textTheme.bodySmall?.copyWith(
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                                          )),
+                                          Text(value, style: theme.textTheme.bodySmall?.copyWith(
+                                            fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+                                            color: valueColor ?? theme.colorScheme.onSurface,
+                                          )),
+                                        ],
+                                      ),
+                                    );
+                                  }
+
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: Card(
@@ -974,186 +1071,74 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                         child: Padding(
                                           padding: const EdgeInsets.all(14),
                                           child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
+                                              // Header: título + estado + chevron
                                               Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Container(
-                                                    width: 40,
-                                                    height: 40,
+                                                    width: 36,
+                                                    height: 36,
                                                     decoration: BoxDecoration(
                                                       color: theme.colorScheme
                                                           .surfaceContainerHighest
-                                                          .withValues(
-                                                              alpha: 0.35),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              999),
+                                                          .withValues(alpha: 0.35),
+                                                      borderRadius: BorderRadius.circular(999),
                                                     ),
-                                                    child: const Icon(
-                                                        Icons.point_of_sale),
+                                                    child: const Icon(Icons.point_of_sale, size: 20),
                                                   ),
-                                                  const SizedBox(width: 12),
+                                                  const SizedBox(width: 10),
                                                   Expanded(
                                                     child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
                                                       children: [
-                                                        Text(title,
-                                                            style: theme
-                                                                .textTheme
-                                                                .titleMedium
-                                                                ?.copyWith(
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w900)),
-                                                        const SizedBox(
-                                                            height: 4),
-                                                        Text(sub,
-                                                            style: theme
-                                                                .textTheme
-                                                                .bodySmall
-                                                                ?.copyWith(
-                                                                    color: theme
-                                                                        .colorScheme
-                                                                        .onSurfaceVariant,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w600)),
+                                                        Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+                                                        Text(sub, style: theme.textTheme.bodySmall?.copyWith(
+                                                          color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600, fontSize: 11)),
                                                       ],
                                                     ),
                                                   ),
-                                                  Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment.end,
-                                                    children: [
-                                                      Text(
-                                                          formatCurrencyNoDecimals(
-                                                              c.total),
-                                                          style: theme.textTheme
-                                                              .titleMedium
-                                                              ?.copyWith(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w900)),
-                                                      const SizedBox(height: 4),
-                                                      Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          Text(
-                                                            'Ef: ${formatCurrencyNoDecimals(c.totalEfectivo)}',
-                                                            style: theme
-                                                                .textTheme
-                                                                .bodySmall
-                                                                ?.copyWith(
-                                                                    color: theme
-                                                                        .colorScheme
-                                                                        .onSurfaceVariant,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700),
-                                                          ),
-                                                          const SizedBox(
-                                                              width: 10),
-                                                          Text(
-                                                            'Tr: ${formatCurrencyNoDecimals(c.totalTransfer)}',
-                                                            style: theme
-                                                                .textTheme
-                                                                .bodySmall
-                                                                ?.copyWith(
-                                                                    color: theme
-                                                                        .colorScheme
-                                                                        .onSurfaceVariant,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      const SizedBox(height: 6),
-                                                      Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 10,
-                                                                vertical: 6),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: cajaChip.bg,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      999),
-                                                        ),
-                                                        child: Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            Icon(cajaChip.icon,
-                                                                size: 14,
-                                                                color: cajaChip
-                                                                    .fg),
-                                                            const SizedBox(
-                                                                width: 6),
-                                                            Text(cajaChip.label,
-                                                                style: theme
-                                                                    .textTheme
-                                                                    .labelSmall
-                                                                    ?.copyWith(
-                                                                        color: cajaChip
-                                                                            .fg,
-                                                                        fontWeight:
-                                                                            FontWeight.w800)),
-                                                          ],
-                                                        ),
-                                                      )
-                                                    ],
-                                                  )
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: cajaChip.bg,
+                                                      borderRadius: BorderRadius.circular(999),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(cajaChip.icon, size: 12, color: cajaChip.fg),
+                                                        const SizedBox(width: 4),
+                                                        Text(cajaChip.label, style: theme.textTheme.labelSmall?.copyWith(
+                                                          color: cajaChip.fg, fontWeight: FontWeight.w800, fontSize: 10)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Icon(Icons.chevron_right, color: theme.colorScheme.onSurfaceVariant, size: 20),
                                                 ],
                                               ),
-                                              const SizedBox(height: 12),
-                                              Divider(
-                                                  height: 1,
-                                                  color: theme.dividerColor
-                                                      .withValues(alpha: 0.6)),
                                               const SizedBox(height: 10),
-                                              Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                children: [
-                                                  Text(
-                                                    'Ing: ${formatCurrencyNoDecimals(c.ingresos)}',
-                                                    style: theme
-                                                        .textTheme.bodySmall
-                                                        ?.copyWith(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w700),
-                                                  ),
-                                                  Text(
-                                                    'Ret: ${formatCurrencyNoDecimals(c.retiros)}',
-                                                    style: theme
-                                                        .textTheme.bodySmall
-                                                        ?.copyWith(
-                                                            color: theme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w700),
-                                                  ),
-                                                  Icon(Icons.chevron_right,
-                                                      color: theme.colorScheme
-                                                          .onSurfaceVariant),
-                                                ],
-                                              )
+                                              Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.5)),
+                                              const SizedBox(height: 8),
+                                              // Detalle de control
+                                              _cajaDetailRow('Ventas', formatCurrencyNoDecimals(c.total)),
+                                              _cajaDetailRow('Efectivo', formatCurrencyNoDecimals(c.totalEfectivo)),
+                                              _cajaDetailRow('Transferencia', formatCurrencyNoDecimals(c.totalTransfer)),
+                                              _cajaDetailRow('Ingresos extra', formatCurrencyNoDecimals(c.ingresos)),
+                                              _cajaDetailRow('Retiros', formatCurrencyNoDecimals(c.retiros)),
+                                              if (c.cerrada) ...[  
+                                                const SizedBox(height: 4),
+                                                Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.4)),
+                                                const SizedBox(height: 4),
+                                                _cajaDetailRow('Caja esperada', formatCurrencyNoDecimals(cajaEsp), bold: true, valueColor: theme.colorScheme.primary),
+                                                _cajaDetailRow('Diferencia', '${c.diferencia >= 0 ? '+' : ''}${formatCurrencyNoDecimals(c.diferencia)}',
+                                                  bold: true,
+                                                  valueColor: c.diferencia == 0
+                                                      ? Colors.green.shade700
+                                                      : (c.diferencia > 0 ? Colors.blue : Colors.red.shade700),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -1309,6 +1294,7 @@ class _PerCajaStats {
     required this.diferenciaPorCaja,
     required this.efectivoPorCaja,
     required this.transferenciaPorCaja,
+    required this.fondoPorCaja,
   });
 
   final Map<int, double> totalesPorCaja;
@@ -1317,6 +1303,7 @@ class _PerCajaStats {
   final Map<int, double> diferenciaPorCaja;
   final Map<int, double> efectivoPorCaja;
   final Map<int, double> transferenciaPorCaja;
+  final Map<int, double> fondoPorCaja;
 
   factory _PerCajaStats.empty() => const _PerCajaStats(
         totalesPorCaja: {},
@@ -1325,6 +1312,7 @@ class _PerCajaStats {
         diferenciaPorCaja: {},
         efectivoPorCaja: {},
         transferenciaPorCaja: {},
+        fondoPorCaja: {},
       );
 }
 
@@ -1356,6 +1344,7 @@ class _CajaRow {
   double ingresos = 0;
   double retiros = 0;
   double diferencia = 0;
+  double fondo = 0;
 
   bool get cerrada => estado.toUpperCase() == 'CERRADA';
 

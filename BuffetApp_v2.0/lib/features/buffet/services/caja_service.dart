@@ -63,11 +63,22 @@ class CajaService {
       final hora =
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
       String discCode = 'OTRO';
-      if (disciplina.toLowerCase().contains('infantil')) {
+      final discLower = disciplina.toLowerCase();
+      if (discLower.contains('infantil')) {
         discCode = 'FUTI';
-      } else if (disciplina.toLowerCase().contains('mayor')) {
+      } else if (discLower.contains('senior')) {
+        discCode = 'FUTS';
+      } else if (discLower.contains('mayor')) {
         discCode = 'FUTM';
-      } else if (disciplina.toLowerCase().contains('evento')) {
+      } else if (discLower.contains('vóley') || discLower.contains('voley')) {
+        discCode = 'VOL';
+      } else if (discLower.contains('patín') || discLower.contains('patin')) {
+        discCode = 'PAT';
+      } else if (discLower.contains('tenis')) {
+        discCode = 'TEN';
+      } else if (discLower.contains('comisión') || discLower.contains('comision') || discLower.contains('directiva')) {
+        discCode = 'CDIR';
+      } else if (discLower.contains('evento')) {
         discCode = 'EVEN';
       }
       final fechaCompact = fecha.replaceAll('-', '');

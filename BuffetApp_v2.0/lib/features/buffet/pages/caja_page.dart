@@ -499,61 +499,128 @@ class _CajaPageState extends State<CajaPage> {
               ],
             ),
           )
-        : _SectionCard(
-            title: 'Cierre de caja (solo lectura)',
-            icon: Icons.lock_outline,
-            initiallyExpanded: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        : Column(
+            children: [
+              // --- RESUMEN DE VENTAS ---
+              _SectionCard(
+                title: 'Resumen de Ventas',
+                icon: Icons.shopping_bag,
+                initiallyExpanded: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                        child: _kv('Cajero de cierre',
-                            cajeroCierre.isEmpty ? '—' : cajeroCierre)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _kv('Entradas',
-                            entradasVendidas == 0 ? '—' : '$entradasVendidas')),
+                    ...totalesMp.map((m) {
+                      final desc = (m['mp_desc'] as String?) ?? 'MP ${m['mp']}';
+                      final monto = ((m['total'] as num?) ?? 0).toDouble();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(desc, style: Theme.of(context).textTheme.bodyMedium)),
+                            Text(formatCurrency(monto), style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: Text('TOTAL VENDIDO', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
+                        Text(formatCurrency(totalVentas), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _kv('Efectivo declarado',
-                            formatCurrency(efectivoDeclarado))),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _kv('Transferencias declaradas',
-                            formatCurrency(transferenciasFinal))),
-                  ],
+              ),
+              const SizedBox(height: 12),
+              // --- RESUMEN CAJA ---
+              _SectionCard(
+                title: 'Resumen Caja',
+                icon: Icons.lock_outline,
+                initiallyExpanded: true,
+                child: Builder(
+                  builder: (context) {
+                    final cajaEsperada = fondo + ventasEfec + _movIngresos - _movRetiros;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('CAJA ESPERADA:', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 8),
+                        _kvRow(context, 'Fondo inicial', formatCurrency(fondo)),
+                        _kvRow(context, '+ Ventas efectivo', formatCurrency(ventasEfec)),
+                        _kvRow(context, '+ Otros ingresos', formatCurrency(_movIngresos)),
+                        _kvRow(context, '- Retiros', '(${formatCurrency(_movRetiros)})'),
+                        const Divider(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: Text('CAJA ESPERADA', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
+                            Text(formatCurrency(cajaEsperada), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _kvRow(context, 'Efectivo declarado', formatCurrency(efectivoDeclarado)),
+                        _kvRow(context, 'Transferencias declaradas', formatCurrency(transferenciasFinal)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(child: Text('Diferencia', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+                            Text(
+                              formatCurrency(diferencia),
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: diferencia == 0 ? Colors.green : (diferencia > 0 ? Colors.blue : Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 16),
+                        _kvRow(context, 'Entradas vendidas', entradasVendidas == 0 ? '—' : '$entradasVendidas'),
+                        _kvRow(context, 'Tickets vendidos', '$ticketsEmitidos'),
+                        _kvRow(context, 'Tickets anulados', '$ticketsAnulados'),
+                        if (cajeroCierre.isNotEmpty) ...[const SizedBox(height: 6), _kvRow(context, 'Cajero de cierre', cajeroCierre)],
+                        if (obsCierre.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _kv('Observación cierre', obsCierre, italicValue: true),
+                        ],
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _kv('Diferencia', formatCurrency(diferencia))),
-                    const SizedBox(width: 12),
-                    Expanded(child: _kv('Estado', estado)),
-                  ],
+              ),
+              const SizedBox(height: 12),
+              // --- RESULTADO ECONÓMICO DEL EVENTO ---
+              _SectionCard(
+                title: 'Resultado Económico del Evento',
+                icon: Icons.trending_up,
+                initiallyExpanded: true,
+                child: Builder(
+                  builder: (context) {
+                    final resultadoNeto = ventasEfec + ventasTransf + _movIngresos - _movRetiros;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _kvRow(context, 'Ventas en efectivo', formatCurrency(ventasEfec)),
+                        _kvRow(context, 'Ventas por transferencia', formatCurrency(ventasTransf)),
+                        _kvRow(context, '+ Otros ingresos', formatCurrency(_movIngresos)),
+                        _kvRow(context, '- Retiros', '(${formatCurrency(_movRetiros)})'),
+                        const Divider(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: Text('RESULTADO NETO', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
+                            Text(formatCurrency(resultadoNeto), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: resultadoNeto >= 0 ? Colors.green.shade700 : Colors.red)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '(${formatCurrency(ventasEfec)} + ${formatCurrency(ventasTransf)} + ${formatCurrency(_movIngresos)} - ${formatCurrency(_movRetiros)})',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _kv('Tickets vendidos', '$ticketsEmitidos')),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _kv('Tickets anulados', '$ticketsAnulados')),
-                  ],
-                ),
-                if (obsCierre.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _kv('Observación cierre', obsCierre, italicValue: true),
-                ],
-              ],
-            ),
+              ),
+            ],
           );
     porProducto.sort((a, b) {
       final an = (a['cantidad'] as num?) ?? 0;
@@ -775,51 +842,105 @@ class _CajaPageState extends State<CajaPage> {
     final ticketsVendidos = (tickets['emitidos'] as num?)?.toInt() ?? 0;
     final ticketsAnulados = (tickets['anulados'] as num?)?.toInt() ?? 0;
 
+    // Calcular ventas en efectivo para el diálogo
+    final porMpDialog = List<Map<String, dynamic>>.from(
+        (resumen['por_mp'] as List?) ?? const []);
+    final ventasEfectivoDialog = porMpDialog.fold<double>(
+      0.0,
+      (acc, e) =>
+          (e['mp_desc']?.toString() ?? '').toLowerCase().contains('efectivo')
+              ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
+              : acc,
+    );
+    final cajaEsperadaDialog = fondo + ventasEfectivoDialog + ingresos - retiros;
+    final totalMovEfectivoDialog = ventasEfectivoDialog + ingresos - retiros;
+
     if (!context.mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirmar cierre de caja'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Total ventas (sistema): ${formatCurrency(totalVentas)}'),
-            () {
-              final porMp = List<Map<String, dynamic>>.from(
-                  (resumen['por_mp'] as List?) ?? const []);
-              final ventasEfectivo = porMp.fold<double>(
-                0.0,
-                (acc, e) =>
-                    (e['mp_desc']?.toString() ?? '').toLowerCase() == 'efectivo'
-                        ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
-                        : acc,
-              );
-              return Text(
-                  'Ventas en efectivo: ${formatCurrency(ventasEfectivo)}');
-            }(),
-            Text('Transferencias: ${formatCurrency(tr)}'),
-            const SizedBox(height: 8),
-            Text('Fondo inicial: ${formatCurrency(fondo)}'),
-            Text('Efectivo declarado en caja: ${formatCurrency(eff)}'),
-            Text('Ingresos registrados: ${formatCurrency(ingresos)}'),
-            Text('Retiros registrados: ${formatCurrency(retiros)}'),
-            Text(
-              'Diferencia: ${formatCurrency(diferencia)}',
-              style: TextStyle(
-                color: diferencia == 0
-                    ? Colors.green
-                    : (diferencia > 0 ? Colors.blue : Colors.red),
-                fontWeight: FontWeight.w700,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // RESUMEN DE VENTAS
+              Text('RESUMEN DE VENTAS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+              const SizedBox(height: 4),
+              ...porMpDialog.map((m) {
+                final desc = (m['mp_desc'] as String?) ?? 'MP ${m['mp']}';
+                final monto = ((m['total'] as num?) ?? 0).toDouble();
+                return Text('  $desc: ${formatCurrency(monto)}');
+              }),
+              Text('TOTAL VENDIDO: ${formatCurrency(totalVentas)}',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 10),
+              // MOVIMIENTOS DE CAJA
+              Text('MOVIMIENTOS DE CAJA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text('+ Ingresos extra: ${formatCurrency(ingresos)}'),
+              Text('- Retiros: ${formatCurrency(retiros)}'),
+              const SizedBox(height: 4),
+              Text('TOTAL MOV. EFECTIVO: ${totalMovEfectivoDialog >= 0 ? '+' : ''}${formatCurrency(totalMovEfectivoDialog)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ingresos)} - ${formatCurrency(retiros)})',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              const SizedBox(height: 10),
+              // RESUMEN CAJA
+              Text('RESUMEN CAJA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text('Fondo inicial:         ${formatCurrency(fondo)}'),
+              Text('+ Ventas efectivo:     ${formatCurrency(ventasEfectivoDialog)}'),
+              Text('+ Otros ingresos:      ${formatCurrency(ingresos)}'),
+              Text('- Retiros:            (${formatCurrency(retiros)})'),
+              Text('CAJA ESPERADA: ${formatCurrency(cajaEsperadaDialog)}',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              Text('Efectivo declarado: ${formatCurrency(eff)}'),
+              Text(
+                'Diferencia: ${formatCurrency(diferencia)}',
+                style: TextStyle(
+                  color: diferencia == 0
+                      ? Colors.green
+                      : (diferencia > 0 ? Colors.blue : Colors.red),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text('Entradas vendidas: ${entradas == null ? '-' : entradas}'),
-            Text('Tickets vendidos: $ticketsVendidos'),
-            Text('Tickets anulados: $ticketsAnulados'),
-            const SizedBox(height: 8),
-            const Text('¿Deseás cerrar la caja?'),
-          ],
+              const SizedBox(height: 10),
+              // RESULTADO ECONÓMICO DEL EVENTO
+              () {
+                final ventasTransfDialog = porMpDialog.fold<double>(
+                  0.0,
+                  (acc, e) => (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
+                      ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
+                      : acc,
+                );
+                final resultadoNetoDialog = ventasEfectivoDialog + ventasTransfDialog + ingresos - retiros;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('RESULTADO ECONÓMICO', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text('Ventas en efectivo:       ${formatCurrency(ventasEfectivoDialog)}'),
+                    Text('Ventas por transferencia: ${formatCurrency(ventasTransfDialog)}'),
+                    Text('Otros ingresos:           ${formatCurrency(ingresos)}'),
+                    Text('Retiros:                 (${formatCurrency(retiros)})'),
+                    Text('RESULTADO NETO: ${formatCurrency(resultadoNetoDialog)}',
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ventasTransfDialog)} + ${formatCurrency(ingresos)} - ${formatCurrency(retiros)})',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  ],
+                );
+              }(),
+              const SizedBox(height: 8),
+              Text('Entradas vendidas: ${entradas == null ? '-' : entradas}'),
+              Text('Tickets vendidos: $ticketsVendidos'),
+              Text('Tickets anulados: $ticketsAnulados'),
+              const SizedBox(height: 8),
+              const Text('¿Deseás cerrar la caja?'),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1198,7 +1319,7 @@ class _TotalVentasCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Total Ventas',
+            'Total Vendido',
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
@@ -1392,6 +1513,24 @@ Widget _kv(String k, String v, {bool italicValue = false}) {
                 color: italicValue ? Theme.of(context).hintColor : null,
               ),
         ),
+      ],
+    ),
+  );
+}
+
+Widget _kvRow(BuildContext context, String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+        Text(value,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w700)),
       ],
     ),
   );

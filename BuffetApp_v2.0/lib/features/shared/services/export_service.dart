@@ -1533,12 +1533,38 @@ class ExportService {
 
       // ─── CIERRE DE CAJA ───
       _section('CIERRE DE CAJA');
+      final cajaEsperada = fondo + ventasEfec + movIngresos - movRetiros;
+      _labelMoney('Fondo Inicial', fondo);
+      _labelMoney('+ Ventas Efectivo', ventasEfec);
+      _labelMoney('+ Ingresos', movIngresos);
+      _labelMoney('- Retiros', movRetiros, negative: true);
+      _labelMoney('= Caja Esperada', cajaEsperada);
+      row++;
       _labelMoney('Efectivo Declarado', efectivoDeclarado);
       _labelMoney('Transferencias Declaradas', transferenciasFinal);
       _labelMoney('Diferencia', diferencia, negative: diferencia < 0);
       _labelValue('Entradas Vendidas',
           entradasVendidas == 0 ? '—' : '$entradasVendidas');
       if (obsCierre.isNotEmpty) _labelValue('Obs. Cierre', obsCierre);
+
+      // ─── RESULTADO ECONÓMICO DEL EVENTO ───
+      _section('RESULTADO ECONÓMICO DEL EVENTO');
+      final resultadoNeto = ventasEfec + ventasTransf + movIngresos - movRetiros;
+      _labelMoney('Ventas en Efectivo', ventasEfec);
+      _labelMoney('Ventas por Transferencia', ventasTransf);
+      _labelMoney('Otros Ingresos', movIngresos);
+      _labelMoney('Retiros', movRetiros, negative: true);
+      row++;
+      // Resultado neto con estilo destacado
+      {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = 'RESULTADO NETO'
+          ..cellStyle = CellStyle(bold: true, fontSize: 14, fontColorHex: resultadoNeto >= 0 ? '#1B5E20' : '#C62828');
+        final rnCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row));
+        rnCell.value = resultadoNeto;
+        rnCell.cellStyle = CellStyle(bold: true, fontSize: 14, fontColorHex: resultadoNeto >= 0 ? '#1B5E20' : '#C62828');
+        row++;
+      }
 
       // ─── ANCHOS DE COLUMNAS ───
       sheet.setColWidth(0, 30.0);

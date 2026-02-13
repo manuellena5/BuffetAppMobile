@@ -225,7 +225,8 @@ class PrintService {
               if (obsCierre.isNotEmpty)
                 pw.Text('Obs. cierre: $obsCierre', style: s()),
               pw.SizedBox(height: 6),
-              pw.Text('TOTALES POR MEDIO DE PAGO', style: s(true)),
+              // --- RESUMEN DE VENTAS ---
+              pw.Text('RESUMEN DE VENTAS', style: s(true)),
               pw.SizedBox(height: 4),
               ...totalesMp.map((m) => pw.Text(
                     '${(m['mp_desc'] as String?) ?? 'MP ${m['mp']}'}: ${_formatCurrency(((m['total'] as num?) ?? 0).toDouble())}',
@@ -233,13 +234,10 @@ class PrintService {
                   )),
               pw.SizedBox(height: 4),
               pw.Text(
-                  'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
+                  'TOTAL VENDIDO: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
                   style: s(true).copyWith(fontSize: 12)),
-              pw.SizedBox(height: 6),
-              pw.Text('Fondo inicial: ${_formatCurrency(fondo)}', style: s()),
-              pw.Text(
-                  'Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}',
-                  style: s()),
+              pw.SizedBox(height: 8),
+              // --- MOVIMIENTOS DE CAJA ---
               () {
                 double ing = 0, ret = 0;
                 for (final m in movimientos) {
@@ -251,19 +249,156 @@ class PrintService {
                     ret += monto;
                   }
                 }
+                // Ventas en efectivo
+                double ventasEfec = 0;
+                for (final m in totalesMp) {
+                  final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+                  if (desc.contains('efectivo')) {
+                    ventasEfec += ((m['total'] as num?) ?? 0).toDouble();
+                  }
+                }
+                final totalMovEfectivo = ventasEfec + ing - ret;
                 return pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('Ingresos registrados: ${_formatCurrency(ing)}',
+                    pw.Text('MOVIMIENTOS DE CAJA', style: s(true)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('+ Ingresos extra: ${_formatCurrency(ing)}',
                         style: s()),
-                    pw.Text('Retiros registrados: ${_formatCurrency(ret)}',
+                    // Detalle de ingresos
+                    ...movimientos
+                        .where((m) => (m['tipo'] ?? '').toString().toUpperCase() == 'INGRESO')
+                        .map((m) {
+                      final ts = (m['created_ts'] as num?)?.toInt();
+                      String tsStr = '';
+                      if (ts != null) {
+                        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                        final dd = dt.day.toString().padLeft(2, '0');
+                        final mm = dt.month.toString().padLeft(2, '0');
+                        final hh = dt.hour.toString().padLeft(2, '0');
+                        final mi = dt.minute.toString().padLeft(2, '0');
+                        tsStr = '$dd/$mm $hh:$mi';
+                      }
+                      final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                      final obs = (m['observacion'] as String?)?.trim();
+                      final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
+                      return pw.Text(
+                        '  * $tsStr Ingreso: ${_formatCurrency(monto)}$obsPart',
+                        style: s(),
+                      );
+                    }),
+                    pw.Text('- Retiros: ${_formatCurrency(ret)}',
+                        style: s()),
+                    // Detalle de retiros
+                    ...movimientos
+                        .where((m) => (m['tipo'] ?? '').toString().toUpperCase() == 'RETIRO')
+                        .map((m) {
+                      final ts = (m['created_ts'] as num?)?.toInt();
+                      String tsStr = '';
+                      if (ts != null) {
+                        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                        final dd = dt.day.toString().padLeft(2, '0');
+                        final mm = dt.month.toString().padLeft(2, '0');
+                        final hh = dt.hour.toString().padLeft(2, '0');
+                        final mi = dt.minute.toString().padLeft(2, '0');
+                        tsStr = '$dd/$mm $hh:$mi';
+                      }
+                      final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                      final obs = (m['observacion'] as String?)?.trim();
+                      final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
+                      return pw.Text(
+                        '  * $tsStr Retiro: ${_formatCurrency(monto)}$obsPart',
+                        style: s(),
+                      );
+                    }),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                        'TOTAL MOV. EFECTIVO DEL DIA: ${totalMovEfectivo >= 0 ? '+' : ''}${_formatCurrency(totalMovEfectivo)}',
+                        style: s(true)),
+                    pw.Text(
+                        '(${_formatCurrency(ventasEfec)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})',
                         style: s()),
                   ],
                 );
               }(),
-              pw.Text('Diferencia: ${_formatCurrency(diferencia)}',
-                  style: s(true)),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 8),
+              // --- RESUMEN CAJA ---
+              () {
+                double ing = 0, ret = 0;
+                for (final m in movimientos) {
+                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                  if (tipo == 'INGRESO') {
+                    ing += monto;
+                  } else if (tipo == 'RETIRO') {
+                    ret += monto;
+                  }
+                }
+                double ventasEfec = 0;
+                for (final m in totalesMp) {
+                  final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+                  if (desc.contains('efectivo')) {
+                    ventasEfec += ((m['total'] as num?) ?? 0).toDouble();
+                  }
+                }
+                final cajaEsperada = fondo + ventasEfec + ing - ret;
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('RESUMEN CAJA', style: s(true)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('CAJA ESPERADA:', style: s(true)),
+                    pw.Text('Fondo inicial          ${_formatCurrency(fondo)}', style: s()),
+                    pw.Text('+ Ventas efectivo      ${_formatCurrency(ventasEfec)}', style: s()),
+                    pw.Text('+ Otros ingresos       ${_formatCurrency(ing)}', style: s()),
+                    pw.Text('- Retiros             (${_formatCurrency(ret)})', style: s()),
+                    pw.SizedBox(height: 2),
+                    pw.Text('CAJA ESPERADA: ${_formatCurrency(cajaEsperada)}',
+                        style: s(true).copyWith(fontSize: 11)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}',
+                        style: s()),
+                    pw.Text('Diferencia: ${_formatCurrency(diferencia)}',
+                        style: s(true)),
+                  ],
+                );
+              }(),
+              pw.SizedBox(height: 8),
+              // --- RESULTADO ECONÓMICO DEL EVENTO ---
+              () {
+                double ing = 0, ret = 0;
+                for (final m in movimientos) {
+                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
+                  if (tipo == 'INGRESO') ing += monto;
+                  else if (tipo == 'RETIRO') ret += monto;
+                }
+                double vEfec = 0, vTransf = 0;
+                for (final m in totalesMp) {
+                  final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+                  if (desc.contains('efectivo')) vEfec += ((m['total'] as num?) ?? 0).toDouble();
+                  if (desc.contains('transfer')) vTransf += ((m['total'] as num?) ?? 0).toDouble();
+                }
+                final resultadoNeto = vEfec + vTransf + ing - ret;
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('RESULTADO ECONÓMICO DEL EVENTO', style: s(true)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Ventas en efectivo:       ${_formatCurrency(vEfec)}', style: s()),
+                    pw.Text('Ventas por transferencia: ${_formatCurrency(vTransf)}', style: s()),
+                    pw.Text('Otros ingresos:           ${_formatCurrency(ing)}', style: s()),
+                    pw.Text('Retiros:                 (${_formatCurrency(ret)})', style: s()),
+                    pw.SizedBox(height: 2),
+                    pw.Text('RESULTADO NETO: ${_formatCurrency(resultadoNeto)}',
+                        style: s(true).copyWith(fontSize: 12)),
+                    pw.Text(
+                        '(${_formatCurrency(vEfec)} + ${_formatCurrency(vTransf)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})',
+                        style: s()),
+                  ],
+                );
+              }(),
+              pw.SizedBox(height: 6),
               pw.Text(
                   'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}',
                   style: s()),
@@ -277,35 +412,9 @@ class PrintService {
               pw.Text('ITEMS VENDIDOS:', style: s(true)),
               pw.SizedBox(height: 2),
               ...porProd.map((p) => pw.Text(
-                    '(${(p['nombre'] ?? '')} x ${(p['cantidad'] ?? 0)}) = ${_formatCurrency(((p['total'] as num?) ?? 0).toDouble())}',
+                    '${(p['nombre'] ?? '')} x ${(p['cantidad'] ?? 0)} = ${_formatCurrency(((p['total'] as num?) ?? 0).toDouble())}',
                     style: s(),
                   )),
-              pw.SizedBox(height: 8),
-              if (movimientos.isNotEmpty) pw.SizedBox(height: 8),
-              if (movimientos.isNotEmpty)
-                pw.Text('MOVIMIENTOS:', style: s(true)),
-              if (movimientos.isNotEmpty) pw.SizedBox(height: 2),
-              ...movimientos.map((m) {
-                final ts = (m['created_ts'] as num?)?.toInt();
-                String tsStr = '';
-                if (ts != null) {
-                  final dt = DateTime.fromMillisecondsSinceEpoch(ts);
-                  final dd = dt.day.toString().padLeft(2, '0');
-                  final mm = dt.month.toString().padLeft(2, '0');
-                  final hh = dt.hour.toString().padLeft(2, '0');
-                  final mi = dt.minute.toString().padLeft(2, '0');
-                  tsStr = '$dd/$mm $hh:$mi';
-                }
-                final tipo = (m['tipo'] ?? '').toString();
-                final monto = ((m['monto'] as num?) ?? 0).toDouble();
-                final obs = (m['observacion'] as String?)?.trim();
-                final obsPart =
-                    (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
-                return pw.Text(
-                  '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart',
-                  style: s(),
-                );
-              }),
             ],
           );
         },
@@ -1385,22 +1494,23 @@ class PrintService {
     if (obsApertura.isNotEmpty) writeWrapped('Obs. apertura: ', obsApertura);
     if (obsCierre.isNotEmpty) writeWrapped('Obs. cierre: ', obsCierre);
     feed();
+    // --- RESUMEN DE VENTAS ---
     boldOn();
-    text('TOTALES POR MEDIO DE PAGO');
+    text('RESUMEN DE VENTAS');
     boldOff();
     for (final m in totalesMp) {
       final mpdesc = (m['mp_desc'] as String?) ?? 'MP ${m['mp']}';
       final tot = ((m['total'] as num?) ?? 0).toDouble();
       text('$mpdesc: ${_formatCurrency(tot)}');
     }
-    // TOTAL más grande
     sizeDouble();
     boldOn();
     text(
-        'TOTAL: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}');
+        'TOTAL VENDIDO: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}');
     boldOff();
     sizeNormal();
     feed();
+    // --- MOVIMIENTOS DE CAJA ---
     double ing = 0, ret = 0;
     for (final m in movimientos) {
       final tipo = (m['tipo'] ?? '').toString().toUpperCase();
@@ -1411,13 +1521,105 @@ class PrintService {
         ret += monto;
       }
     }
-    text('Fondo inicial: ${_formatCurrency(fondo)}');
-    text('Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}');
-    text('Ingresos registrados: ${_formatCurrency(ing)}');
-    text('Retiros registrados: ${_formatCurrency(ret)}');
+    double ventasEfecEsc = 0;
+    for (final m in totalesMp) {
+      final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+      if (desc.contains('efectivo')) {
+        ventasEfecEsc += ((m['total'] as num?) ?? 0).toDouble();
+      }
+    }
+    boldOn();
+    text('MOVIMIENTOS DE CAJA');
+    boldOff();
+    text('+ Ingresos extra: ${_formatCurrency(ing)}');
+    for (final m in movimientos) {
+      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+      if (tipo != 'INGRESO') continue;
+      final ts = (m['created_ts'] as num?)?.toInt();
+      String tsStr = '';
+      if (ts != null) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+        final dd = dt.day.toString().padLeft(2, '0');
+        final mmm = dt.month.toString().padLeft(2, '0');
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mi = dt.minute.toString().padLeft(2, '0');
+        tsStr = '$dd/$mmm $hh:$mi';
+      }
+      final monto = ((m['monto'] as num?) ?? 0).toDouble();
+      final obs = (m['observacion'] as String?)?.trim();
+      final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
+      writeWrapped('', '* $tsStr Ingreso: ${_formatCurrency(monto)}$obsPart');
+    }
+    text('- Retiros: ${_formatCurrency(ret)}');
+    for (final m in movimientos) {
+      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+      if (tipo != 'RETIRO') continue;
+      final ts = (m['created_ts'] as num?)?.toInt();
+      String tsStr = '';
+      if (ts != null) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+        final dd = dt.day.toString().padLeft(2, '0');
+        final mmm = dt.month.toString().padLeft(2, '0');
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mi = dt.minute.toString().padLeft(2, '0');
+        tsStr = '$dd/$mmm $hh:$mi';
+      }
+      final monto = ((m['monto'] as num?) ?? 0).toDouble();
+      final obs = (m['observacion'] as String?)?.trim();
+      final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
+      writeWrapped('', '* $tsStr Retiro: ${_formatCurrency(monto)}$obsPart');
+    }
+    feed();
+    final totalMovEfectivoEsc = ventasEfecEsc + ing - ret;
+    boldOn();
+    text('TOTAL MOV. EFECTIVO DEL DIA: ${totalMovEfectivoEsc >= 0 ? '+' : ''}${_formatCurrency(totalMovEfectivoEsc)}');
+    boldOff();
+    text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})');
+    feed();
+    // --- RESUMEN CAJA ---
+    final cajaEsperadaEsc = fondo + ventasEfecEsc + ing - ret;
+    boldOn();
+    text('RESUMEN CAJA');
+    boldOff();
+    boldOn();
+    text('CAJA ESPERADA:');
+    boldOff();
+    text('Fondo inicial          ${_formatCurrency(fondo)}');
+    text('+ Ventas efectivo      ${_formatCurrency(ventasEfecEsc)}');
+    text('+ Otros ingresos       ${_formatCurrency(ing)}');
+    text('- Retiros             (${_formatCurrency(ret)})');
+    boldOn();
+    text('CAJA ESPERADA: ${_formatCurrency(cajaEsperadaEsc)}');
+    boldOff();
+    feed();
+    text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}');
     boldOn();
     text('Diferencia: ${_formatCurrency(diferencia)}');
     boldOff();
+    feed();
+    // --- RESULTADO ECONÓMICO DEL EVENTO ---
+    double ventasTransfEsc = 0;
+    for (final m in totalesMp) {
+      final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+      if (desc.contains('transfer')) {
+        ventasTransfEsc += ((m['total'] as num?) ?? 0).toDouble();
+      }
+    }
+    final resultadoNetoEsc = ventasEfecEsc + ventasTransfEsc + ing - ret;
+    boldOn();
+    text('RESULTADO ECONOMICO DEL EVENTO');
+    boldOff();
+    text('Ventas en efectivo:       ${_formatCurrency(ventasEfecEsc)}');
+    text('Ventas por transferencia: ${_formatCurrency(ventasTransfEsc)}');
+    text('Otros ingresos:           ${_formatCurrency(ing)}');
+    text('Retiros:                 (${_formatCurrency(ret)})');
+    sizeDouble();
+    boldOn();
+    text('RESULTADO NETO: ${_formatCurrency(resultadoNetoEsc)}');
+    boldOff();
+    sizeNormal();
+    text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ventasTransfEsc)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})');
+    feed();
     text(
         'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}');
     text('Tickets vendidos: ${(resumen['tickets']['emitidos'] ?? 0)}');
@@ -1430,32 +1632,7 @@ class PrintService {
       final name = (p['nombre'] ?? '').toString();
       final cant = (p['cantidad'] ?? 0).toString();
       final tot = ((p['total'] as num?) ?? 0).toDouble();
-      text('($name x $cant) = ${_formatCurrency(tot)}');
-    }
-    if (movimientos.isNotEmpty) {
-      feed();
-      boldOn();
-      text('MOVIMIENTOS:');
-      boldOff();
-      // Detalle de movimientos (como en PDF)
-      for (final m in movimientos) {
-        final ts = (m['created_ts'] as num?)?.toInt();
-        String tsStr = '';
-        if (ts != null) {
-          final dt = DateTime.fromMillisecondsSinceEpoch(ts);
-          final dd = dt.day.toString().padLeft(2, '0');
-          final mm = dt.month.toString().padLeft(2, '0');
-          final hh = dt.hour.toString().padLeft(2, '0');
-          final mi = dt.minute.toString().padLeft(2, '0');
-          tsStr = '$dd/$mm $hh:$mi';
-        }
-        final tipo = (m['tipo'] ?? '').toString();
-        final monto = ((m['monto'] as num?) ?? 0).toDouble();
-        final obs = (m['observacion'] as String?)?.trim();
-        final obsPart = (obs != null && obs.isNotEmpty) ? ' - $obs' : '';
-        final line = '$tsStr $tipo: ${_formatCurrency(monto)}$obsPart';
-        writeWrapped('', line);
-      }
+      text('$name x $cant = ${_formatCurrency(tot)}');
     }
     feed(2);
     b.add([0x1D, 0x56, 0x42, 0x00]); // corte parcial

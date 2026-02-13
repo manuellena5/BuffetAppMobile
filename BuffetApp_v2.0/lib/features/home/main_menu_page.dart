@@ -118,50 +118,19 @@ class _MainMenuPageState extends State<MainMenuPage> {
                       onTap: () => _goToBuffet(context),
                     ),
 
-                    const SizedBox(height: 20),
-
-                    // ── Tarjeta Tesorería ──
-                    _ModuleCard(
-                      icon: Icons.account_balance_wallet,
-                      title: 'Tesorería',
-                      subtitle: Platform.isAndroid
-                          ? 'Próximamente'
-                          : 'Movimientos financieros',
-                      description: Platform.isAndroid
-                          ? 'Este módulo estará disponible próximamente en Android'
-                          : 'Ingresos, egresos, compromisos y reportes',
-                      color: Platform.isAndroid
-                          ? Colors.grey
-                          : Colors.teal.shade700,
-                      onTap: () {
-                        if (Platform.isAndroid) {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: Row(
-                                children: [
-                                  Icon(Icons.info_outline,
-                                      color: Colors.teal.shade700, size: 32),
-                                  const SizedBox(width: 12),
-                                  const Text('Próximamente'),
-                                ],
-                              ),
-                              content: const Text(
-                                'El módulo de Tesorería estará disponible próximamente en Android.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Aceptar'),
-                                ),
-                              ],
-                            ),
-                          );
-                        } else {
-                          _goToTesoreria(context);
-                        }
-                      },
-                    ),
+                    // ── Tarjeta Tesorería (solo Windows/desktop) ──
+                    if (!Platform.isAndroid) ...[
+                      const SizedBox(height: 20),
+                      _ModuleCard(
+                        icon: Icons.account_balance_wallet,
+                        title: 'Tesorería',
+                        subtitle: 'Movimientos financieros',
+                        description:
+                            'Ingresos, egresos, compromisos y reportes',
+                        color: Colors.teal.shade700,
+                        onTap: () => _goToTesoreria(context),
+                      ),
+                    ],
 
                     const SizedBox(height: 32),
 
