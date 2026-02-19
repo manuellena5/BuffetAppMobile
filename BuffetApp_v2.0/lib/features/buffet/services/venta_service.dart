@@ -60,6 +60,8 @@ class VentaService {
           final unit = (it['precio_unitario'] as num).toDouble();
           final ddmmyyyy =
               '${now.day.toString().padLeft(2, '0')}${now.month.toString().padLeft(2, '0')}${now.year.toString()}';
+          // Sufijo de método de pago: E=Efectivo, T=Transferencia
+          final mpSuffix = metodoPagoId == 2 ? 'T' : 'E';
           for (var k = 0; k < qty; k++) {
             final ticketId = await txn.insert('tickets', {
               'venta_id': idVenta,
@@ -70,7 +72,7 @@ class VentaService {
               'total_ticket': unit,
               'identificador_ticket': null,
             });
-            final ident = '$codigo-$ddmmyyyy-$ticketId';
+            final ident = '$codigo-$ddmmyyyy-$ticketId$mpSuffix';
             await txn.update('tickets', {'identificador_ticket': ident},
                 where: 'id=?', whereArgs: [ticketId]);
             generatedTickets.add(ticketId);

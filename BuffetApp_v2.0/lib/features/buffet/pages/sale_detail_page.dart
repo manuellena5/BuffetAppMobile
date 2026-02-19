@@ -46,6 +46,8 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
     _load();
   }
 
+  String? _metodoPago;
+
   Future<void> _load() async {
     final db = await AppDatabase.instance();
     final t =
@@ -57,8 +59,22 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
       return;
     }
     final ticket = t.first;
+    // Obtener método de pago desde la venta asociada
+    String? metodo;
+    final ventaId = ticket['venta_id'] as int?;
+    if (ventaId != null) {
+      final mpRows = await db.rawQuery('''
+        SELECT mp.descripcion FROM ventas v
+        JOIN metodos_pago mp ON mp.id = v.metodo_pago_id
+        WHERE v.id = ?
+      ''', [ventaId]);
+      if (mpRows.isNotEmpty) {
+        metodo = mpRows.first['descripcion'] as String?;
+      }
+    }
     setState(() {
       _ticket = ticket;
+      _metodoPago = metodo;
       _loading = false;
     });
   }
@@ -123,6 +139,29 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                     .bodySmall
                     ?.copyWith(color: Colors.black54),
               ),
+              if (_metodoPago != null) ...
+              [
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      _metodoPago == 'Transferencia'
+                          ? Icons.account_balance
+                          : Icons.payments_outlined,
+                      size: 16,
+                      color: Colors.black54,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Método de pago: $_metodoPago',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               FutureBuilder(
                 future: _loadItemNombre(

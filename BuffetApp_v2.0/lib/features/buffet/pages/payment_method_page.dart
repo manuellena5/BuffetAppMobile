@@ -9,6 +9,7 @@ import '../../shared/format.dart';
 import '../state/cart_model.dart';
 import 'payment_confirm_dialogs.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/state/app_settings.dart';
 
 class PaymentMethodPage extends StatefulWidget {
   const PaymentMethodPage({super.key});
@@ -160,8 +161,10 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                                 (m['descripcion'] as String).toLowerCase();
                             bool confirmed;
                             if (desc.contains('efectivo')) {
+                              final showHelper = context.read<AppSettings>().cashChangeHelper;
                               confirmed = await showCashPaymentDialog(
-                                  context, cart.total);
+                                  context, cart.total,
+                                  showChangeHelper: showHelper);
                             } else {
                               confirmed = await showTransferPaymentDialog(
                                   context, cart.total);

@@ -8,11 +8,17 @@ import '../../shared/format.dart';
 
 /// Muestra el modal de pago en efectivo con sugerencias de billetes y
 /// cálculo de cambio.  Retorna `true` si el usuario confirma la compra.
-Future<bool> showCashPaymentDialog(BuildContext context, double total) async {
+///
+/// Si [showChangeHelper] es `false`, muestra un diálogo simplificado
+/// (solo monto + confirmar/cancelar, sin calculador de vuelto).
+Future<bool> showCashPaymentDialog(BuildContext context, double total,
+    {bool showChangeHelper = true}) async {
   final result = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => _CashPaymentDialog(total: total),
+    builder: (_) => showChangeHelper
+        ? _CashPaymentDialog(total: total)
+        : _SimpleCashPaymentDialog(total: total),
   );
   return result ?? false;
 }
@@ -512,6 +518,86 @@ class _TransferPaymentDialog extends StatelessWidget {
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Confirmar Compra'),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Simple Cash Payment Dialog (sin calculador de vuelto)
+// ═══════════════════════════════════════════════════════════════════
+
+class _SimpleCashPaymentDialog extends StatelessWidget {
+  final double total;
+  const _SimpleCashPaymentDialog({required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // En landscape, centrar el diálogo con máximo 480 px de ancho
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final horizontalInset = isLandscape
+        ? ((screenWidth - 480) / 2).clamp(20.0, screenWidth * 0.3)
+        : 20.0;
+
+    return AlertDialog(
+      insetPadding:
+          EdgeInsets.symmetric(horizontal: horizontalInset, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      title: Row(
+        children: [
+          Icon(Icons.payments_outlined, color: Colors.green[700], size: 28),
+          const SizedBox(width: 10),
+          const Text('Pago en Efectivo'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Total
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                Text('Total a cobrar',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                const SizedBox(height: 4),
+                Text(
+                  formatCurrency(total),
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),

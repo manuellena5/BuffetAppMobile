@@ -1369,7 +1369,6 @@ class ExportService {
                       (caja['transferencias_final'] as num?)) ??
                   0)
               .toDouble();
-      final diferencia = ((caja['diferencia'] as num?) ?? 0).toDouble();
       final entradasVendidas = ((caja['entradas'] as num?) ?? 0).toInt();
 
       final totalVentas = ((resumen['total'] as num?) ?? 0).toDouble();
@@ -1531,18 +1530,57 @@ class ExportService {
         row++;
       }
 
-      // ─── CIERRE DE CAJA ───
-      _section('CIERRE DE CAJA');
+      // ─── CONCILIACIÓN POR MEDIO DE PAGO ───
+      _section('CONCILIACIÓN POR MEDIO DE PAGO');
+
+      // -- Efectivo --
       final cajaEsperada = fondo + ventasEfec + movIngresos - movRetiros;
-      _labelMoney('Fondo Inicial', fondo);
-      _labelMoney('+ Ventas Efectivo', ventasEfec);
-      _labelMoney('+ Ingresos', movIngresos);
-      _labelMoney('- Retiros', movRetiros, negative: true);
-      _labelMoney('= Caja Esperada', cajaEsperada);
+      final difEfectivo = efectivoDeclarado - cajaEsperada;
+      {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = 'EFECTIVO'
+          ..cellStyle = CellStyle(bold: true, fontSize: 11);
+        row++;
+      }
+      _labelMoney('Efectivo esperado', cajaEsperada);
+      _labelMoney('Efectivo declarado', efectivoDeclarado);
+      _labelMoney('Diferencia efectivo', difEfectivo,
+          negative: difEfectivo < 0);
       row++;
-      _labelMoney('Efectivo Declarado', efectivoDeclarado);
-      _labelMoney('Transferencias Declaradas', transferenciasFinal);
-      _labelMoney('Diferencia', diferencia, negative: diferencia < 0);
+
+      // -- Transferencias --
+      final transfEsperadas = ventasTransf;
+      final difTransf = transferenciasFinal - transfEsperadas;
+      {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = 'TRANSFERENCIAS'
+          ..cellStyle = CellStyle(bold: true, fontSize: 11);
+        row++;
+      }
+      _labelMoney('Transf. esperadas', transfEsperadas);
+      _labelMoney('Transf. declaradas', transferenciasFinal);
+      _labelMoney('Diferencia transf.', difTransf, negative: difTransf < 0);
+      row++;
+
+      // -- Diferencia Total --
+      final difTotal = difEfectivo + difTransf;
+      {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = 'DIFERENCIA TOTAL DEL EVENTO'
+          ..cellStyle = CellStyle(
+              bold: true,
+              fontSize: 12,
+              fontColorHex: difTotal >= 0 ? '#1B5E20' : '#C62828');
+        final dtCell = sheet.cell(
+            CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row));
+        dtCell.value = difTotal;
+        dtCell.cellStyle = CellStyle(
+            bold: true,
+            fontSize: 12,
+            fontColorHex: difTotal >= 0 ? '#1B5E20' : '#C62828');
+        row++;
+      }
+      _labelValue('', '(Suma de diferencias por medio de pago)');
       _labelValue('Entradas Vendidas',
           entradasVendidas == 0 ? '—' : '$entradasVendidas');
       if (obsCierre.isNotEmpty) _labelValue('Obs. Cierre', obsCierre);

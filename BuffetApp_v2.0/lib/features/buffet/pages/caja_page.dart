@@ -533,46 +533,66 @@ class _CajaPageState extends State<CajaPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              // --- RESUMEN CAJA ---
+              // --- CONCILIACIÓN POR MEDIO DE PAGO ---
               _SectionCard(
-                title: 'Resumen Caja',
-                icon: Icons.lock_outline,
+                title: 'Conciliación por Medio de Pago',
+                icon: Icons.balance,
                 initiallyExpanded: true,
                 child: Builder(
                   builder: (context) {
                     final cajaEsperada = fondo + ventasEfec + _movIngresos - _movRetiros;
+                    final difEfectivo = efectivoDeclarado - cajaEsperada;
+                    final transfEsperadas = ventasTransf;
+                    final difTransf = transferenciasFinal - transfEsperadas;
+                    final difTotal = difEfectivo + difTransf;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('CAJA ESPERADA:', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 8),
-                        _kvRow(context, 'Fondo inicial', formatCurrency(fondo)),
-                        _kvRow(context, '+ Ventas efectivo', formatCurrency(ventasEfec)),
-                        _kvRow(context, '+ Otros ingresos', formatCurrency(_movIngresos)),
-                        _kvRow(context, '- Retiros', '(${formatCurrency(_movRetiros)})'),
-                        const Divider(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: Text('CAJA ESPERADA', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
-                            Text(formatCurrency(cajaEsperada), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary)),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
+                        Text('EFECTIVO', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        _kvRow(context, 'Efectivo esperado', formatCurrency(cajaEsperada)),
                         _kvRow(context, 'Efectivo declarado', formatCurrency(efectivoDeclarado)),
-                        _kvRow(context, 'Transferencias declaradas', formatCurrency(transferenciasFinal)),
-                        const SizedBox(height: 4),
                         Row(
                           children: [
-                            Expanded(child: Text('Diferencia', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+                            Expanded(child: Text('Diferencia efectivo', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
                             Text(
-                              formatCurrency(diferencia),
+                              '${difEfectivo >= 0 ? '+' : ''}${formatCurrency(difEfectivo)}',
                               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w900,
-                                color: diferencia == 0 ? Colors.green : (diferencia > 0 ? Colors.blue : Colors.red),
+                                color: difEfectivo == 0 ? Colors.green : (difEfectivo > 0 ? Colors.blue : Colors.red),
                               ),
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+                        Text('TRANSFERENCIAS', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        _kvRow(context, 'Transf. esperadas', formatCurrency(transfEsperadas)),
+                        _kvRow(context, 'Transf. declaradas', formatCurrency(transferenciasFinal)),
+                        Row(
+                          children: [
+                            Expanded(child: Text('Diferencia transf.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+                            Text(
+                              '${difTransf >= 0 ? '+' : ''}${formatCurrency(difTransf)}',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: difTransf == 0 ? Colors.green : (difTransf > 0 ? Colors.blue : Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 20),
+                        Text('DIFERENCIA TOTAL DEL EVENTO', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${difTotal >= 0 ? '+' : ''}${formatCurrency(difTotal)}',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: difTotal == 0 ? Colors.green : (difTotal > 0 ? Colors.blue : Colors.red),
+                          ),
+                        ),
+                        Text('(Suma de diferencias por medio de pago)',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
                         const Divider(height: 16),
                         _kvRow(context, 'Entradas vendidas', entradasVendidas == 0 ? '—' : '$entradasVendidas'),
                         _kvRow(context, 'Tickets vendidos', '$ticketsEmitidos'),
@@ -887,26 +907,75 @@ class _CajaPageState extends State<CajaPage> {
               Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ingresos)} - ${formatCurrency(retiros)})',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               const SizedBox(height: 10),
-              // RESUMEN CAJA
-              Text('RESUMEN CAJA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-              const SizedBox(height: 4),
-              Text('Fondo inicial:         ${formatCurrency(fondo)}'),
-              Text('+ Ventas efectivo:     ${formatCurrency(ventasEfectivoDialog)}'),
-              Text('+ Otros ingresos:      ${formatCurrency(ingresos)}'),
-              Text('- Retiros:            (${formatCurrency(retiros)})'),
-              Text('CAJA ESPERADA: ${formatCurrency(cajaEsperadaDialog)}',
-                  style: const TextStyle(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
+              // CONCILIACIÓN POR MEDIO DE PAGO
+              Text('CONCILIACIÓN POR MEDIO DE PAGO', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+              const SizedBox(height: 8),
+              Text('EFECTIVO', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+              Text('Efectivo esperado: ${formatCurrency(cajaEsperadaDialog)}'),
               Text('Efectivo declarado: ${formatCurrency(eff)}'),
-              Text(
-                'Diferencia: ${formatCurrency(diferencia)}',
-                style: TextStyle(
-                  color: diferencia == 0
-                      ? Colors.green
-                      : (diferencia > 0 ? Colors.blue : Colors.red),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              () {
+                final difEfectivo = eff - cajaEsperadaDialog;
+                return Text(
+                  'Diferencia efectivo: ${difEfectivo >= 0 ? '+' : ''}${formatCurrency(difEfectivo)}',
+                  style: TextStyle(
+                    color: difEfectivo == 0 ? Colors.green : (difEfectivo > 0 ? Colors.blue : Colors.red),
+                    fontWeight: FontWeight.w700,
+                  ),
+                );
+              }(),
+              const SizedBox(height: 8),
+              () {
+                final ventasTransfDialog = porMpDialog.fold<double>(
+                  0.0,
+                  (acc, e) => (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
+                      ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
+                      : acc,
+                );
+                final difTransf = tr - ventasTransfDialog;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('TRANSFERENCIAS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    Text('Transf. esperadas: ${formatCurrency(ventasTransfDialog)}'),
+                    Text('Transf. declaradas: ${formatCurrency(tr)}'),
+                    Text(
+                      'Diferencia transf.: ${difTransf >= 0 ? '+' : ''}${formatCurrency(difTransf)}',
+                      style: TextStyle(
+                        color: difTransf == 0 ? Colors.green : (difTransf > 0 ? Colors.blue : Colors.red),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                );
+              }(),
+              const SizedBox(height: 8),
+              () {
+                final ventasTransfDialog2 = porMpDialog.fold<double>(
+                  0.0,
+                  (acc, e) => (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
+                      ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
+                      : acc,
+                );
+                final difEf = eff - cajaEsperadaDialog;
+                final difTr = tr - ventasTransfDialog2;
+                final difTotal = difEf + difTr;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('DIFERENCIA TOTAL DEL EVENTO', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                    Text(
+                      '${difTotal >= 0 ? '+' : ''}${formatCurrency(difTotal)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: difTotal == 0 ? Colors.green : (difTotal > 0 ? Colors.blue : Colors.red),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text('(Suma de diferencias por medio de pago)',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  ],
+                );
+              }(),
               const SizedBox(height: 10),
               // RESULTADO ECONÓMICO DEL EVENTO
               () {

@@ -220,7 +220,6 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = context.watch<CartModel>();
     final uiScale = context.watch<AppSettings>().uiScale;
     final width = MediaQuery.of(context).size.width;
 
@@ -265,30 +264,31 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
           title: Row(children: [
             const Icon(Icons.receipt_long),
             const SizedBox(width: 6),
-            InkWell(
-              onTap: () async {
-                final nav = Navigator.of(context);
-                await nav
-                    .push(MaterialPageRoute(builder: (_) => const CartPage()));
-                if (!mounted) return;
-                // refrescar lista por si hubo cambios de stock desde carrito
-                await _load();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(6)),
-                child: Text('${cart.count}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+            Consumer<CartModel>(
+              builder: (_, cart, __) => InkWell(
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  await nav
+                      .push(MaterialPageRoute(builder: (_) => const CartPage()));
+                  if (!mounted) return;
+                  // refrescar lista por si hubo cambios de stock desde carrito
+                  await _load();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(6)),
+                  child: Text('${cart.count}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
               ),
             ),
           ]),
           actions: [
             // Limpiar carrito
-            Builder(builder: (ctx) {
-              final cart = context.watch<CartModel>();
-              return IconButton(
+            Consumer<CartModel>(
+              builder: (_, cart, __) => IconButton(
                 tooltip: 'Limpiar carrito',
                 icon: const Icon(Icons.remove_shopping_cart),
                 onPressed: cart.isEmpty
@@ -339,41 +339,43 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
                           );
                         }
                       },
-              );
-            }),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor:
-                      Theme.of(context).colorScheme.secondaryContainer,
-                  foregroundColor:
-                      Theme.of(context).colorScheme.onSecondaryContainer,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: const StadiumBorder(),
-                ),
-                onPressed: cart.isEmpty
-                    ? null
-                    : () async {
-                        if (!mounted) return;
-                        // ignore: use_build_context_synchronously
-                        final paid = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const PaymentMethodPage()),
-                        );
-                        if (!mounted) return;
-                        if (paid == true) {
+              ),
+            ),
+            Consumer<CartModel>(
+              builder: (_, cart, __) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        Theme.of(context).colorScheme.secondaryContainer,
+                    foregroundColor:
+                        Theme.of(context).colorScheme.onSecondaryContainer,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: const StadiumBorder(),
+                  ),
+                  onPressed: cart.isEmpty
+                      ? null
+                      : () async {
+                          if (!mounted) return;
                           // ignore: use_build_context_synchronously
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Venta registrada')));
-                          await _load();
-                        }
-                      },
-                icon: const Icon(Icons.attach_money),
-                label: Text(formatCurrency(cart.total)),
+                          final paid = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const PaymentMethodPage()),
+                          );
+                          if (!mounted) return;
+                          if (paid == true) {
+                            // ignore: use_build_context_synchronously
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Venta registrada')));
+                            await _load();
+                          }
+                        },
+                  icon: const Icon(Icons.attach_money),
+                  label: Text(formatCurrency(cart.total)),
+                ),
               ),
             ),
           ],
@@ -574,32 +576,34 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
                   ],
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 16)),
-                  onPressed: cart.isEmpty
-                      ? null
-                      : () async {
-                          final nav = Navigator.of(context);
-                          final messenger = ScaffoldMessenger.of(context);
-                          final paid = await nav.push(MaterialPageRoute(
-                              builder: (_) => const PaymentMethodPage()));
-                          if (paid == true && mounted) {
-                            messenger.showSnackBar(const SnackBar(
-                                content: Text('Venta registrada')));
-                            await _load();
-                          }
-                        },
-                  child: Text('COBRAR  ${formatCurrency(cart.total)}',
-                      style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
+            Consumer<CartModel>(
+              builder: (_, cart, __) => Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 16)),
+                    onPressed: cart.isEmpty
+                        ? null
+                        : () async {
+                            final nav = Navigator.of(context);
+                            final messenger = ScaffoldMessenger.of(context);
+                            final paid = await nav.push(MaterialPageRoute(
+                                builder: (_) => const PaymentMethodPage()));
+                            if (paid == true && mounted) {
+                              messenger.showSnackBar(const SnackBar(
+                                  content: Text('Venta registrada')));
+                              await _load();
+                            }
+                          },
+                    child: Text('COBRAR  ${formatCurrency(cart.total)}',
+                        style: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold)),
+                  ),
                 ),
               ),
             ),

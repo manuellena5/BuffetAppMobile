@@ -15,10 +15,14 @@ class SalesListPage extends StatefulWidget {
 class _SalesListPageState extends State<SalesListPage> {
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
-  // Filtros alineados con CajaTicketsPage
-  String _estadoFiltro = 'Todos'; // Todos | Impreso | Anulado | No impreso
+  // Filtros
+  String _estadoFiltro = 'Todos';
   String _productoFiltro = 'Todos';
+  String _metodoPagoFiltro = 'Todos';
+  String _categoriaFiltro = 'Todos';
   List<String> _productos = const [];
+  List<String> _metodosPago = const [];
+  List<String> _categorias = const [];
 
   @override
   void initState() {
@@ -35,24 +39,34 @@ class _SalesListPageState extends State<SalesListPage> {
     final v = await db.rawQuery('''
       SELECT t.id, t.fecha_hora, t.total_ticket, t.identificador_ticket, t.status,
              v.metodo_pago_id, mp.descripcion AS metodo_pago_desc,
-             COALESCE(p.nombre, c.descripcion) AS item_nombre
+             COALESCE(p.nombre, c.descripcion) AS item_nombre,
+             COALESCE(cp.descripcion, c.descripcion, 'Sin cat.') AS categoria_desc
       FROM tickets t
       JOIN ventas v ON v.id = t.venta_id
       LEFT JOIN products p ON p.id = t.producto_id
       LEFT JOIN Categoria_Producto c ON c.id = t.categoria_id
+      LEFT JOIN Categoria_Producto cp ON cp.id = p.categoria_id
       LEFT JOIN metodos_pago mp ON mp.id = v.metodo_pago_id
       $where
       ORDER BY t.fecha_hora DESC
     ''', args);
-    // Construir lista de productos únicos para filtro
+    // Construir listas únicas para filtros
     final prods = <String>{'Todos'};
+    final metodos = <String>{'Todos'};
+    final cats = <String>{'Todos'};
     for (final r in v) {
       final it = (r['item_nombre'] as String?)?.trim();
       if (it != null && it.isNotEmpty) prods.add(it);
+      final mp = (r['metodo_pago_desc'] as String?)?.trim();
+      if (mp != null && mp.isNotEmpty) metodos.add(mp);
+      final cat = (r['categoria_desc'] as String?)?.trim();
+      if (cat != null && cat.isNotEmpty) cats.add(cat);
     }
     setState(() {
       _rows = v;
       _productos = prods.toList()..sort();
+      _metodosPago = metodos.toList()..sort();
+      _categorias = cats.toList()..sort();
       _loading = false;
     });
   }
@@ -73,22 +87,50 @@ class _SalesListPageState extends State<SalesListPage> {
               child: Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Estado'),
+                    decoration: const InputDecoration(labelText: 'Estado', isDense: true),
                     initialValue: _estadoFiltro,
                     items: const ['Todos', 'Impreso', 'Anulado', 'No impreso']
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13))))
                         .toList(),
                     onChanged: (v) =>
                         setState(() => _estadoFiltro = v ?? 'Todos'),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Producto'),
+                    decoration: const InputDecoration(labelText: 'Método pago', isDense: true),
+                    initialValue: _metodoPagoFiltro,
+                    items: _metodosPago
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13))))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => _metodoPagoFiltro = v ?? 'Todos'),
+                  ),
+                ),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(labelText: 'Categoría', isDense: true),
+                    initialValue: _categoriaFiltro,
+                    items: _categorias
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13))))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => _categoriaFiltro = v ?? 'Todos'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(labelText: 'Producto', isDense: true),
                     initialValue: _productoFiltro,
                     items: _productos
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13))))
                         .toList(),
                     onChanged: (v) =>
                         setState(() => _productoFiltro = v ?? 'Todos'),
@@ -192,12 +234,18 @@ class _SalesListPageState extends State<SalesListPage> {
   List<Map<String, dynamic>> _filteredRows() {
     final filtroEstado = _normEstado(_estadoFiltro);
     final filtroProd = _productoFiltro.trim().toLowerCase();
+    final filtroMetodo = _metodoPagoFiltro.trim().toLowerCase();
+    final filtroCat = _categoriaFiltro.trim().toLowerCase();
     return _rows.where((r) {
       final estado = _normEstado((r['status'] as String?) ?? '');
       final item = ((r['item_nombre'] as String?) ?? '').trim().toLowerCase();
+      final metodo = ((r['metodo_pago_desc'] as String?) ?? '').trim().toLowerCase();
+      final cat = ((r['categoria_desc'] as String?) ?? '').trim().toLowerCase();
       final okEstado = (filtroEstado == 'todos') || (estado == filtroEstado);
       final okProducto = (_productoFiltro == 'Todos') || (item == filtroProd);
-      return okEstado && okProducto;
+      final okMetodo = (_metodoPagoFiltro == 'Todos') || (metodo == filtroMetodo);
+      final okCategoria = (_categoriaFiltro == 'Todos') || (cat == filtroCat);
+      return okEstado && okProducto && okMetodo && okCategoria;
     }).toList(growable: false);
   }
 

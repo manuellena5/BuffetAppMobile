@@ -145,6 +145,8 @@ class PrintService {
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final efectivoDeclarado =
         ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+    final transferenciasDeclaradasPdf =
+        ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
     final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
     final obsCierre = (c['obs_cierre'] as String?) ?? '';
     final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
@@ -225,6 +227,11 @@ class PrintService {
               if (obsCierre.isNotEmpty)
                 pw.Text('Obs. cierre: $obsCierre', style: s()),
               pw.SizedBox(height: 6),
+              // --- FONDO INICIAL ---
+              pw.Text('FONDO INICIAL', style: s(true)),
+              pw.Text('Saldo inicial de caja: ${_formatCurrency(fondo)}',
+                  style: s()),
+              pw.SizedBox(height: 6),
               // --- RESUMEN DE VENTAS ---
               pw.Text('RESUMEN DE VENTAS', style: s(true)),
               pw.SizedBox(height: 4),
@@ -235,7 +242,7 @@ class PrintService {
               pw.SizedBox(height: 4),
               pw.Text(
                   'TOTAL VENDIDO: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}',
-                  style: s(true).copyWith(fontSize: 12)),
+                  style: s(true).copyWith(fontSize: 10)),
               pw.SizedBox(height: 8),
               // --- MOVIMIENTOS DE CAJA ---
               () {
@@ -322,7 +329,7 @@ class PrintService {
                 );
               }(),
               pw.SizedBox(height: 8),
-              // --- RESUMEN CAJA ---
+              // --- CONCILIACIÓN POR MEDIO DE PAGO ---
               () {
                 double ing = 0, ret = 0;
                 for (final m in movimientos) {
@@ -335,31 +342,45 @@ class PrintService {
                   }
                 }
                 double ventasEfec = 0;
+                double ventasTransf = 0;
                 for (final m in totalesMp) {
                   final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
                   if (desc.contains('efectivo')) {
                     ventasEfec += ((m['total'] as num?) ?? 0).toDouble();
                   }
+                  if (desc.contains('transfer')) {
+                    ventasTransf += ((m['total'] as num?) ?? 0).toDouble();
+                  }
                 }
-                final cajaEsperada = fondo + ventasEfec + ing - ret;
+                final efectivoEsperado = fondo + ventasEfec + ing - ret;
+                final difEfectivo = efectivoDeclarado - efectivoEsperado;
+                final transfEsperadas = ventasTransf;
+                final difTransf = transferenciasDeclaradasPdf - transfEsperadas;
+                final difTotal = difEfectivo + difTransf;
                 return pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('RESUMEN CAJA', style: s(true)),
+                    pw.Text('CONCILIACIÓN POR MEDIO DE PAGO', style: s(true)),
                     pw.SizedBox(height: 4),
-                    pw.Text('CAJA ESPERADA:', style: s(true)),
-                    pw.Text('Fondo inicial          ${_formatCurrency(fondo)}', style: s()),
-                    pw.Text('+ Ventas efectivo      ${_formatCurrency(ventasEfec)}', style: s()),
-                    pw.Text('+ Otros ingresos       ${_formatCurrency(ing)}', style: s()),
-                    pw.Text('- Retiros             (${_formatCurrency(ret)})', style: s()),
-                    pw.SizedBox(height: 2),
-                    pw.Text('CAJA ESPERADA: ${_formatCurrency(cajaEsperada)}',
-                        style: s(true).copyWith(fontSize: 11)),
-                    pw.SizedBox(height: 4),
-                    pw.Text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}',
+                    pw.Text('EFECTIVO', style: s(true)),
+                    pw.Text('Efectivo esperado: ${_formatCurrency(efectivoEsperado)}', style: s()),
+                    pw.Text(
+                        '(Fondo ${_formatCurrency(fondo)} + Ventas ${_formatCurrency(ventasEfec)} + Ing. ${_formatCurrency(ing)} - Ret. ${_formatCurrency(ret)})',
                         style: s()),
-                    pw.Text('Diferencia: ${_formatCurrency(diferencia)}',
+                    pw.Text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}', style: s()),
+                    pw.Text('Diferencia efectivo: ${difEfectivo >= 0 ? '+' : ''}${_formatCurrency(difEfectivo)}',
                         style: s(true)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('TRANSFERENCIAS', style: s(true)),
+                    pw.Text('Transf. esperadas: ${_formatCurrency(transfEsperadas)}', style: s()),
+                    pw.Text('Transf. declaradas: ${_formatCurrency(transferenciasDeclaradasPdf)}', style: s()),
+                    pw.Text('Diferencia transf.: ${difTransf >= 0 ? '+' : ''}${_formatCurrency(difTransf)}',
+                        style: s(true)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('DIFERENCIA TOTAL DEL EVENTO', style: s(true)),
+                    pw.Text('${difTotal >= 0 ? '+' : ''}${_formatCurrency(difTotal)}',
+                        style: s(true).copyWith(fontSize: 10)),
+                    pw.Text('(Suma de diferencias por medio de pago)', style: s()),
                   ],
                 );
               }(),
@@ -391,7 +412,7 @@ class PrintService {
                     pw.Text('Retiros:                 (${_formatCurrency(ret)})', style: s()),
                     pw.SizedBox(height: 2),
                     pw.Text('RESULTADO NETO: ${_formatCurrency(resultadoNeto)}',
-                        style: s(true).copyWith(fontSize: 12)),
+                        style: s(true).copyWith(fontSize: 10)),
                     pw.Text(
                         '(${_formatCurrency(vEfec)} + ${_formatCurrency(vTransf)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})',
                         style: s()),
@@ -564,6 +585,8 @@ class PrintService {
         final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
         final efectivoDeclarado =
             ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+        final transferenciasDeclaradasEvt =
+            ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
         final diferencia = ((c['diferencia'] as num?) ?? 0).toDouble();
         final int? entradasVendidas = (c['entradas'] as num?)?.toInt();
         final descEvento = (c['descripcion_evento'] as String?) ?? '';
@@ -707,19 +730,39 @@ class PrintService {
                   style: s(true).copyWith(fontSize: 12)));
 
               widgets.add(pw.SizedBox(height: 6));
-              widgets.add(pw.Text('Fondo inicial: ${_formatCurrency(fondo)}',
-                  style: s()));
-              widgets.add(pw.Text(
-                  'Efectivo declarado en caja: ${_formatCurrency(efectivoDeclarado)}',
-                  style: s()));
-              widgets.add(pw.Text(
-                  'Ingresos registrados: ${_formatCurrency(ing)}',
-                  style: s()));
-              widgets.add(pw.Text(
-                  'Retiros registrados: ${_formatCurrency(ret)}',
-                  style: s()));
-              widgets.add(pw.Text('Diferencia: ${_formatCurrency(diferencia)}',
-                  style: s(true)));
+              // --- CONCILIACIÓN POR MEDIO DE PAGO ---
+              double ventasEfecEvt = 0;
+              double ventasTransfEvt = 0;
+              for (final m in totalesMpCaja) {
+                final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+                if (desc.contains('efectivo')) {
+                  ventasEfecEvt += ((m['total'] as num?) ?? 0).toDouble();
+                }
+                if (desc.contains('transfer')) {
+                  ventasTransfEvt += ((m['total'] as num?) ?? 0).toDouble();
+                }
+              }
+              final efectivoEsperadoEvt = fondo + ventasEfecEvt + ing - ret;
+              final difEfectivoEvt = efectivoDeclarado - efectivoEsperadoEvt;
+              final transfEsperadasEvt = ventasTransfEvt;
+              final difTransfEvt = transferenciasDeclaradasEvt - transfEsperadasEvt;
+              final difTotalEvt = difEfectivoEvt + difTransfEvt;
+              widgets.add(pw.Text('CONCILIACIÓN POR MEDIO DE PAGO', style: s(true)));
+              widgets.add(pw.SizedBox(height: 2));
+              widgets.add(pw.Text('EFECTIVO', style: s(true)));
+              widgets.add(pw.Text('Efectivo esperado: ${_formatCurrency(efectivoEsperadoEvt)}', style: s()));
+              widgets.add(pw.Text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}', style: s()));
+              widgets.add(pw.Text('Diferencia efectivo: ${difEfectivoEvt >= 0 ? '+' : ''}${_formatCurrency(difEfectivoEvt)}', style: s(true)));
+              widgets.add(pw.SizedBox(height: 2));
+              widgets.add(pw.Text('TRANSFERENCIAS', style: s(true)));
+              widgets.add(pw.Text('Transf. esperadas: ${_formatCurrency(transfEsperadasEvt)}', style: s()));
+              widgets.add(pw.Text('Transf. declaradas: ${_formatCurrency(transferenciasDeclaradasEvt)}', style: s()));
+              widgets.add(pw.Text('Diferencia transf.: ${difTransfEvt >= 0 ? '+' : ''}${_formatCurrency(difTransfEvt)}', style: s(true)));
+              widgets.add(pw.SizedBox(height: 2));
+              widgets.add(pw.Text('DIFERENCIA TOTAL DEL EVENTO', style: s(true)));
+              widgets.add(pw.Text('${difTotalEvt >= 0 ? '+' : ''}${_formatCurrency(difTotalEvt)}', style: s(true).copyWith(fontSize: 10)));
+              widgets.add(pw.Text('(Suma de diferencias por medio de pago)', style: s()));
+              widgets.add(pw.SizedBox(height: 4));
               widgets.add(pw.Text(
                   'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}',
                   style: s()));
@@ -1317,17 +1360,39 @@ class PrintService {
     boldOff();
     text('Efectivo: ${_formatCurrency(32450)}');
     text('Transferencia: ${_formatCurrency(18750)}');
-    sizeDouble();
     boldOn();
     text('TOTAL: ${_formatCurrency(51200)}');
     boldOff();
-    sizeNormal();
     feed();
-    text('Fondo inicial: ${_formatCurrency(5000)}');
-    text('Efectivo declarado en caja: ${_formatCurrency(4800)}');
+    // --- CONCILIACION POR MEDIO DE PAGO ---
     boldOn();
-    text('Diferencia: ${_formatCurrency(0)}');
+    text('CONCILIACION POR MEDIO DE PAGO');
     boldOff();
+    feed();
+    boldOn();
+    text('EFECTIVO');
+    boldOff();
+    text('Efectivo esperado: ${_formatCurrency(37450)}');
+    text('Efectivo declarado en caja: ${_formatCurrency(37450)}');
+    boldOn();
+    text('Diferencia efectivo: +${_formatCurrency(0)}');
+    boldOff();
+    feed();
+    boldOn();
+    text('TRANSFERENCIAS');
+    boldOff();
+    text('Transf. esperadas: ${_formatCurrency(18750)}');
+    text('Transf. declaradas: ${_formatCurrency(18750)}');
+    boldOn();
+    text('Diferencia transf.: +${_formatCurrency(0)}');
+    boldOff();
+    feed();
+    boldOn();
+    text('DIFERENCIA TOTAL DEL EVENTO');
+    text('+${_formatCurrency(0)}');
+    boldOff();
+    text('(Suma de diferencias por medio de pago)');
+    feed();
     text('Tickets anulados: 0');
     feed();
     boldOn();
@@ -1374,6 +1439,8 @@ class PrintService {
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final efectivoDeclarado =
         ((c['conteo_efectivo_final'] as num?) ?? 0).toDouble();
+    final transferenciasDeclaradas =
+        ((c['conteo_transferencias_final'] as num?) ?? 0).toDouble();
     final obsApertura = (c['observaciones_apertura'] as String?) ?? '';
     final obsCierre = (c['obs_cierre'] as String?) ?? '';
     final descripcionEvento = (c['descripcion_evento'] as String?) ?? '';
@@ -1494,6 +1561,12 @@ class PrintService {
     if (obsApertura.isNotEmpty) writeWrapped('Obs. apertura: ', obsApertura);
     if (obsCierre.isNotEmpty) writeWrapped('Obs. cierre: ', obsCierre);
     feed();
+    // --- FONDO INICIAL ---
+    boldOn();
+    text('FONDO INICIAL');
+    boldOff();
+    text('Saldo inicial de caja: ${_formatCurrency(fondo)}');
+    feed();
     // --- RESUMEN DE VENTAS ---
     boldOn();
     text('RESUMEN DE VENTAS');
@@ -1503,12 +1576,10 @@ class PrintService {
       final tot = ((m['total'] as num?) ?? 0).toDouble();
       text('$mpdesc: ${_formatCurrency(tot)}');
     }
-    sizeDouble();
     boldOn();
     text(
         'TOTAL VENDIDO: ${_formatCurrency(((resumen['total'] as num?) ?? 0).toDouble())}');
     boldOff();
-    sizeNormal();
     feed();
     // --- MOVIMIENTOS DE CAJA ---
     double ing = 0, ret = 0;
@@ -1576,26 +1647,50 @@ class PrintService {
     boldOff();
     text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})');
     feed();
-    // --- RESUMEN CAJA ---
+    // --- CONCILIACIÓN POR MEDIO DE PAGO ---
     final cajaEsperadaEsc = fondo + ventasEfecEsc + ing - ret;
     boldOn();
-    text('RESUMEN CAJA');
-    boldOff();
-    boldOn();
-    text('CAJA ESPERADA:');
-    boldOff();
-    text('Fondo inicial          ${_formatCurrency(fondo)}');
-    text('+ Ventas efectivo      ${_formatCurrency(ventasEfecEsc)}');
-    text('+ Otros ingresos       ${_formatCurrency(ing)}');
-    text('- Retiros             (${_formatCurrency(ret)})');
-    boldOn();
-    text('CAJA ESPERADA: ${_formatCurrency(cajaEsperadaEsc)}');
+    text('CONCILIACION POR MEDIO DE PAGO');
     boldOff();
     feed();
-    text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}');
+    // -- EFECTIVO --
     boldOn();
-    text('Diferencia: ${_formatCurrency(diferencia)}');
+    text('EFECTIVO');
     boldOff();
+    text('Efectivo esperado: ${_formatCurrency(cajaEsperadaEsc)}');
+    text('(Fondo ${_formatCurrency(fondo)} + Ventas ${_formatCurrency(ventasEfecEsc)} + Ing. ${_formatCurrency(ing)} - Ret. ${_formatCurrency(ret)})');
+    text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}');
+    final difEfectivo = efectivoDeclarado - cajaEsperadaEsc;
+    boldOn();
+    text('Diferencia efectivo: ${difEfectivo >= 0 ? '+' : ''}${_formatCurrency(difEfectivo)}');
+    boldOff();
+    feed();
+    // -- TRANSFERENCIAS --
+    double ventasTransfConc = 0;
+    for (final m in totalesMp) {
+      final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
+      if (desc.contains('transfer')) {
+        ventasTransfConc += ((m['total'] as num?) ?? 0).toDouble();
+      }
+    }
+    final transfEsperadas = ventasTransfConc;
+    boldOn();
+    text('TRANSFERENCIAS');
+    boldOff();
+    text('Transf. esperadas: ${_formatCurrency(transfEsperadas)}');
+    text('Transf. declaradas: ${_formatCurrency(transferenciasDeclaradas)}');
+    final difTransf = transferenciasDeclaradas - transfEsperadas;
+    boldOn();
+    text('Diferencia transf.: ${difTransf >= 0 ? '+' : ''}${_formatCurrency(difTransf)}');
+    boldOff();
+    feed();
+    // -- DIFERENCIA TOTAL --
+    final difTotal = difEfectivo + difTransf;
+    boldOn();
+    text('DIFERENCIA TOTAL DEL EVENTO');
+    text('${difTotal >= 0 ? '+' : ''}${_formatCurrency(difTotal)}');
+    boldOff();
+    text('(Suma de diferencias por medio de pago)');
     feed();
     // --- RESULTADO ECONÓMICO DEL EVENTO ---
     double ventasTransfEsc = 0;
@@ -1613,11 +1708,9 @@ class PrintService {
     text('Ventas por transferencia: ${_formatCurrency(ventasTransfEsc)}');
     text('Otros ingresos:           ${_formatCurrency(ing)}');
     text('Retiros:                 (${_formatCurrency(ret)})');
-    sizeDouble();
     boldOn();
     text('RESULTADO NETO: ${_formatCurrency(resultadoNetoEsc)}');
     boldOff();
-    sizeNormal();
     text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ventasTransfEsc)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})');
     feed();
     text(

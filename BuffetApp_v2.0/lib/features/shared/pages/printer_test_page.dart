@@ -99,18 +99,6 @@ class _PrinterTestPageState extends State<PrinterTestPage> {
             children: [
               Text('Preferencias de impresión',
                   style: Theme.of(context).textTheme.titleMedium),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Imprimir logo en cierre (USB)'),
-                value: _printLogoEscpos,
-                onChanged: (v) async {
-                  setState(() => _printLogoEscpos = v);
-                  try {
-                    final sp = await SharedPreferences.getInstance();
-                    await sp.setBool('print_logo_escpos', v);
-                  } catch (_) {}
-                },
-              ),
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(

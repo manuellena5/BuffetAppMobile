@@ -30,6 +30,7 @@ class _SettingsPageState extends State<SettingsPage> {
   AppThemeMode _theme = AppThemeMode.system;
   bool _advanced = false;
   double _uiScale = 1.0;
+  bool _cashChangeHelper = true;
 
   String? _winPrinterName;
   List<String> _winPrinters = const [];
@@ -40,6 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _initialAdvanced = false;
   String? _initialWinPrinterName;
   double _initialUiScale = 1.0;
+  bool _initialCashChangeHelper = true;
 
   String _escPosToPreviewText(Uint8List bytes) {
     final sb = StringBuffer();
@@ -122,6 +124,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _advanced = adv;
       _winPrinterName = winPrinter;
       _winPrinters = winPrinters;
+      _cashChangeHelper = settings?.cashChangeHelper ?? true;
       _uiScale = (settings?.uiScale ?? (prefs.getDouble('ui_scale') ?? 1.0))
           .toDouble();
       _loading = false;
@@ -134,6 +137,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _initialTheme = _theme;
     _initialWinPrinterName = _winPrinterName;
     _initialUiScale = _uiScale;
+    _initialCashChangeHelper = _cashChangeHelper;
     _dirty = false;
   }
 
@@ -142,6 +146,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _advanced != _initialAdvanced ||
         _theme != _initialTheme ||
         _uiScale != _initialUiScale ||
+        _cashChangeHelper != _initialCashChangeHelper ||
         (Platform.isWindows && _winPrinterName != _initialWinPrinterName);
     if (next != _dirty) setState(() => _dirty = next);
   }
@@ -192,9 +197,11 @@ class _SettingsPageState extends State<SettingsPage> {
     if (settings != null) {
       await settings.setTheme(_theme);
       await settings.setUiScale(_uiScale);
+      await settings.setCashChangeHelper(_cashChangeHelper);
     } else {
       await prefs.setString('theme_mode', _theme.name);
       await prefs.setDouble('ui_scale', _uiScale);
+      await prefs.setBool('cash_change_helper', _cashChangeHelper);
     }
 
     if (Platform.isWindows) {
@@ -212,6 +219,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _initialTheme = _theme;
     _initialWinPrinterName = _winPrinterName;
     _initialUiScale = _uiScale;
+    _initialCashChangeHelper = _cashChangeHelper;
     setState(() => _dirty = false);
     
     // Solo hacer pop si drawer NO está fijo (si está fijo, solo actualizamos dirty state)
@@ -480,6 +488,18 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: const Text(
                           'Previsualizar y configurar pantalla de Ventas'),
                     ),
+                  ),
+                  const Divider(),
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    title: const Text('Ayuda de vuelto en efectivo'),
+                    subtitle: const Text(
+                        'Muestra sugerencias de billetes y calcula el vuelto al cobrar en efectivo'),
+                    value: _cashChangeHelper,
+                    onChanged: (v) => setState(() {
+                      _cashChangeHelper = v;
+                      _recomputeDirty();
+                    }),
                   ),
                   const Divider(),
                   ListTile(

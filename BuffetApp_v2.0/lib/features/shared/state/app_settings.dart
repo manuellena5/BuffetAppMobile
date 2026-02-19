@@ -17,6 +17,9 @@ class AppSettings extends ChangeNotifier {
   static const _kEventoActivoFecha = 'evento_activo_fecha';
   static const _kEventoActivoEsEspecial = 'evento_activo_especial';
   
+  // Buffet: ayuda de vuelto en efectivo
+  static const _kCashChangeHelper = 'cash_change_helper';
+
   // Unidad de Gestión activa para Tesorería
   static const _kUnidadGestionActivaId = 'unidad_gestion_activa_id';
 
@@ -51,6 +54,10 @@ class AppSettings extends ChangeNotifier {
 
   bool _eventoActivoEsEspecial = false;
   bool get eventoActivoEsEspecial => _eventoActivoEsEspecial;
+
+  // Buffet: mostrar calculador de vuelto en pago efectivo
+  bool _cashChangeHelper = true;
+  bool get cashChangeHelper => _cashChangeHelper;
 
   // Unidad de Gestión activa para Tesorería
   int? _unidadGestionActivaId;
@@ -109,6 +116,9 @@ class AppSettings extends ChangeNotifier {
     _eventoActivoFecha = sp.getString(_kEventoActivoFecha);
     _eventoActivoEsEspecial = sp.getBool(_kEventoActivoEsEspecial) ?? false;
     
+    // Buffet: ayuda de vuelto
+    _cashChangeHelper = sp.getBool(_kCashChangeHelper) ?? true;
+
     // Unidad de Gestión activa para Tesorería
     _unidadGestionActivaId = sp.getInt(_kUnidadGestionActivaId);
 
@@ -246,6 +256,13 @@ class AppSettings extends ChangeNotifier {
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_kPuntoVentaCodigo, _puntoVentaCodigo!);
     await sp.setString(_kAliasDispositivo, _aliasDispositivo!);
+    notifyListeners();
+  }
+
+  Future<void> setCashChangeHelper(bool value) async {
+    _cashChangeHelper = value;
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool(_kCashChangeHelper, value);
     notifyListeners();
   }
 

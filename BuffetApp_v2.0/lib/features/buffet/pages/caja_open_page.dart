@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/caja_service.dart';
 import '../../shared/format.dart';
 import 'buffet_home_page.dart';
-import 'products_page.dart';
+import 'bulk_edit_products_page.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/widgets/responsive_container.dart';
@@ -325,25 +325,24 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Caja abierta'),
-          content: const Text('¿Querés cargar stock ahora?'),
+          content: const Text('¿Querés cargar precios y stock ahora?'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
                 child: const Text('Ir a ventas')),
             ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Cargar stock')),
+                child: const Text('Cargar precios/stock')),
           ],
         ),
       );
       if (!mounted) return;
       if (goToStock == true) {
-        // Ir a Productos
-        // Importación perezosa para evitar dependencias circulares
+        // Ir a edición masiva de precios y stock
         // ignore: use_build_context_synchronously
         if (!context.mounted) return;
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const ProductsPage()));
+            context, MaterialPageRoute(builder: (_) => const BulkEditProductsPage()));
       } else {
         if (!context.mounted) return;
         Navigator.pushReplacement(

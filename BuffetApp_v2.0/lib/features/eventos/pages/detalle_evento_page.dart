@@ -3,12 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../../../data/dao/db.dart';
 import '../../buffet/services/caja_service.dart';
-import '../../shared/services/print_service.dart';
 import '../../shared/services/supabase_sync_service.dart';
-import '../../shared/services/usb_printer_service.dart';
 import '../../shared/format.dart';
 import '../../buffet/pages/caja_page.dart';
-import '../../shared/pages/printer_test_page.dart';
 
 class DetalleEventoPage extends StatefulWidget {
   const DetalleEventoPage({
@@ -30,8 +27,6 @@ enum _EventoSync { pendiente, parcial, sincronizada, error }
 
 class _DetalleEventoPageState extends State<DetalleEventoPage> {
   final _cajaSvc = CajaService();
-
-  final _usb = UsbPrinterService();
 
   bool _loading = true;
   bool _syncing = false;
@@ -67,108 +62,6 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
         ],
       ),
     );
-  }
-
-  Future<_PdfModo?> _pickPdfModo() async {
-    if (!mounted) return null;
-    return showDialog<_PdfModo>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reporte del evento'),
-        content: const Text('¿Qué tipo de reporte querés generar?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_PdfModo.detallePorCaja),
-            child: const Text('Detalle por caja'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_PdfModo.sumarizado),
-            child: const Text('Sumarizado'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancelar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<int> _closedCajaIds() {
-    return _cajas
-        .where((c) => c.cerrada)
-        .map((c) => c.id)
-        .toList(growable: false);
-  }
-
-  Future<void> _showPrinterNotConnectedDialog() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Impresora no disponible'),
-        content: const Text('No hay impresora POS USB conectada.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PrinterTestPage()),
-              );
-              if (!mounted) return;
-              setState(() {});
-            },
-            child: const Text('Config. Impresora'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _printEventoUsb({required _PdfModo modo}) async {
-    final cajaIds = _closedCajaIds();
-    if (cajaIds.isEmpty) return;
-
-    bool ok = true;
-
-    try {
-      if (modo == _PdfModo.detallePorCaja) {
-        for (final id in cajaIds) {
-          final r = await PrintService()
-              .printCajaResumenUsbOnly(id)
-              .timeout(const Duration(seconds: 6), onTimeout: () => false);
-          ok = ok && r;
-        }
-      } else {
-        ok = await PrintService().printEventoResumenUsbOnly(
-          fecha: widget.fecha,
-          disciplina: widget.disciplina,
-          cajaIds: cajaIds,
-        );
-      }
-    } catch (_) {
-      ok = false;
-    } finally {
-      if (mounted) {
-        try {
-          Navigator.of(context, rootNavigator: true).pop();
-        } catch (_) {}
-      }
-    }
-
-    if (!mounted) return;
-    if (!ok) {
-      await _showInfoDialog(
-        title: 'No se pudo imprimir',
-        message:
-            'Hubo un problema al imprimir por USB.\nProbá reconectar la impresora o usar Previsualizar PDF.',
-      );
-    }
   }
 
   Future<void> _load() async {
@@ -591,72 +484,6 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
       appBar: AppBar(
         title: const Text('Detalle del Evento'),
         centerTitle: true,
-        actions: [
-          FutureBuilder<bool>(
-            future: () async {
-              try {
-                return await _usb.isConnected();
-              } catch (_) {
-                return false;
-              }
-            }(),
-            builder: (ctx, snap) {
-              final connected = snap.data ?? false;
-              return IconButton(
-                tooltip: connected
-                    ? 'Impresora USB conectada'
-                    : 'Impresora USB desconectada',
-                icon: Icon(
-                  Icons.print,
-                  color: connected ? Colors.green : Colors.red,
-                ),
-                onPressed: _loading
-                    ? null
-                    : () async {
-                        bool ok = false;
-                        try {
-                          ok = await _usb.isConnected();
-                        } catch (_) {
-                          ok = false;
-                        }
-                        if (!mounted) return;
-                        if (!ok) {
-                          await _showPrinterNotConnectedDialog();
-                          return;
-                        }
-
-                        final modo = await _pickPdfModo();
-                        if (modo == null) return;
-
-                        final cajaIds = _closedCajaIds();
-                        if (cajaIds.isEmpty) {
-                          await _showInfoDialog(
-                            title: 'Nada para imprimir',
-                            message:
-                                'Este evento no tiene cajas cerradas.\nSolo se imprimen reportes de cajas cerradas.',
-                          );
-                          return;
-                        }
-
-                        if (!mounted) return;
-                        showDialog<void>(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) => const AlertDialog(
-                            title: Text('Imprimiendo…'),
-                            content: SizedBox(
-                              height: 56,
-                              child: Center(child: CircularProgressIndicator()),
-                            ),
-                          ),
-                        );
-
-                        await _printEventoUsb(modo: modo);
-                      },
-              );
-            },
-          ),
-        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -1205,8 +1032,6 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
     );
   }
 }
-
-enum _PdfModo { detallePorCaja, sumarizado }
 
 class _SyncEventoDialog extends StatelessWidget {
   const _SyncEventoDialog({
