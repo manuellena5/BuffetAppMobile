@@ -298,7 +298,7 @@ class _HomePageState extends State<HomePage> {
               ),
               ListTile(
                 leading: const Icon(Icons.event),
-                title: const Text('Eventos'),
+                title: const Text('Eventos / Listado Cajas'),
                 onTap: () async {
                   final nav = Navigator.of(context);
                   nav.pop();
@@ -656,10 +656,11 @@ class _HomePageState extends State<HomePage> {
                                 child: Column(
                                   children: [
                                     Text(
-                                      'Eventos',
+                                      'Eventos / Listado Cajas',
                                       style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w700),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ],
                                 ),

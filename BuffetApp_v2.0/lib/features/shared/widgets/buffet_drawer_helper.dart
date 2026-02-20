@@ -147,7 +147,7 @@ class BuffetDrawerHelper {
         // Eventos
         DrawerMenuItem(
           icon: Icons.event,
-          label: 'Eventos',
+          label: 'Eventos / Listado Cajas',
           onTap: () {
             final nav = Navigator.of(context);
             if (!isDrawerFixed) Navigator.pop(context);

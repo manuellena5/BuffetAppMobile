@@ -15,6 +15,18 @@ import '../state/app_mode.dart';
 import '../state/drawer_state.dart';
 import 'punto_venta_setup_page.dart';
 import '../../home/main_menu_page.dart';
+import '../../home/home_page.dart';
+import '../../buffet/pages/buffet_home_page.dart';
+import '../../buffet/pages/caja_open_page.dart';
+import '../../buffet/pages/caja_page.dart';
+import '../../buffet/pages/sales_list_page.dart';
+import '../../buffet/pages/products_page.dart';
+import '../../buffet/services/caja_service.dart';
+import '../../eventos/pages/eventos_page.dart';
+import '../../tesoreria/pages/movimientos_page.dart';
+import 'error_logs_page.dart';
+import 'help_page.dart';
+import 'printer_test_page.dart';
 
 enum ProductosLayout { grid, list }
 
@@ -307,7 +319,9 @@ class _SettingsPageState extends State<SettingsPage> {
         }
         await _showUnsavedChangesModal();
       },
-      child: TesoreriaScaffold(
+      child: modeState.isBuffetMode
+          ? _buildBuffetScaffold(context, appSettings, modeState, pv, alias)
+          : TesoreriaScaffold(
         title: 'Configuraciones',
         currentRouteName: '/settings',
         appBarColor: Colors.grey,
@@ -317,284 +331,492 @@ class _SettingsPageState extends State<SettingsPage> {
             child: const Text('GUARDAR'),
           ),
         ],
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : ResponsiveContainer(
-                maxWidth: 800,
-                child: ListView(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                    children: [
-                  // Cambiar de módulo
-                  Card(
-                    color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-                    child: ListTile(
-                      leading: Icon(
-                        modeState.isBuffetMode ? Icons.account_balance : Icons.store,
-                        color: modeState.isBuffetMode ? Colors.green : Colors.blue,
+        body: _buildSettingsBody(context, modeState, pv, alias),
+      ),
+    );
+  }
+
+  Widget _buildBuffetScaffold(
+    BuildContext context,
+    AppSettings? appSettings,
+    AppModeState modeState,
+    String? pv,
+    String? alias,
+  ) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Configuraciones'),
+        actions: [
+          TextButton(
+            onPressed: _loading ? null : _save,
+            child: const Text('GUARDAR'),
+          ),
+        ],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            const DrawerHeader(child: Text('BuffetApp')),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Inicio'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomePage()),
+                  (route) => false,
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.point_of_sale),
+              title: const Text('Ventas'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                nav.pop();
+                final caja = await CajaService().getCajaAbierta();
+                if (caja == null) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Abrí una caja para vender')),
+                  );
+                  return;
+                }
+                nav.push(
+                  MaterialPageRoute(builder: (_) => const BuffetHomePage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Tickets'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                nav.pop();
+                final caja = await CajaService().getCajaAbierta();
+                if (caja == null) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                        content: Text('Abrí una caja para ver los tickets')),
+                  );
+                  return;
+                }
+                nav.push(
+                  MaterialPageRoute(builder: (_) => const SalesListPage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.store),
+              title: const Text('Caja'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                final caja = await CajaService().getCajaAbierta();
+                if (caja == null) {
+                  nav.push(
+                    MaterialPageRoute(builder: (_) => const CajaOpenPage()),
+                  );
+                } else {
+                  nav.push(
+                    MaterialPageRoute(builder: (_) => const CajaPage()),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.event),
+              title: const Text('Eventos / Listado Cajas'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                nav.push(
+                  MaterialPageRoute(builder: (_) => const EventosPage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.swap_vert),
+              title: const Text('Movimientos caja'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                nav.pop();
+                final caja = await CajaService().getCajaAbierta();
+                if (caja == null) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                        content: Text('Abrí una caja para ver movimientos')),
+                  );
+                  return;
+                }
+                nav.push(
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          MovimientosPage(cajaId: caja['id'] as int)),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.inventory_2),
+              title: const Text('Productos'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                nav.push(
+                  MaterialPageRoute(builder: (_) => const ProductsPage()),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading:
+                  const Icon(Icons.home_outlined, color: Colors.deepPurple),
+              title: const Text('Menú Principal'),
+              subtitle: const Text('Volver al selector de módulos'),
+              onTap: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const MainMenuPage()),
+                  (route) => false,
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Configuraciones'),
+              selected: true,
+              onTap: () => Navigator.pop(context),
+            ),
+            if (_advanced)
+              ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: const Text('Logs de errores'),
+                onTap: () async {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  nav.push(
+                    MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
+                  );
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.print),
+              title: const Text('Config. impresora'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                nav.push(
+                  MaterialPageRoute(builder: (_) => const PrinterTestPage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Ayuda'),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                nav.pop();
+                nav.push(
+                  MaterialPageRoute(builder: (_) => const HelpPage()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+      body: _buildSettingsBody(context, modeState, pv, alias),
+    );
+  }
+
+  Widget _buildSettingsBody(
+    BuildContext context,
+    AppModeState modeState,
+    String? pv,
+    String? alias,
+  ) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
+    return ResponsiveContainer(
+      maxWidth: 800,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        children: [
+          // Cambiar de módulo
+          Card(
+            color: Theme.of(context)
+                .colorScheme
+                .primaryContainer
+                .withOpacity(0.3),
+            child: ListTile(
+              leading: Icon(
+                modeState.isBuffetMode
+                    ? Icons.account_balance
+                    : Icons.store,
+                color:
+                    modeState.isBuffetMode ? Colors.green : Colors.blue,
+              ),
+              title: const Text('Cambiar de módulo'),
+              subtitle: Text(
+                'Actualmente en: ${modeState.isBuffetMode ? "Buffet" : "Tesorería"}',
+              ),
+              trailing: const Icon(Icons.swap_horiz),
+              onTap: () async {
+                final nav = Navigator.of(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Cambiar módulo'),
+                    content: Text(
+                      'Vas a cambiar al módulo ${modeState.isBuffetMode ? "Tesorería" : "Buffet"}.\n\n'
+                      '¿Deseas continuar?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancelar'),
                       ),
-                      title: const Text('Cambiar de módulo'),
-                      subtitle: Text(
-                        'Actualmente en: ${modeState.isBuffetMode ? "Buffet" : "Tesorería"}',
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Cambiar'),
                       ),
-                      trailing: const Icon(Icons.swap_horiz),
-                      onTap: () async {
-                        final nav = Navigator.of(context);
-                        
-                        // Confirmar antes de cambiar
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Cambiar módulo'),
-                            content: Text(
-                              'Vas a cambiar al módulo ${modeState.isBuffetMode ? "Tesorería" : "Buffet"}.\n\n'
-                              '¿Deseas continuar?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancelar'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Cambiar'),
-                              ),
-                            ],
-                          ),
-                        );
-                        
-                        if (confirm == true) {
-                          // Ir al menú principal
-                          nav.pushAndRemoveUntil(
-                            MaterialPageRoute(
-                              builder: (_) => const MainMenuPage(),
-                            ),
-                            (route) => false,
-                          );
-                        }
-                      },
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  nav.pushAndRemoveUntil(
+                    MaterialPageRoute(
+                        builder: (_) => const MainMenuPage()),
+                    (route) => false,
+                  );
+                }
+              },
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            title: const Text('Punto de venta (Caja) y dispositivo'),
+            subtitle: Text(
+              (pv == null || pv.trim().isEmpty)
+                  ? 'Sin configurar'
+                  : '${pv.trim()} • ${(alias ?? '').trim().isEmpty ? 'Alias sin definir' : (alias ?? '').trim()}',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final nav = Navigator.of(context);
+              final r = await nav.push<bool>(
+                MaterialPageRoute(
+                    builder: (_) => const PuntoVentaSetupPage()),
+              );
+              if (r == true && mounted) {
+                setState(() {});
+              }
+            },
+          ),
+          if (Platform.isWindows) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: DropdownButtonFormField<String?>(
+                initialValue: _winPrinterName,
+                decoration: const InputDecoration(
+                  labelText: 'Impresora térmica (Windows)',
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Sin configurar'),
+                  ),
+                  ..._winPrinters.map(
+                    (p) => DropdownMenuItem<String?>(
+                      value: p,
+                      child: Text(p),
                     ),
                   ),
-                  const Divider(),
-                  ListTile(
-                    title: const Text('Punto de venta (Caja) y dispositivo'),
-                    subtitle: Text(
-                      (pv == null || pv.trim().isEmpty)
-                          ? 'Sin configurar'
-                          : '${pv.trim()} • ${(alias ?? '').trim().isEmpty ? 'Alias sin definir' : (alias ?? '').trim()}',
+                ],
+                onChanged: (v) => setState(() {
+                  _winPrinterName = v;
+                  _recomputeDirty();
+                }),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final bytes =
+                      await PrintService().buildTicketEscPosSample();
+                  if (!mounted) return;
+                  await _showEscPosPreviewDialog(
+                    title: 'Vista previa ticket demo (ESC/POS)',
+                    bytes: bytes,
+                  );
+                },
+                icon: const Icon(Icons.visibility),
+                label: const Text('Vista previa (ticket demo)'),
+              ),
+            ),
+          ],
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DropdownButtonFormField<ProductosLayout>(
+              initialValue: _layout,
+              decoration: const InputDecoration(
+                labelText:
+                    'Distribución de los artículos en la pantalla de ventas',
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: ProductosLayout.grid,
+                  child: Text('Cuadrícula'),
+                ),
+                DropdownMenuItem(
+                  value: ProductosLayout.list,
+                  child: Text('Lista'),
+                ),
+              ],
+              onChanged: (v) => setState(() {
+                _layout = v ?? ProductosLayout.grid;
+                _recomputeDirty();
+              }),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final settings = context.read<AppSettings?>();
+                await settings?.ensureLoaded();
+                if (!mounted) return;
+                final changed =
+                    await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => _VentasGridPreviewPage(
+                      initialMinTileWidth:
+                          settings?.winSalesGridMinTileWidth,
                     ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      final nav = Navigator.of(context);
-                      final r = await nav.push<bool>(
-                        MaterialPageRoute(
-                            builder: (_) => const PuntoVentaSetupPage()),
-                      );
-                      if (r == true && mounted) {
-                        setState(() {});
-                      }
-                    },
                   ),
-                  if (Platform.isWindows) ...[
-                    const Divider(),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: DropdownButtonFormField<String?>(
-                        initialValue: _winPrinterName,
-                        decoration: const InputDecoration(
-                          labelText: 'Impresora térmica (Windows)',
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('Sin configurar'),
-                          ),
-                          ..._winPrinters.map(
-                            (p) => DropdownMenuItem<String?>(
-                              value: p,
-                              child: Text(p),
-                            ),
-                          ),
-                        ],
-                        onChanged: (v) => setState(() {
-                          _winPrinterName = v;
-                          _recomputeDirty();
-                        }),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          final bytes =
-                              await PrintService().buildTicketEscPosSample();
-                          if (!mounted) return;
-                          await _showEscPosPreviewDialog(
-                            title: 'Vista previa ticket demo (ESC/POS)',
-                            bytes: bytes,
-                          );
-                        },
-                        icon: const Icon(Icons.visibility),
-                        label: const Text('Vista previa (ticket demo)'),
-                      ),
-                    ),
+                );
+                if (changed == true && mounted) {
+                  await _load();
+                }
+              },
+              icon: const Icon(Icons.grid_view),
+              label: const Text(
+                  'Previsualizar y configurar pantalla de Ventas'),
+            ),
+          ),
+          const Divider(),
+          SwitchListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text('Ayuda de vuelto en efectivo'),
+            subtitle: const Text(
+                'Muestra sugerencias de billetes y calcula el vuelto al cobrar en efectivo'),
+            value: _cashChangeHelper,
+            onChanged: (v) => setState(() {
+              _cashChangeHelper = v;
+              _recomputeDirty();
+            }),
+          ),
+          const Divider(),
+          ListTile(
+            title: const Text('Modo oscuro'),
+            subtitle: Text(_themeLabel(_theme)),
+            onTap: _pickTheme,
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Zoom de interfaz'),
+                    Text('${(_uiScale * 100).round()}%'),
                   ],
-                  const Divider(),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: DropdownButtonFormField<ProductosLayout>(
-                      initialValue: _layout,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Distribución de los artículos en la pantalla de ventas',
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: ProductosLayout.grid,
-                          child: Text('Cuadrícula'),
-                        ),
-                        DropdownMenuItem(
-                          value: ProductosLayout.list,
-                          child: Text('Lista'),
-                        ),
-                      ],
-                      onChanged: (v) => setState(() {
-                        _layout = v ?? ProductosLayout.grid;
-                        _recomputeDirty();
-                      }),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final settings = context.read<AppSettings?>();
-                        await settings?.ensureLoaded();
-                        if (!mounted) return;
-                        final changed = await Navigator.of(context).push<bool>(
-                          MaterialPageRoute(
-                            builder: (_) => _VentasGridPreviewPage(
-                              initialMinTileWidth:
-                                  settings?.winSalesGridMinTileWidth,
-                            ),
-                          ),
-                        );
-                        if (changed == true && mounted) {
-                          await _load();
-                        }
-                      },
-                      icon: const Icon(Icons.grid_view),
-                      label: const Text(
-                          'Previsualizar y configurar pantalla de Ventas'),
-                    ),
-                  ),
-                  const Divider(),
-                  SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    title: const Text('Ayuda de vuelto en efectivo'),
-                    subtitle: const Text(
-                        'Muestra sugerencias de billetes y calcula el vuelto al cobrar en efectivo'),
-                    value: _cashChangeHelper,
-                    onChanged: (v) => setState(() {
-                      _cashChangeHelper = v;
+                ),
+                Slider(
+                  value: _uiScale.clamp(
+                      AppSettings.uiScaleMin, AppSettings.uiScaleMax),
+                  min: AppSettings.uiScaleMin,
+                  max: AppSettings.uiScaleMax,
+                  divisions: ((AppSettings.uiScaleMax -
+                              AppSettings.uiScaleMin) /
+                          0.05)
+                      .round(),
+                  label: '${(_uiScale * 100).round()}%',
+                  onChanged: (v) {
+                    setState(() {
+                      _uiScale = v;
                       _recomputeDirty();
-                    }),
-                  ),
-                  const Divider(),
-                  ListTile(
-                    title: const Text('Modo oscuro'),
-                    subtitle: Text(_themeLabel(_theme)),
-                    onTap: _pickTheme,
-                  ),
-                  const Divider(),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Zoom de interfaz'),
-                            Text('${(_uiScale * 100).round()}%'),
-                          ],
-                        ),
-                        Slider(
-                          value: _uiScale.clamp(
-                              AppSettings.uiScaleMin, AppSettings.uiScaleMax),
-                          min: AppSettings.uiScaleMin,
-                          max: AppSettings.uiScaleMax,
-                          divisions: ((AppSettings.uiScaleMax -
-                                      AppSettings.uiScaleMin) /
-                                  0.05)
-                              .round(),
-                          label: '${(_uiScale * 100).round()}%',
-                          onChanged: (v) {
-                            setState(() {
-                              _uiScale = v;
-                              _recomputeDirty();
-                            });
-                          },
-                        ),
-                        const Text(
-                          'Ajusta el tamaño del texto en toda la app.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
+                    });
+                  },
+                ),
+                const Text(
+                  'Ajusta el tamaño del texto en toda la app.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          SwitchListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text('Mostrar opciones avanzadas'),
+            subtitle:
+                const Text('Incluye acceso a logs de errores'),
+            value: _advanced,
+            onChanged: (v) => setState(() {
+              _advanced = v;
+              _recomputeDirty();
+            }),
+          ),
+          if (_advanced) const Divider(),
+          if (_advanced)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Mantenimiento de Datos',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
                     ),
+                    icon: const Icon(Icons.delete_forever),
+                    onPressed: _mostrarDialogoPurgar,
+                    label: const Text(
+                        'Borrar TODAS las cajas y tickets (Irreversible)'),
                   ),
-                  const Divider(),
-                  SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    title: const Text('Mostrar opciones avanzadas'),
-                    subtitle: const Text('Incluye acceso a logs de errores'),
-                    value: _advanced,
-                    onChanged: (v) => setState(() {
-                      _advanced = v;
-                      _recomputeDirty();
-                    }),
-                  ),
-                  if (_advanced) const Divider(),
-                  if (_advanced)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Mantenimiento de Datos',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade700,
-                              foregroundColor: Colors.white,
-                            ),
-                            icon: const Icon(Icons.delete_forever),
-                            onPressed: _mostrarDialogoPurgar,
-                            label: const Text(
-                                'Borrar TODAS las cajas y tickets (Irreversible)'),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade900,
-                              foregroundColor: Colors.white,
-                            ),
-                            icon: const Icon(Icons.restart_alt),
-                            onPressed: _mostrarDialogoRestaurarFabrica,
-                            label: const Text(
-                                'Restaurar de fábrica (Borra TODO y re-inicializa)'),
-                          ),
-                          const SizedBox(height: 12),
-                          const SizedBox.shrink(),
-                        ],
-                      ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade900,
+                      foregroundColor: Colors.white,
                     ),
+                    icon: const Icon(Icons.restart_alt),
+                    onPressed: _mostrarDialogoRestaurarFabrica,
+                    label: const Text(
+                        'Restaurar de fábrica (Borra TODO y re-inicializa)'),
+                  ),
+                  const SizedBox(height: 12),
+                  const SizedBox.shrink(),
                 ],
               ),
             ),
+        ],
       ),
     );
   }

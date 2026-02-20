@@ -438,7 +438,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
               ),
               ListTile(
                 leading: const Icon(Icons.event),
-                title: const Text('Eventos'),
+                title: const Text('Eventos / Listado Cajas'),
                 onTap: () async {
                   final nav = Navigator.of(context);
                   nav.pop();
