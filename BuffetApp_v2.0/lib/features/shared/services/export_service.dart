@@ -1604,6 +1604,28 @@ class ExportService {
         row++;
       }
 
+      // ─── RESULTADO NETO + DIFERENCIAS ───
+      row++;
+      {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = 'RESULTADO NETO + DIFERENCIAS'
+          ..cellStyle = CellStyle(bold: true, fontSize: 12);
+        row++;
+      }
+      _labelMoney('Diferencia efectivo', difEfectivo, negative: difEfectivo < 0);
+      _labelMoney('Diferencia transferencias', difTransf, negative: difTransf < 0);
+      row++;
+      {
+        final resultadoConDif = resultadoNeto + difEfectivo + difTransf;
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+          ..value = 'TOTAL (RESULTADO + DIFERENCIAS)'
+          ..cellStyle = CellStyle(bold: true, fontSize: 14, fontColorHex: resultadoConDif >= 0 ? '#1B5E20' : '#C62828');
+        final totalCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row));
+        totalCell.value = resultadoConDif;
+        totalCell.cellStyle = CellStyle(bold: true, fontSize: 14, fontColorHex: resultadoConDif >= 0 ? '#1B5E20' : '#C62828');
+        row++;
+      }
+
       // ─── ANCHOS DE COLUMNAS ───
       sheet.setColWidth(0, 30.0);
       sheet.setColWidth(1, 25.0);

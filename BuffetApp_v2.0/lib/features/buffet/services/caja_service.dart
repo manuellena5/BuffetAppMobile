@@ -247,8 +247,22 @@ class CajaService {
     ''', [cajaId]);
       final ingresos = (movTotals.first['ingresos'] as num?)?.toDouble() ?? 0.0;
       final retiros = (movTotals.first['retiros'] as num?)?.toDouble() ?? 0.0;
+      // Obtener desglose por medio de pago
+      final movMpTotals = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
+        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
+        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
+        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
+      FROM caja_movimiento cm
+      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+      WHERE cm.caja_id = ?
+    ''', [cajaId]);
+      final ingEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
+      final retEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+      // Fórmula con desglose por medio de pago
       final totalPorFormula =
-          (efectivoEnCaja - fondo - ingresos + retiros) + transferencias;
+          (efectivoEnCaja - fondo - ingEfec + retEfec) + transferencias;
       final diferencia = totalPorFormula - totalVentas;
       await db.update(
           'caja_diaria',

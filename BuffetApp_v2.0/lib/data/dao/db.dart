@@ -81,7 +81,7 @@ class AppDatabase {
     _db = await factory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 19, // Agregar sync_estado a caja_diaria
+        version: 20, // Agregar medio_pago_id a caja_movimiento
         onConfigure: _onConfigure,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
@@ -232,6 +232,27 @@ class AppDatabase {
       } catch (e) {
         if (!e.toString().contains('duplicate column')) {
           print('⚠ Error en migración v18→v19: $e');
+        }
+      }
+    }
+    
+    // Migración a versión 20: Agregar medio_pago_id a caja_movimiento
+    if (oldVersion < 20) {
+      try {
+        await db.execute('''
+          ALTER TABLE caja_movimiento 
+          ADD COLUMN medio_pago_id INTEGER NOT NULL DEFAULT 1 REFERENCES metodos_pago(id)
+        ''');
+        print('✓ Migración v19→v20: Columna medio_pago_id agregada a caja_movimiento (default=1 Efectivo)');
+        // Índice para consultas agrupadas por medio de pago
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_mov_caja_mp 
+          ON caja_movimiento(caja_id, medio_pago_id)
+        ''');
+        print('✓ Migración v19→v20: Índice idx_mov_caja_mp creado');
+      } catch (e) {
+        if (!e.toString().contains('duplicate column')) {
+          print('⚠ Error en migración v19→v20: $e');
         }
       }
     }
@@ -737,9 +758,11 @@ class AppDatabase {
         tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','RETIRO')),
         monto REAL NOT NULL CHECK (monto > 0),
         observacion TEXT,
+        medio_pago_id INTEGER NOT NULL DEFAULT 1,
         created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
         updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
-        FOREIGN KEY (caja_id) REFERENCES caja_diaria(id)
+        FOREIGN KEY (caja_id) REFERENCES caja_diaria(id),
+        FOREIGN KEY (medio_pago_id) REFERENCES metodos_pago(id)
       )
     ''');
   }
@@ -1142,7 +1165,7 @@ class AppDatabase {
 
   static Future<void> _createViews(Database db) async {
     // Vista para tickets con información completa
-    // Esta query se repite en: sales_list_page, caja_tickets_page, export_service
+    // Esta query se repite en: sales_list_page, export_service
     await db.execute('''
       CREATE VIEW IF NOT EXISTS v_tickets_completo AS
       SELECT 

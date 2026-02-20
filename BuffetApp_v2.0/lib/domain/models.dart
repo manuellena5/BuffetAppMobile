@@ -114,6 +114,8 @@ class Movimiento {
   final String tipo;
   final double monto;
   final String? observacion;
+  final int medioPagoId;
+  final String? medioPagoDesc;
   final String creadoTs;
   Movimiento(
       {required this.id,
@@ -121,6 +123,8 @@ class Movimiento {
       required this.tipo,
       required this.monto,
       this.observacion,
+      this.medioPagoId = 1,
+      this.medioPagoDesc,
       required this.creadoTs});
 }
 

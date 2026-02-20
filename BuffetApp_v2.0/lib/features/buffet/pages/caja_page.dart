@@ -10,8 +10,9 @@ import '../../shared/services/usb_printer_service.dart';
 import '../../shared/services/export_service.dart';
 import '../../shared/format.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../shared/state/app_settings.dart';
-import 'caja_tickets_page.dart';
+import 'sales_list_page.dart';
 import '../../eventos/pages/detalle_evento_page.dart';
 import '../../home/home_page.dart';
 import '../../tesoreria/pages/movimientos_page.dart';
@@ -35,6 +36,11 @@ class _CajaPageState extends State<CajaPage> {
   bool _loading = true;
   double _movIngresos = 0.0;
   double _movRetiros = 0.0;
+  // Desglose de movimientos por medio de pago
+  double _movIngresosEfectivo = 0.0;
+  double _movRetirosEfectivo = 0.0;
+  double _movIngresosTransferencia = 0.0;
+  double _movRetirosTransferencia = 0.0;
 
   int? get _cajaId => _caja?['id'] as int?;
 
@@ -76,6 +82,10 @@ class _CajaPageState extends State<CajaPage> {
     Map<String, dynamic>? resumen;
     var movIngresos = 0.0;
     var movRetiros = 0.0;
+    var movIngEfec = 0.0;
+    var movRetEfec = 0.0;
+    var movIngTransf = 0.0;
+    var movRetTransf = 0.0;
 
     if (caja != null) {
       resumen = await _svc.resumenCaja(caja['id'] as int);
@@ -83,6 +93,12 @@ class _CajaPageState extends State<CajaPage> {
         final mt = await MovimientoService().totalesPorCaja(caja['id'] as int);
         movIngresos = (mt['ingresos'] as num?)?.toDouble() ?? 0.0;
         movRetiros = (mt['retiros'] as num?)?.toDouble() ?? 0.0;
+        // Desglose por medio de pago
+        final mtMp = await MovimientoService().totalesPorCajaPorMp(caja['id'] as int);
+        movIngEfec = (mtMp['ingresosEfectivo'] as num?)?.toDouble() ?? 0.0;
+        movRetEfec = (mtMp['retirosEfectivo'] as num?)?.toDouble() ?? 0.0;
+        movIngTransf = (mtMp['ingresosTransferencia'] as num?)?.toDouble() ?? 0.0;
+        movRetTransf = (mtMp['retirosTransferencia'] as num?)?.toDouble() ?? 0.0;
       } catch (e, st) {
         AppDatabase.logLocalError(
           scope: 'caja_page.totales_movimientos',
@@ -99,6 +115,10 @@ class _CajaPageState extends State<CajaPage> {
       _resumen = resumen;
       _movIngresos = movIngresos;
       _movRetiros = movRetiros;
+      _movIngresosEfectivo = movIngEfec;
+      _movRetirosEfectivo = movRetEfec;
+      _movIngresosTransferencia = movIngTransf;
+      _movRetirosTransferencia = movRetTransf;
       _loading = false;
     });
   }
@@ -266,7 +286,7 @@ class _CajaPageState extends State<CajaPage> {
             context,
             icon: Icons.arrow_downward,
             title: 'Ingresos',
-            subtitle: 'Registrados manual',
+            subtitle: 'Efectivo: ${formatCurrency(_movIngresosEfectivo)} • Transf: ${formatCurrency(_movIngresosTransferencia)}',
             value: '+ ${formatCurrency(_movIngresos)}',
             valueStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700, color: Colors.green.shade700),
@@ -276,7 +296,7 @@ class _CajaPageState extends State<CajaPage> {
             context,
             icon: Icons.arrow_upward,
             title: 'Retiros',
-            subtitle: 'Registrados manual',
+            subtitle: 'Efectivo: ${formatCurrency(_movRetirosEfectivo)} • Transf: ${formatCurrency(_movRetirosTransferencia)}',
             value: '- ${formatCurrency(_movRetiros)}',
             valueStyle: Theme.of(context)
                 .textTheme
@@ -405,8 +425,26 @@ class _CajaPageState extends State<CajaPage> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _efectivo,
-                  decoration:
-                      const InputDecoration(labelText: 'Efectivo declarado'),
+                  decoration: InputDecoration(
+                    labelText: 'Efectivo declarado',
+                    suffixIcon: TextButton.icon(
+                      icon: const Icon(Icons.calculate_outlined, size: 20),
+                      label: const Text('Contar billetes', style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        final result = await showDialog<double>(
+                          context: context,
+                          builder: (_) => const _ContarBilletesDialog(),
+                        );
+                        if (result != null) {
+                          _efectivo.text = result.toStringAsFixed(0);
+                        }
+                      },
+                    ),
+                  ),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 8),
@@ -540,9 +578,9 @@ class _CajaPageState extends State<CajaPage> {
                 initiallyExpanded: true,
                 child: Builder(
                   builder: (context) {
-                    final cajaEsperada = fondo + ventasEfec + _movIngresos - _movRetiros;
+                    final cajaEsperada = fondo + ventasEfec + _movIngresosEfectivo - _movRetirosEfectivo;
                     final difEfectivo = efectivoDeclarado - cajaEsperada;
-                    final transfEsperadas = ventasTransf;
+                    final transfEsperadas = ventasTransf + _movIngresosTransferencia - _movRetirosTransferencia;
                     final difTransf = transferenciasFinal - transfEsperadas;
                     final difTotal = difEfectivo + difTransf;
                     return Column(
@@ -616,6 +654,12 @@ class _CajaPageState extends State<CajaPage> {
                 child: Builder(
                   builder: (context) {
                     final resultadoNeto = ventasEfec + ventasTransf + _movIngresos - _movRetiros;
+                    // Diferencias por medio de pago (con desglose de movimientos)
+                    final cajaEsperadaRes = fondo + ventasEfec + _movIngresosEfectivo - _movRetirosEfectivo;
+                    final difEfectivoRes = efectivoDeclarado - cajaEsperadaRes;
+                    final transfEsperadaRes = ventasTransf + _movIngresosTransferencia - _movRetirosTransferencia;
+                    final difTransfRes = transferenciasFinal - transfEsperadaRes;
+                    final resultadoConDif = resultadoNeto + difEfectivoRes + difTransfRes;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -633,6 +677,55 @@ class _CajaPageState extends State<CajaPage> {
                         const SizedBox(height: 4),
                         Text(
                           '(${formatCurrency(ventasEfec)} + ${formatCurrency(ventasTransf)} + ${formatCurrency(_movIngresos)} - ${formatCurrency(_movRetiros)})',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                        ),
+                        const Divider(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: Text('RESULTADO NETO + DIFERENCIAS', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(child: Text('Diferencia efectivo', style: Theme.of(context).textTheme.bodyMedium)),
+                            Text(
+                              '${difEfectivoRes >= 0 ? '+' : ''}${formatCurrency(difEfectivoRes)}',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: difEfectivoRes == 0 ? Colors.green : (difEfectivoRes > 0 ? Colors.blue : Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Expanded(child: Text('Diferencia transferencias', style: Theme.of(context).textTheme.bodyMedium)),
+                            Text(
+                              '${difTransfRes >= 0 ? '+' : ''}${formatCurrency(difTransfRes)}',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: difTransfRes == 0 ? Colors.green : (difTransfRes > 0 ? Colors.blue : Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(child: Text('TOTAL', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
+                            Text(
+                              formatCurrency(resultadoConDif),
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: resultadoConDif >= 0 ? Colors.green.shade700 : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '(${formatCurrency(resultadoNeto)} + ${formatCurrency(difEfectivoRes)} + ${formatCurrency(difTransfRes)})',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
                         ),
                       ],
@@ -663,7 +756,7 @@ class _CajaPageState extends State<CajaPage> {
               await Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) =>
-                      CajaTicketsPage(cajaId: cajaId, codigoCaja: codigoCaja),
+                      SalesListPage(cajaId: cajaId, codigoCaja: codigoCaja),
                 ),
               );
             },
@@ -770,9 +863,9 @@ class _CajaPageState extends State<CajaPage> {
                 child: SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: _exportCajaExcel,
+                    onPressed: _mostrarModalExportarCompartir,
                     icon: const Icon(Icons.table_chart),
-                    label: const Text('Exportar a Excel'),
+                    label: const Text('Exportar a Excel / Compartir'),
                   ),
                 ),
               ),
@@ -796,7 +889,7 @@ class _CajaPageState extends State<CajaPage> {
                               final cajaId = _caja!['id'] as int;
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
-                                    builder: (_) => CajaTicketsPage(
+                                    builder: (_) => SalesListPage(
                                         cajaId: cajaId,
                                         codigoCaja: codigoCaja)),
                               );
@@ -854,7 +947,14 @@ class _CajaPageState extends State<CajaPage> {
         await MovimientoService().totalesPorCaja(_caja!['id'] as int);
     final ingresos = (movTotals['ingresos'] as num?)?.toDouble() ?? 0.0;
     final retiros = (movTotals['retiros'] as num?)?.toDouble() ?? 0.0;
-    final totalPorFormula = (eff - fondo - ingresos + retiros) + tr;
+    // Desglose por medio de pago
+    final movTotalsMp =
+        await MovimientoService().totalesPorCajaPorMp(_caja!['id'] as int);
+    final ingEfec = (movTotalsMp['ingresosEfectivo'] as num?)?.toDouble() ?? 0.0;
+    final retEfec = (movTotalsMp['retirosEfectivo'] as num?)?.toDouble() ?? 0.0;
+    final ingTransf = (movTotalsMp['ingresosTransferencia'] as num?)?.toDouble() ?? 0.0;
+    final retTransf = (movTotalsMp['retirosTransferencia'] as num?)?.toDouble() ?? 0.0;
+    final totalPorFormula = (eff - fondo - ingEfec + retEfec) + tr;
     final diferencia = totalPorFormula - totalVentas;
 
     final tickets = (resumen['tickets'] as Map?)?.cast<String, dynamic>() ??
@@ -872,8 +972,16 @@ class _CajaPageState extends State<CajaPage> {
               ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
               : acc,
     );
-    final cajaEsperadaDialog = fondo + ventasEfectivoDialog + ingresos - retiros;
-    final totalMovEfectivoDialog = ventasEfectivoDialog + ingresos - retiros;
+    final ventasTransfDialog = porMpDialog.fold<double>(
+      0.0,
+      (acc, e) =>
+          (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
+              ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
+              : acc,
+    );
+    final cajaEsperadaDialog = fondo + ventasEfectivoDialog + ingEfec - retEfec;
+    final transfEsperadaDialog = ventasTransfDialog + ingTransf - retTransf;
+    final totalMovEfectivoDialog = ventasEfectivoDialog + ingEfec - retEfec;
 
     if (!context.mounted) return;
     final ok = await showDialog<bool>(
@@ -900,11 +1008,17 @@ class _CajaPageState extends State<CajaPage> {
               Text('MOVIMIENTOS DE CAJA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
               const SizedBox(height: 4),
               Text('+ Ingresos extra: ${formatCurrency(ingresos)}'),
+              if (ingEfec > 0 || ingTransf > 0)
+                Text('  (Efectivo: ${formatCurrency(ingEfec)} • Transf: ${formatCurrency(ingTransf)})',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               Text('- Retiros: ${formatCurrency(retiros)}'),
+              if (retEfec > 0 || retTransf > 0)
+                Text('  (Efectivo: ${formatCurrency(retEfec)} • Transf: ${formatCurrency(retTransf)})',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               const SizedBox(height: 4),
               Text('TOTAL MOV. EFECTIVO: ${totalMovEfectivoDialog >= 0 ? '+' : ''}${formatCurrency(totalMovEfectivoDialog)}',
                   style: const TextStyle(fontWeight: FontWeight.w700)),
-              Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ingresos)} - ${formatCurrency(retiros)})',
+              Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ingEfec)} - ${formatCurrency(retEfec)})',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               const SizedBox(height: 10),
               // CONCILIACIÓN POR MEDIO DE PAGO
@@ -925,18 +1039,15 @@ class _CajaPageState extends State<CajaPage> {
               }(),
               const SizedBox(height: 8),
               () {
-                final ventasTransfDialog = porMpDialog.fold<double>(
-                  0.0,
-                  (acc, e) => (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
-                      ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
-                      : acc,
-                );
-                final difTransf = tr - ventasTransfDialog;
+                final difTransf = tr - transfEsperadaDialog;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('TRANSFERENCIAS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                    Text('Transf. esperadas: ${formatCurrency(ventasTransfDialog)}'),
+                    Text('Transf. esperadas: ${formatCurrency(transfEsperadaDialog)}'),
+                    if (ingTransf > 0 || retTransf > 0)
+                      Text('  (Ventas ${formatCurrency(ventasTransfDialog)} + Ing. ${formatCurrency(ingTransf)} - Ret. ${formatCurrency(retTransf)})',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                     Text('Transf. declaradas: ${formatCurrency(tr)}'),
                     Text(
                       'Diferencia transf.: ${difTransf >= 0 ? '+' : ''}${formatCurrency(difTransf)}',
@@ -950,14 +1061,8 @@ class _CajaPageState extends State<CajaPage> {
               }(),
               const SizedBox(height: 8),
               () {
-                final ventasTransfDialog2 = porMpDialog.fold<double>(
-                  0.0,
-                  (acc, e) => (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
-                      ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
-                      : acc,
-                );
                 final difEf = eff - cajaEsperadaDialog;
-                final difTr = tr - ventasTransfDialog2;
+                final difTr = tr - transfEsperadaDialog;
                 final difTotal = difEf + difTr;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -979,13 +1084,11 @@ class _CajaPageState extends State<CajaPage> {
               const SizedBox(height: 10),
               // RESULTADO ECONÓMICO DEL EVENTO
               () {
-                final ventasTransfDialog = porMpDialog.fold<double>(
-                  0.0,
-                  (acc, e) => (e['mp_desc']?.toString() ?? '').toLowerCase().contains('transfer')
-                      ? acc + ((e['total'] as num?)?.toDouble() ?? 0.0)
-                      : acc,
-                );
                 final resultadoNetoDialog = ventasEfectivoDialog + ventasTransfDialog + ingresos - retiros;
+                // Diferencias por medio de pago (con desglose de movimientos)
+                final difEfDialog = eff - cajaEsperadaDialog;
+                final difTrDialog = tr - transfEsperadaDialog;
+                final resultadoConDifDialog = resultadoNetoDialog + difEfDialog + difTrDialog;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -998,6 +1101,27 @@ class _CajaPageState extends State<CajaPage> {
                     Text('RESULTADO NETO: ${formatCurrency(resultadoNetoDialog)}',
                         style: const TextStyle(fontWeight: FontWeight.w900)),
                     Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ventasTransfDialog)} + ${formatCurrency(ingresos)} - ${formatCurrency(retiros)})',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    const SizedBox(height: 8),
+                    Text('RESULTADO NETO + DIFERENCIAS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Dif. efectivo: ${difEfDialog >= 0 ? '+' : ''}${formatCurrency(difEfDialog)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: difEfDialog == 0 ? Colors.green : (difEfDialog > 0 ? Colors.blue : Colors.red),
+                      ),
+                    ),
+                    Text(
+                      'Dif. transferencias: ${difTrDialog >= 0 ? '+' : ''}${formatCurrency(difTrDialog)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: difTrDialog == 0 ? Colors.green : (difTrDialog > 0 ? Colors.blue : Colors.red),
+                      ),
+                    ),
+                    Text('TOTAL: ${formatCurrency(resultadoConDifDialog)}',
+                        style: TextStyle(fontWeight: FontWeight.w900, color: resultadoConDifDialog >= 0 ? Colors.green.shade700 : Colors.red)),
+                    Text('(${formatCurrency(resultadoNetoDialog)} + ${formatCurrency(difEfDialog)} + ${formatCurrency(difTrDialog)})',
                         style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                   ],
                 );
@@ -1135,6 +1259,87 @@ class _CajaPageState extends State<CajaPage> {
       onLayout: (format) => PrintService().buildCajaResumenPdf(cajaId),
       name: 'cierre_caja_$cajaId.pdf',
     );
+  }
+
+  Future<void> _mostrarModalExportarCompartir() async {
+    final cajaId = _cajaId;
+    if (cajaId == null) return;
+
+    if (!mounted) return;
+    final opcion = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.description, color: Colors.green.shade700, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Archivo de cierre de caja')),
+          ],
+        ),
+        content: const Text(
+          '¿Qué desea hacer con el archivo Excel del cierre de caja?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'descargar'),
+            icon: const Icon(Icons.download),
+            label: const Text('Descargar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'compartir'),
+            icon: const Icon(Icons.share),
+            label: const Text('Compartir'),
+          ),
+        ],
+      ),
+    );
+
+    if (opcion == null || !mounted) return;
+
+    if (opcion == 'descargar') {
+      await _exportCajaExcel();
+    } else if (opcion == 'compartir') {
+      await _compartirCajaExcel();
+    }
+  }
+
+  Future<void> _compartirCajaExcel() async {
+    final cajaId = _cajaId;
+    if (cajaId == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final savedPath = await ExportService().exportCajaExcel(cajaId);
+
+      if (!mounted) return;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(savedPath)],
+          subject: 'Cierre de caja - Excel',
+          title: 'Cierre de caja - Excel',
+        ),
+      );
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'caja_page.compartir_excel',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'cajaId': cajaId},
+      );
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Error al compartir el archivo Excel. Intente nuevamente.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _exportCajaExcel() async {
@@ -1603,6 +1808,354 @@ Widget _kvRow(BuildContext context, String label, String value) {
       ],
     ),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Modal de conteo de billetes argentinos
+// ---------------------------------------------------------------------------
+class _ContarBilletesDialog extends StatefulWidget {
+  const _ContarBilletesDialog();
+
+  @override
+  State<_ContarBilletesDialog> createState() => _ContarBilletesDialogState();
+}
+
+class _ContarBilletesDialogState extends State<_ContarBilletesDialog> {
+  // Denominaciones vigentes en Argentina (2026)
+  static const List<int> _denominations = [20000, 10000, 2000, 1000, 500, 200, 100];
+
+  final Map<int, TextEditingController> _controllers = {};
+  final Map<int, int> _quantities = {};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final d in _denominations) {
+      _quantities[d] = 0;
+      _controllers[d] = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  double get _total {
+    double t = 0;
+    for (final d in _denominations) {
+      t += d * (_quantities[d] ?? 0);
+    }
+    return t;
+  }
+
+  void _updateQuantity(int denom, String value) {
+    final parsed = int.tryParse(value);
+    setState(() {
+      _quantities[denom] = (parsed != null && parsed >= 0) ? parsed : 0;
+    });
+  }
+
+  void _increment(int denom) {
+    setState(() {
+      _quantities[denom] = (_quantities[denom] ?? 0) + 1;
+      _controllers[denom]!.text = _quantities[denom].toString();
+    });
+  }
+
+  void _decrement(int denom) {
+    final current = _quantities[denom] ?? 0;
+    if (current <= 0) return;
+    setState(() {
+      _quantities[denom] = current - 1;
+      _controllers[denom]!.text = _quantities[denom] == 0 ? '' : _quantities[denom].toString();
+    });
+  }
+
+  void _limpiar() {
+    setState(() {
+      for (final d in _denominations) {
+        _quantities[d] = 0;
+        _controllers[d]!.text = '';
+      }
+    });
+  }
+
+  String _formatMoney(double v) {
+    final s = v.toStringAsFixed(0);
+    final buf = StringBuffer();
+    int count = 0;
+    for (int i = s.length - 1; i >= 0; i--) {
+      buf.write(s[i]);
+      count++;
+      if (count % 3 == 0 && i > 0 && s[i] != '-') buf.write('.');
+    }
+    return '\$ ${buf.toString().split('').reversed.join()}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = _total;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.payments_outlined, color: theme.colorScheme.onPrimary),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Contar billetes',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _limpiar,
+                    style: TextButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onPrimary.withValues(alpha: 0.9),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Limpiar', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+
+            // Bill rows
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                itemCount: _denominations.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                itemBuilder: (context, index) {
+                  final denom = _denominations[index];
+                  final qty = _quantities[denom] ?? 0;
+                  final subtotal = denom * qty;
+                  return _BillRow(
+                    denomination: denom,
+                    controller: _controllers[denom]!,
+                    quantity: qty,
+                    subtotal: subtotal.toDouble(),
+                    onChanged: (v) => _updateQuantity(denom, v),
+                    onIncrement: () => _increment(denom),
+                    onDecrement: () => _decrement(denom),
+                    formatMoney: _formatMoney,
+                  );
+                },
+              ),
+            ),
+
+            // Total + actions
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('TOTAL', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        _formatMoney(total),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.check),
+                          label: const Text('Aplicar'),
+                          onPressed: () => Navigator.pop(context, total),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BillRow extends StatelessWidget {
+  const _BillRow({
+    required this.denomination,
+    required this.controller,
+    required this.quantity,
+    required this.subtotal,
+    required this.onChanged,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.formatMoney,
+  });
+
+  final int denomination;
+  final TextEditingController controller;
+  final int quantity;
+  final double subtotal;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+  final String Function(double) formatMoney;
+
+  String _denomLabel(int d) {
+    if (d >= 1000) return '\$ ${(d ~/ 1000)}.000';
+    return '\$ $d';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasValue = quantity > 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: hasValue
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
+            : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasValue
+              ? theme.colorScheme.primary.withValues(alpha: 0.4)
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Denomination label
+          SizedBox(
+            width: 72,
+            child: Text(
+              _denomLabel(denomination),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+
+          // Decrement
+          _CircleBtn(
+            icon: Icons.remove,
+            onTap: quantity > 0 ? onDecrement : null,
+          ),
+
+          // Quantity input
+          SizedBox(
+            width: 52,
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+              decoration: InputDecoration(
+                hintText: '0',
+                hintStyle: TextStyle(color: theme.hintColor.withValues(alpha: 0.4)),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: InputBorder.none,
+              ),
+              onChanged: onChanged,
+            ),
+          ),
+
+          // Increment
+          _CircleBtn(
+            icon: Icons.add,
+            onTap: onIncrement,
+          ),
+
+          const SizedBox(width: 4),
+
+          // Subtotal
+          Expanded(
+            child: Text(
+              hasValue ? formatMoney(subtotal) : '',
+              textAlign: TextAlign.right,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleBtn extends StatelessWidget {
+  const _CircleBtn({required this.icon, this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: enabled
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: enabled
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).disabledColor,
+        ),
+      ),
+    );
+  }
 }
 
 Widget _movementRow(

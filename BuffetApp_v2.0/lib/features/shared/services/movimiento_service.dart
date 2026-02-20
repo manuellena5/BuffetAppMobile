@@ -6,8 +6,13 @@ class MovimientoService {
   Future<List<Map<String, dynamic>>> listarPorCaja(int cajaId) async {
     try {
       final db = await AppDatabase.instance();
-    final rows = await db.query('caja_movimiento',
-      where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts DESC');
+      final rows = await db.rawQuery('''
+        SELECT cm.*, mp.descripcion as medio_pago_desc
+        FROM caja_movimiento cm
+        LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+        WHERE cm.caja_id=?
+        ORDER BY cm.created_ts DESC
+      ''', [cajaId]);
       return rows.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'mov.listar', error: e, stackTrace: st, payload: {'cajaId': cajaId});
@@ -15,7 +20,7 @@ class MovimientoService {
     }
   }
 
-  Future<int> crear({required int cajaId, required String tipo, required double monto, String? observacion}) async {
+  Future<int> crear({required int cajaId, required String tipo, required double monto, String? observacion, int medioPagoId = 1}) async {
     try {
       final db = await AppDatabase.instance();
       return await db.insert('caja_movimiento', {
@@ -23,24 +28,25 @@ class MovimientoService {
         'tipo': tipo.toUpperCase(),
         'monto': monto,
         'observacion': observacion,
-  // created_ts usa DEFAULT CURRENT_TIMESTAMP
+        'medio_pago_id': medioPagoId,
       });
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'mov.crear', error: e, stackTrace: st, payload: {'cajaId': cajaId,'tipo': tipo,'monto': monto});
+      await AppDatabase.logLocalError(scope: 'mov.crear', error: e, stackTrace: st, payload: {'cajaId': cajaId,'tipo': tipo,'monto': monto,'medioPagoId': medioPagoId});
       rethrow;
     }
   }
 
-  Future<void> actualizar({required int id, required String tipo, required double monto, String? observacion}) async {
+  Future<void> actualizar({required int id, required String tipo, required double monto, String? observacion, int medioPagoId = 1}) async {
     try {
       final db = await AppDatabase.instance();
       await db.update('caja_movimiento', {
         'tipo': tipo.toUpperCase(),
         'monto': monto,
         'observacion': observacion,
+        'medio_pago_id': medioPagoId,
       }, where: 'id=?', whereArgs: [id]);
     } catch (e, st) {
-      await AppDatabase.logLocalError(scope: 'mov.actualizar', error: e, stackTrace: st, payload: {'id': id,'tipo': tipo,'monto': monto});
+      await AppDatabase.logLocalError(scope: 'mov.actualizar', error: e, stackTrace: st, payload: {'id': id,'tipo': tipo,'monto': monto,'medioPagoId': medioPagoId});
       rethrow;
     }
   }
@@ -55,6 +61,7 @@ class MovimientoService {
     }
   }
 
+  /// Totales globales (retrocompatible)
   Future<Map<String, double>> totalesPorCaja(int cajaId) async {
     try {
       final db = await AppDatabase.instance();
@@ -71,6 +78,38 @@ class MovimientoService {
       };
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'mov.totales', error: e, stackTrace: st, payload: {'cajaId': cajaId});
+      rethrow;
+    }
+  }
+
+  /// Totales desglosados por medio de pago:
+  /// Retorna mapa con claves: ingresosEfectivo, retirosEfectivo, ingresosTransferencia, retirosTransferencia
+  Future<Map<String, double>> totalesPorCajaPorMp(int cajaId) async {
+    try {
+      final db = await AppDatabase.instance();
+      final rows = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ingresos_efectivo,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as retiros_efectivo,
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ingresos_transferencia,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as retiros_transferencia,
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' THEN cm.monto END),0) as ingresos_total,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  THEN cm.monto END),0) as retiros_total
+        FROM caja_movimiento cm
+        LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+        WHERE cm.caja_id=?
+      ''', [cajaId]);
+      final r = rows.first;
+      return {
+        'ingresosEfectivo': (r['ingresos_efectivo'] as num).toDouble(),
+        'retirosEfectivo': (r['retiros_efectivo'] as num).toDouble(),
+        'ingresosTransferencia': (r['ingresos_transferencia'] as num).toDouble(),
+        'retirosTransferencia': (r['retiros_transferencia'] as num).toDouble(),
+        'ingresosTotal': (r['ingresos_total'] as num).toDouble(),
+        'retirosTotal': (r['retiros_total'] as num).toDouble(),
+      };
+    } catch (e, st) {
+      await AppDatabase.logLocalError(scope: 'mov.totalesPorMp', error: e, stackTrace: st, payload: {'cajaId': cajaId});
       rethrow;
     }
   }

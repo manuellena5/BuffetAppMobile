@@ -566,6 +566,7 @@ class SupaSyncService {
           'tipo': m['tipo'],
           'monto': _toDouble(m['monto']) ?? 0,
           'observacion': m['observacion'],
+          'medio_pago_id': (m['medio_pago_id'] as num?)?.toInt() ?? 1,
         });
       }
     });
@@ -1749,6 +1750,7 @@ class SupaSyncService {
               'tipo': (m['tipo'] ?? '').toString(),
               'monto': (m['monto'] as num?)?.toDouble() ?? 0.0,
               'observacion': (m['observacion'] ?? '').toString(),
+              'medio_pago_id': (m['medio_pago_id'] as num?)?.toInt() ?? 1,
               'created_ts': (m['created_ts'] ?? '').toString(),
               'updated_ts': (m['updated_ts'] ?? '').toString(),
             });
@@ -1756,7 +1758,7 @@ class SupaSyncService {
           await _insertChunkedWithFallback(
             table: 'caja_movimiento',
             rows: movPayload,
-            optionalCols: const ['observacion', 'created_ts', 'updated_ts'],
+            optionalCols: const ['observacion', 'medio_pago_id', 'created_ts', 'updated_ts'],
           );
           report.movimientosSubidos += movPayload.length;
           processed += 1;

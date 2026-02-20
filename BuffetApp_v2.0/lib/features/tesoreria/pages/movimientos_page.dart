@@ -509,6 +509,7 @@ class _MovimientosPageState extends State<MovimientosPage> {
                         final tipo = (m['tipo'] ?? '').toString();
                         final monto = (m['monto'] as num?)?.toDouble() ?? 0;
                         final obs = (m['observacion'] as String?) ?? '';
+                        final mpDesc = (m['medio_pago_desc'] as String?) ?? 'Efectivo';
                         final fecha = _formatCreatedTs(m['created_ts']);
                         final color = tipo == 'INGRESO'
                             ? Colors.green.shade200
@@ -525,6 +526,10 @@ class _MovimientosPageState extends State<MovimientosPage> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                  child: Text(mpDesc, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+                                ),
                                 if (obs.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(
@@ -575,6 +580,8 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
   final _monto = TextEditingController();
   final _obs = TextEditingController();
   bool _saving = false;
+  int _medioPagoId = 1; // Default: Efectivo
+  List<Map<String, dynamic>> _metodosPago = [];
 
   @override
   void initState() {
@@ -585,6 +592,26 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
       _monto.text =
           ((mov['monto'] as num?)?.toDouble() ?? 0).toStringAsFixed(2);
       _obs.text = (mov['observacion'] as String?) ?? '';
+      _medioPagoId = (mov['medio_pago_id'] as num?)?.toInt() ?? 1;
+    }
+    _loadMetodosPago();
+  }
+
+  Future<void> _loadMetodosPago() async {
+    try {
+      final db = await AppDatabase.instance();
+      final rows = await db.query('metodos_pago', orderBy: 'id ASC');
+      if (mounted) {
+        setState(() {
+          _metodosPago = rows.map((e) => Map<String, dynamic>.from(e)).toList();
+        });
+      }
+    } catch (e, st) {
+      AppDatabase.logLocalError(
+        scope: 'movimiento_dialog.load_mp',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -609,13 +636,15 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
             cajaId: widget.cajaId,
             tipo: _tipo,
             monto: monto,
-            observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim());
+            observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim(),
+            medioPagoId: _medioPagoId);
       } else {
         await _svc.actualizar(
             id: widget.movimiento!['id'] as int,
             tipo: _tipo,
             monto: monto,
-            observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim());
+            observacion: _obs.text.trim().isEmpty ? null : _obs.text.trim(),
+            medioPagoId: _medioPagoId);
       }
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -650,6 +679,20 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
             ],
             onChanged: (v) => setState(() => _tipo = v ?? 'INGRESO'),
             decoration: const InputDecoration(labelText: 'Tipo'),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int>(
+            value: _medioPagoId,
+            items: _metodosPago.isEmpty
+                ? [const DropdownMenuItem(value: 1, child: Text('Efectivo')), const DropdownMenuItem(value: 2, child: Text('Transferencia'))]
+                : _metodosPago.map((mp) {
+                    return DropdownMenuItem<int>(
+                      value: (mp['id'] as num).toInt(),
+                      child: Text((mp['descripcion'] as String?) ?? 'MP ${mp['id']}'),
+                    );
+                  }).toList(),
+            onChanged: (v) => setState(() => _medioPagoId = v ?? 1),
+            decoration: const InputDecoration(labelText: 'Medio de pago'),
           ),
           TextField(
             controller: _monto,

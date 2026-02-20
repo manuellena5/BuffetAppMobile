@@ -139,8 +139,28 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-    final movimientos = await db.query('caja_movimiento',
-        where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+    final movimientos = await db.rawQuery('''
+      SELECT cm.*, mp.descripcion as medio_pago_desc
+      FROM caja_movimiento cm
+      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+      WHERE cm.caja_id=?
+      ORDER BY cm.created_ts ASC
+    ''', [cajaId]);
+    // Desglose de movimientos por medio de pago
+    final movMpTotals = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
+        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
+        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
+        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
+      FROM caja_movimiento cm
+      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+      WHERE cm.caja_id=?
+    ''', [cajaId]);
+    final movIngEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
+    final movRetEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+    final movIngTransf = (movMpTotals.first['ing_transf'] as num?)?.toDouble() ?? 0.0;
+    final movRetTransf = (movMpTotals.first['ret_transf'] as num?)?.toDouble() ?? 0.0;
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final efectivoDeclarado =
@@ -246,16 +266,8 @@ class PrintService {
               pw.SizedBox(height: 8),
               // --- MOVIMIENTOS DE CAJA ---
               () {
-                double ing = 0, ret = 0;
-                for (final m in movimientos) {
-                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
-                  if (tipo == 'INGRESO') {
-                    ing += monto;
-                  } else if (tipo == 'RETIRO') {
-                    ret += monto;
-                  }
-                }
+                final ingTotal = movIngEfec + movIngTransf;
+                final retTotal = movRetEfec + movRetTransf;
                 // Ventas en efectivo
                 double ventasEfec = 0;
                 for (final m in totalesMp) {
@@ -264,57 +276,60 @@ class PrintService {
                     ventasEfec += ((m['total'] as num?) ?? 0).toDouble();
                   }
                 }
-                final totalMovEfectivo = ventasEfec + ing - ret;
+                final totalMovEfectivo = ventasEfec + movIngEfec - movRetEfec;
+
+                // Helper para formatear timestamp
+                String fmtTs(Map<String, Object?> m) {
+                  final ts = (m['created_ts'] as num?)?.toInt();
+                  if (ts == null) return '';
+                  final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+                  final dd = dt.day.toString().padLeft(2, '0');
+                  final mm = dt.month.toString().padLeft(2, '0');
+                  final hh = dt.hour.toString().padLeft(2, '0');
+                  final mi = dt.minute.toString().padLeft(2, '0');
+                  return '$dd/$mm $hh:$mi';
+                }
+
                 return pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text('MOVIMIENTOS DE CAJA', style: s(true)),
                     pw.SizedBox(height: 4),
-                    pw.Text('+ Ingresos extra: ${_formatCurrency(ing)}',
+                    pw.Text('+ Ingresos extra: ${_formatCurrency(ingTotal)}',
                         style: s()),
+                    if (movIngEfec > 0)
+                      pw.Text('    Efectivo: ${_formatCurrency(movIngEfec)}', style: s()),
+                    if (movIngTransf > 0)
+                      pw.Text('    Transferencia: ${_formatCurrency(movIngTransf)}', style: s()),
                     // Detalle de ingresos
                     ...movimientos
                         .where((m) => (m['tipo'] ?? '').toString().toUpperCase() == 'INGRESO')
                         .map((m) {
-                      final ts = (m['created_ts'] as num?)?.toInt();
-                      String tsStr = '';
-                      if (ts != null) {
-                        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
-                        final dd = dt.day.toString().padLeft(2, '0');
-                        final mm = dt.month.toString().padLeft(2, '0');
-                        final hh = dt.hour.toString().padLeft(2, '0');
-                        final mi = dt.minute.toString().padLeft(2, '0');
-                        tsStr = '$dd/$mm $hh:$mi';
-                      }
                       final monto = ((m['monto'] as num?) ?? 0).toDouble();
                       final obs = (m['observacion'] as String?)?.trim();
                       final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
+                      final mpDesc = (m['medio_pago_desc'] as String?) ?? 'Efectivo';
                       return pw.Text(
-                        '  * $tsStr Ingreso: ${_formatCurrency(monto)}$obsPart',
+                        '  * ${fmtTs(m)} Ingreso: ${_formatCurrency(monto)} ($mpDesc)$obsPart',
                         style: s(),
                       );
                     }),
-                    pw.Text('- Retiros: ${_formatCurrency(ret)}',
+                    pw.Text('- Retiros: ${_formatCurrency(retTotal)}',
                         style: s()),
+                    if (movRetEfec > 0)
+                      pw.Text('    Efectivo: ${_formatCurrency(movRetEfec)}', style: s()),
+                    if (movRetTransf > 0)
+                      pw.Text('    Transferencia: ${_formatCurrency(movRetTransf)}', style: s()),
                     // Detalle de retiros
                     ...movimientos
                         .where((m) => (m['tipo'] ?? '').toString().toUpperCase() == 'RETIRO')
                         .map((m) {
-                      final ts = (m['created_ts'] as num?)?.toInt();
-                      String tsStr = '';
-                      if (ts != null) {
-                        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
-                        final dd = dt.day.toString().padLeft(2, '0');
-                        final mm = dt.month.toString().padLeft(2, '0');
-                        final hh = dt.hour.toString().padLeft(2, '0');
-                        final mi = dt.minute.toString().padLeft(2, '0');
-                        tsStr = '$dd/$mm $hh:$mi';
-                      }
                       final monto = ((m['monto'] as num?) ?? 0).toDouble();
                       final obs = (m['observacion'] as String?)?.trim();
                       final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
+                      final mpDesc = (m['medio_pago_desc'] as String?) ?? 'Efectivo';
                       return pw.Text(
-                        '  * $tsStr Retiro: ${_formatCurrency(monto)}$obsPart',
+                        '  * ${fmtTs(m)} Retiro: ${_formatCurrency(monto)} ($mpDesc)$obsPart',
                         style: s(),
                       );
                     }),
@@ -323,7 +338,7 @@ class PrintService {
                         'TOTAL MOV. EFECTIVO DEL DIA: ${totalMovEfectivo >= 0 ? '+' : ''}${_formatCurrency(totalMovEfectivo)}',
                         style: s(true)),
                     pw.Text(
-                        '(${_formatCurrency(ventasEfec)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})',
+                        '(${_formatCurrency(ventasEfec)} + ${_formatCurrency(movIngEfec)} - ${_formatCurrency(movRetEfec)})',
                         style: s()),
                   ],
                 );
@@ -331,16 +346,6 @@ class PrintService {
               pw.SizedBox(height: 8),
               // --- CONCILIACIÓN POR MEDIO DE PAGO ---
               () {
-                double ing = 0, ret = 0;
-                for (final m in movimientos) {
-                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
-                  if (tipo == 'INGRESO') {
-                    ing += monto;
-                  } else if (tipo == 'RETIRO') {
-                    ret += monto;
-                  }
-                }
                 double ventasEfec = 0;
                 double ventasTransf = 0;
                 for (final m in totalesMp) {
@@ -352,9 +357,9 @@ class PrintService {
                     ventasTransf += ((m['total'] as num?) ?? 0).toDouble();
                   }
                 }
-                final efectivoEsperado = fondo + ventasEfec + ing - ret;
+                final efectivoEsperado = fondo + ventasEfec + movIngEfec - movRetEfec;
                 final difEfectivo = efectivoDeclarado - efectivoEsperado;
-                final transfEsperadas = ventasTransf;
+                final transfEsperadas = ventasTransf + movIngTransf - movRetTransf;
                 final difTransf = transferenciasDeclaradasPdf - transfEsperadas;
                 final difTotal = difEfectivo + difTransf;
                 return pw.Column(
@@ -365,7 +370,7 @@ class PrintService {
                     pw.Text('EFECTIVO', style: s(true)),
                     pw.Text('Efectivo esperado: ${_formatCurrency(efectivoEsperado)}', style: s()),
                     pw.Text(
-                        '(Fondo ${_formatCurrency(fondo)} + Ventas ${_formatCurrency(ventasEfec)} + Ing. ${_formatCurrency(ing)} - Ret. ${_formatCurrency(ret)})',
+                        '(Fondo ${_formatCurrency(fondo)} + Ventas ${_formatCurrency(ventasEfec)} + Ing. ${_formatCurrency(movIngEfec)} - Ret. ${_formatCurrency(movRetEfec)})',
                         style: s()),
                     pw.Text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}', style: s()),
                     pw.Text('Diferencia efectivo: ${difEfectivo >= 0 ? '+' : ''}${_formatCurrency(difEfectivo)}',
@@ -373,6 +378,9 @@ class PrintService {
                     pw.SizedBox(height: 4),
                     pw.Text('TRANSFERENCIAS', style: s(true)),
                     pw.Text('Transf. esperadas: ${_formatCurrency(transfEsperadas)}', style: s()),
+                    pw.Text(
+                        '(Ventas ${_formatCurrency(ventasTransf)} + Ing. ${_formatCurrency(movIngTransf)} - Ret. ${_formatCurrency(movRetTransf)})',
+                        style: s()),
                     pw.Text('Transf. declaradas: ${_formatCurrency(transferenciasDeclaradasPdf)}', style: s()),
                     pw.Text('Diferencia transf.: ${difTransf >= 0 ? '+' : ''}${_formatCurrency(difTransf)}',
                         style: s(true)),
@@ -387,20 +395,21 @@ class PrintService {
               pw.SizedBox(height: 8),
               // --- RESULTADO ECONÓMICO DEL EVENTO ---
               () {
-                double ing = 0, ret = 0;
-                for (final m in movimientos) {
-                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-                  final monto = ((m['monto'] as num?) ?? 0).toDouble();
-                  if (tipo == 'INGRESO') ing += monto;
-                  else if (tipo == 'RETIRO') ret += monto;
-                }
+                final ingTotal = movIngEfec + movIngTransf;
+                final retTotal = movRetEfec + movRetTransf;
                 double vEfec = 0, vTransf = 0;
                 for (final m in totalesMp) {
                   final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
                   if (desc.contains('efectivo')) vEfec += ((m['total'] as num?) ?? 0).toDouble();
                   if (desc.contains('transfer')) vTransf += ((m['total'] as num?) ?? 0).toDouble();
                 }
-                final resultadoNeto = vEfec + vTransf + ing - ret;
+                final resultadoNeto = vEfec + vTransf + ingTotal - retTotal;
+                // Diferencias por medio de pago
+                final cajaEsperadaPdf = fondo + vEfec + movIngEfec - movRetEfec;
+                final difEfPdf = efectivoDeclarado - cajaEsperadaPdf;
+                final transfEsperadasPdf = vTransf + movIngTransf - movRetTransf;
+                final difTrPdf = transferenciasDeclaradasPdf - transfEsperadasPdf;
+                final resultadoConDif = resultadoNeto + difEfPdf + difTrPdf;
                 return pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -408,13 +417,26 @@ class PrintService {
                     pw.SizedBox(height: 4),
                     pw.Text('Ventas en efectivo:       ${_formatCurrency(vEfec)}', style: s()),
                     pw.Text('Ventas por transferencia: ${_formatCurrency(vTransf)}', style: s()),
-                    pw.Text('Otros ingresos:           ${_formatCurrency(ing)}', style: s()),
-                    pw.Text('Retiros:                 (${_formatCurrency(ret)})', style: s()),
+                    pw.Text('Otros ingresos efec.:     ${_formatCurrency(movIngEfec)}', style: s()),
+                    pw.Text('Otros ingresos transf.:   ${_formatCurrency(movIngTransf)}', style: s()),
+                    pw.Text('Retiros efec.:           (${_formatCurrency(movRetEfec)})', style: s()),
+                    pw.Text('Retiros transf.:         (${_formatCurrency(movRetTransf)})', style: s()),
                     pw.SizedBox(height: 2),
                     pw.Text('RESULTADO NETO: ${_formatCurrency(resultadoNeto)}',
                         style: s(true).copyWith(fontSize: 10)),
                     pw.Text(
-                        '(${_formatCurrency(vEfec)} + ${_formatCurrency(vTransf)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})',
+                        '(${_formatCurrency(vEfec)} + ${_formatCurrency(vTransf)} + ${_formatCurrency(ingTotal)} - ${_formatCurrency(retTotal)})',
+                        style: s()),
+                    pw.SizedBox(height: 6),
+                    pw.Text('RESULTADO NETO + DIFERENCIAS', style: s(true)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('Dif. efectivo: ${difEfPdf >= 0 ? '+' : ''}${_formatCurrency(difEfPdf)}', style: s()),
+                    pw.Text('Dif. transferencias: ${difTrPdf >= 0 ? '+' : ''}${_formatCurrency(difTrPdf)}', style: s()),
+                    pw.SizedBox(height: 2),
+                    pw.Text('TOTAL: ${_formatCurrency(resultadoConDif)}',
+                        style: s(true).copyWith(fontSize: 10)),
+                    pw.Text(
+                        '(${_formatCurrency(resultadoNeto)} + ${_formatCurrency(difEfPdf)} + ${_formatCurrency(difTrPdf)})',
                         style: s()),
                   ],
                 );
@@ -1433,8 +1455,28 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-    final movimientos = await db.query('caja_movimiento',
-        where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts ASC');
+    final movimientos = await db.rawQuery('''
+      SELECT cm.*, mp.descripcion as medio_pago_desc
+      FROM caja_movimiento cm
+      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+      WHERE cm.caja_id=?
+      ORDER BY cm.created_ts ASC
+    ''', [cajaId]);
+    // Desglose de movimientos por medio de pago (ESC/POS)
+    final movMpTotalsEsc = await db.rawQuery('''
+      SELECT 
+        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
+        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
+        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
+        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
+      FROM caja_movimiento cm
+      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+      WHERE cm.caja_id=?
+    ''', [cajaId]);
+    final movIngEfecEsc = (movMpTotalsEsc.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
+    final movRetEfecEsc = (movMpTotalsEsc.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+    final movIngTransfEsc = (movMpTotalsEsc.first['ing_transf'] as num?)?.toDouble() ?? 0.0;
+    final movRetTransfEsc = (movMpTotalsEsc.first['ret_transf'] as num?)?.toDouble() ?? 0.0;
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final efectivoDeclarado =
@@ -1582,16 +1624,8 @@ class PrintService {
     boldOff();
     feed();
     // --- MOVIMIENTOS DE CAJA ---
-    double ing = 0, ret = 0;
-    for (final m in movimientos) {
-      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-      final monto = ((m['monto'] as num?) ?? 0).toDouble();
-      if (tipo == 'INGRESO') {
-        ing += monto;
-      } else if (tipo == 'RETIRO') {
-        ret += monto;
-      }
-    }
+    final ingTotalEsc = movIngEfecEsc + movIngTransfEsc;
+    final retTotalEsc = movRetEfecEsc + movRetTransfEsc;
     double ventasEfecEsc = 0;
     for (final m in totalesMp) {
       final desc = ((m['mp_desc'] as String?) ?? '').toLowerCase();
@@ -1602,7 +1636,9 @@ class PrintService {
     boldOn();
     text('MOVIMIENTOS DE CAJA');
     boldOff();
-    text('+ Ingresos extra: ${_formatCurrency(ing)}');
+    text('+ Ingresos extra: ${_formatCurrency(ingTotalEsc)}');
+    if (movIngEfecEsc > 0) text('    Efectivo: ${_formatCurrency(movIngEfecEsc)}');
+    if (movIngTransfEsc > 0) text('    Transferencia: ${_formatCurrency(movIngTransfEsc)}');
     for (final m in movimientos) {
       final tipo = (m['tipo'] ?? '').toString().toUpperCase();
       if (tipo != 'INGRESO') continue;
@@ -1619,9 +1655,12 @@ class PrintService {
       final monto = ((m['monto'] as num?) ?? 0).toDouble();
       final obs = (m['observacion'] as String?)?.trim();
       final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
-      writeWrapped('', '* $tsStr Ingreso: ${_formatCurrency(monto)}$obsPart');
+      final mpDesc = (m['medio_pago_desc'] as String?) ?? 'Efectivo';
+      writeWrapped('', '* $tsStr Ingreso: ${_formatCurrency(monto)} ($mpDesc)$obsPart');
     }
-    text('- Retiros: ${_formatCurrency(ret)}');
+    text('- Retiros: ${_formatCurrency(retTotalEsc)}');
+    if (movRetEfecEsc > 0) text('    Efectivo: ${_formatCurrency(movRetEfecEsc)}');
+    if (movRetTransfEsc > 0) text('    Transferencia: ${_formatCurrency(movRetTransfEsc)}');
     for (final m in movimientos) {
       final tipo = (m['tipo'] ?? '').toString().toUpperCase();
       if (tipo != 'RETIRO') continue;
@@ -1638,17 +1677,18 @@ class PrintService {
       final monto = ((m['monto'] as num?) ?? 0).toDouble();
       final obs = (m['observacion'] as String?)?.trim();
       final obsPart = (obs != null && obs.isNotEmpty) ? ' $obs' : '';
-      writeWrapped('', '* $tsStr Retiro: ${_formatCurrency(monto)}$obsPart');
+      final mpDesc = (m['medio_pago_desc'] as String?) ?? 'Efectivo';
+      writeWrapped('', '* $tsStr Retiro: ${_formatCurrency(monto)} ($mpDesc)$obsPart');
     }
     feed();
-    final totalMovEfectivoEsc = ventasEfecEsc + ing - ret;
+    final totalMovEfectivoEsc = ventasEfecEsc + movIngEfecEsc - movRetEfecEsc;
     boldOn();
     text('TOTAL MOV. EFECTIVO DEL DIA: ${totalMovEfectivoEsc >= 0 ? '+' : ''}${_formatCurrency(totalMovEfectivoEsc)}');
     boldOff();
-    text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})');
+    text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(movIngEfecEsc)} - ${_formatCurrency(movRetEfecEsc)})');
     feed();
     // --- CONCILIACIÓN POR MEDIO DE PAGO ---
-    final cajaEsperadaEsc = fondo + ventasEfecEsc + ing - ret;
+    final cajaEsperadaEsc = fondo + ventasEfecEsc + movIngEfecEsc - movRetEfecEsc;
     boldOn();
     text('CONCILIACION POR MEDIO DE PAGO');
     boldOff();
@@ -1658,7 +1698,7 @@ class PrintService {
     text('EFECTIVO');
     boldOff();
     text('Efectivo esperado: ${_formatCurrency(cajaEsperadaEsc)}');
-    text('(Fondo ${_formatCurrency(fondo)} + Ventas ${_formatCurrency(ventasEfecEsc)} + Ing. ${_formatCurrency(ing)} - Ret. ${_formatCurrency(ret)})');
+    text('(Fondo ${_formatCurrency(fondo)} + Ventas ${_formatCurrency(ventasEfecEsc)} + Ing. ${_formatCurrency(movIngEfecEsc)} - Ret. ${_formatCurrency(movRetEfecEsc)})');
     text('Efectivo declarado: ${_formatCurrency(efectivoDeclarado)}');
     final difEfectivo = efectivoDeclarado - cajaEsperadaEsc;
     boldOn();
@@ -1673,11 +1713,12 @@ class PrintService {
         ventasTransfConc += ((m['total'] as num?) ?? 0).toDouble();
       }
     }
-    final transfEsperadas = ventasTransfConc;
+    final transfEsperadas = ventasTransfConc + movIngTransfEsc - movRetTransfEsc;
     boldOn();
     text('TRANSFERENCIAS');
     boldOff();
     text('Transf. esperadas: ${_formatCurrency(transfEsperadas)}');
+    text('(Ventas ${_formatCurrency(ventasTransfConc)} + Ing. ${_formatCurrency(movIngTransfEsc)} - Ret. ${_formatCurrency(movRetTransfEsc)})');
     text('Transf. declaradas: ${_formatCurrency(transferenciasDeclaradas)}');
     final difTransf = transferenciasDeclaradas - transfEsperadas;
     boldOn();
@@ -1700,18 +1741,32 @@ class PrintService {
         ventasTransfEsc += ((m['total'] as num?) ?? 0).toDouble();
       }
     }
-    final resultadoNetoEsc = ventasEfecEsc + ventasTransfEsc + ing - ret;
+    final resultadoNetoEsc = ventasEfecEsc + ventasTransfEsc + ingTotalEsc - retTotalEsc;
     boldOn();
     text('RESULTADO ECONOMICO DEL EVENTO');
     boldOff();
     text('Ventas en efectivo:       ${_formatCurrency(ventasEfecEsc)}');
     text('Ventas por transferencia: ${_formatCurrency(ventasTransfEsc)}');
-    text('Otros ingresos:           ${_formatCurrency(ing)}');
-    text('Retiros:                 (${_formatCurrency(ret)})');
+    text('Otros ingresos efec.:     ${_formatCurrency(movIngEfecEsc)}');
+    text('Otros ingresos transf.:   ${_formatCurrency(movIngTransfEsc)}');
+    text('Retiros efec.:           (${_formatCurrency(movRetEfecEsc)})');
+    text('Retiros transf.:         (${_formatCurrency(movRetTransfEsc)})');
     boldOn();
     text('RESULTADO NETO: ${_formatCurrency(resultadoNetoEsc)}');
     boldOff();
-    text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ventasTransfEsc)} + ${_formatCurrency(ing)} - ${_formatCurrency(ret)})');
+    text('(${_formatCurrency(ventasEfecEsc)} + ${_formatCurrency(ventasTransfEsc)} + ${_formatCurrency(ingTotalEsc)} - ${_formatCurrency(retTotalEsc)})');
+    feed();
+    // --- RESULTADO NETO + DIFERENCIAS ---
+    final resultadoConDifEsc = resultadoNetoEsc + difEfectivo + difTransf;
+    boldOn();
+    text('RESULTADO NETO + DIFERENCIAS');
+    boldOff();
+    text('Dif. efectivo: ${difEfectivo >= 0 ? '+' : ''}${_formatCurrency(difEfectivo)}');
+    text('Dif. transferencias: ${difTransf >= 0 ? '+' : ''}${_formatCurrency(difTransf)}');
+    boldOn();
+    text('TOTAL: ${_formatCurrency(resultadoConDifEsc)}');
+    boldOff();
+    text('(${_formatCurrency(resultadoNetoEsc)} + ${_formatCurrency(difEfectivo)} + ${_formatCurrency(difTransf)})');
     feed();
     text(
         'Entradas vendidas: ${entradasVendidas == null ? '-' : entradasVendidas}');
