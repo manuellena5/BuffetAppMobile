@@ -3,10 +3,9 @@ import '../../../data/dao/db.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../shared/format.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/services/product_image_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'product_reorder_page.dart';
 
 class ProductsPage extends StatefulWidget {
@@ -15,9 +14,11 @@ class ProductsPage extends StatefulWidget {
   State<ProductsPage> createState() => _ProductsPageState();
 }
 
-class _ProductsPageState extends State<ProductsPage> {
+class _ProductsPageState extends State<ProductsPage>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
+  late TabController _tabController;
   final _cats = const [
     {'id': 1, 'descripcion': 'Comida'},
     {'id': 2, 'descripcion': 'Bebida'},
@@ -27,6 +28,8 @@ class _ProductsPageState extends State<ProductsPage> {
   @override
   void initState() {
     super.initState();
+    // Tabs: Todos + una por categoría
+    _tabController = TabController(length: _cats.length + 1, vsync: this);
     _ensureCategories().then((_) => _load());
   }
 
@@ -63,6 +66,66 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> _filterByCategory(int? catId) {
+    if (catId == null) return _items; // Todos
+    return _items.where((p) => p['categoria_id'] == catId).toList();
+  }
+
+  Widget _buildProductList(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text('No hay productos en esta categoría',
+              style: TextStyle(color: Colors.grey, fontSize: 16)),
+        ),
+      );
+    }
+    return LandscapeCenteredBody(
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView.separated(
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (ctx, i) {
+            final p = items[i];
+            final visible = ((p['visible'] as int?) ?? 1) == 1;
+            return ListTile(
+              leading: _buildLeadingImage(p['imagen'] as String?),
+              title: Text(p['nombre'] as String),
+              subtitle: Text(
+                  '${p['categoria'] ?? ''} • ${formatCurrencyNoDecimals(p['precio_venta'] as num)} • Stock: ${p['stock_actual']}'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () async {
+                      final ok = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => _ProductForm(data: p)));
+                      if (ok == true) _load();
+                    }),
+                IconButton(
+                  tooltip: visible ? 'Ocultar' : 'Mostrar',
+                  icon:
+                      Icon(visible ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () =>
+                      _toggleVisible(p['id'] as int, visible ? 1 : 0),
+                ),
+              ]),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -88,6 +151,15 @@ class _ProductsPageState extends State<ProductsPage> {
             ],
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: [
+            const Tab(text: 'Todos'),
+            ..._cats.map((c) => Tab(text: c['descripcion'] as String)),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -97,42 +169,13 @@ class _ProductsPageState extends State<ProductsPage> {
         },
         child: const Icon(Icons.add),
       ),
-      body: LandscapeCenteredBody(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView.separated(
-            itemCount: _items.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (ctx, i) {
-              final p = _items[i];
-              final visible = ((p['visible'] as int?) ?? 1) == 1;
-              return ListTile(
-                leading: _buildLeadingImage(p['imagen'] as String?),
-                title: Text(p['nombre'] as String),
-                subtitle: Text(
-                    '${p['categoria'] ?? ''} • ${formatCurrencyNoDecimals(p['precio_venta'] as num)} • Stock: ${p['stock_actual']}'),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () async {
-                        final ok = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => _ProductForm(data: p)));
-                        if (ok == true) _load();
-                      }),
-                  IconButton(
-                    tooltip: visible ? 'Ocultar' : 'Mostrar',
-                    icon:
-                        Icon(visible ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () =>
-                        _toggleVisible(p['id'] as int, visible ? 1 : 0),
-                  ),
-                ]),
-              );
-            },
-          ),
-        ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildProductList(_filterByCategory(null)),
+          ..._cats.map((c) => _buildProductList(
+              _filterByCategory(c['id'] as int))),
+        ],
       ),
     );
   }
@@ -172,6 +215,8 @@ class _ProductFormState extends State<_ProductForm> {
   int? _catId = 3; // Otros por defecto
   bool _visible = true;
   String? _imagenPath; // ruta local a la imagen
+  String? _imagenPathOriginal; // para detectar cambio de imagen
+  bool _savingImage = false; // procesando imagen
   bool _updatingFields = false; // evita bucles entre listeners
 
   bool _dirty = false;
@@ -196,6 +241,7 @@ class _ProductFormState extends State<_ProductForm> {
       _catId = d['categoria_id'] as int? ?? 3;
       _visible = ((d['visible'] as int?) ?? 1) == 1;
       _imagenPath = d['imagen'] as String?;
+      _imagenPathOriginal = _imagenPath;
     }
 
     _initialSnapshot = _snapshot();
@@ -452,18 +498,252 @@ class _ProductFormState extends State<_ProductForm> {
       'color': null,
       'imagen': _imagenPath,
     };
+
+    // Si se quitó la imagen, borrar archivo anterior del disco
+    final imgService = ProductImageService();
+    if (_imagenPath == null && _imagenPathOriginal != null) {
+      await imgService.deleteImage(_imagenPathOriginal);
+    }
+
     if (widget.data == null) {
       // create: asignar orden_visual = max(orden_visual)+1
       final r = await db.rawQuery(
           'SELECT COALESCE(MAX(orden_visual),0) as maxo FROM products');
       final next = ((r.first['maxo'] as num?)?.toInt() ?? 0) + 1;
-      await db.insert('products', {...payload, 'orden_visual': next});
+      final newId = await db.insert('products', {...payload, 'orden_visual': next});
+      // Renombrar imagen temporal al ID definitivo del producto
+      if (_imagenPath != null && _imagenPath!.isNotEmpty) {
+        final renamed = await imgService.renameToProductId(
+          currentPath: _imagenPath!,
+          productId: newId,
+        );
+        if (renamed != null && renamed != _imagenPath) {
+          await db.update('products', {'imagen': renamed},
+              where: 'id=?', whereArgs: [newId]);
+        }
+      }
     } else {
       // update
       await db.update('products', payload,
           where: 'id=?', whereArgs: [widget.data!['id']]);
+      // Si cambió la imagen y había una anterior diferente, limpiar la vieja
+      if (_imagenPath != _imagenPathOriginal && _imagenPathOriginal != null) {
+        await imgService.deleteImage(_imagenPathOriginal);
+      }
     }
     if (mounted) nav.pop(true);
+  }
+
+  /// Abre selector de origen (galería/cámara) y procesa la imagen.
+  Future<void> _pickImage() async {
+    final src = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library),
+            title: const Text('Galería'),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera),
+            title: const Text('Cámara'),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+        ]),
+      ),
+    );
+    if (src == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: src);
+    if (picked == null || !mounted) return;
+
+    setState(() => _savingImage = true);
+
+    final productId = widget.data?['id'] as int?;
+    final savedPath = await ProductImageService().saveImage(
+      sourcePath: picked.path,
+      productId: productId,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _savingImage = false;
+      if (savedPath != null) {
+        _imagenPath = savedPath;
+      }
+    });
+
+    if (savedPath == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo procesar la imagen'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Confirma y quita la imagen del producto.
+  Future<void> _removeImage() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Quitar imagen'),
+        content:
+            const Text('¿Estás seguro de que querés quitar la imagen del producto?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Quitar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      setState(() => _imagenPath = null);
+    }
+  }
+
+  Widget _buildImageSection() {
+    final hasImage = _imagenPath != null &&
+        _imagenPath!.isNotEmpty &&
+        File(_imagenPath!).existsSync();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Preview
+            GestureDetector(
+              onTap: hasImage ? () => _showFullImage() : _pickImage,
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _savingImage
+                    ? const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : hasImage
+                        ? Image.file(
+                            File(_imagenPath!),
+                            fit: BoxFit.cover,
+                            // Eliminar caché para que se actualice la imagen
+                            cacheWidth: 160,
+                          )
+                        : const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo,
+                                  color: Colors.grey, size: 28),
+                              SizedBox(height: 4),
+                              Text('Agregar',
+                                  style: TextStyle(
+                                      fontSize: 10, color: Colors.grey)),
+                            ],
+                          ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Botones de acción
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasImage) ...[
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.swap_horiz, size: 18),
+                          label: const Text('Cambiar'),
+                          onPressed: _savingImage ? null : _pickImage,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          icon: const Icon(Icons.delete_outline,
+                              size: 18, color: Colors.red),
+                          label: const Text('Quitar',
+                              style: TextStyle(color: Colors.red)),
+                          onPressed: _savingImage ? null : _removeImage,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Toque la imagen para verla completa',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ] else ...[
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.add_a_photo, size: 18),
+                      label: const Text('Agregar imagen'),
+                      onPressed: _savingImage ? null : _pickImage,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Se redimensiona y comprime automáticamente',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Muestra la imagen en pantalla completa.
+  void _showFullImage() {
+    if (_imagenPath == null) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                child: Image.file(File(_imagenPath!)),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -489,78 +769,8 @@ class _ProductFormState extends State<_ProductForm> {
                 key: _form,
                 child: ListView(
                   children: [
-                    // Imagen del producto (preview y selector)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: _imagenPath != null &&
-                                  _imagenPath!.isNotEmpty &&
-                                  File(_imagenPath!).existsSync()
-                              ? Image.file(File(_imagenPath!),
-                                  fit: BoxFit.cover)
-                              : const Icon(Icons.image, color: Colors.grey),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.add_a_photo),
-                          label: const Text('Agregar imagen'),
-                          onPressed: () async {
-                            final src = await showModalBottomSheet<ImageSource>(
-                              context: context,
-                              builder: (ctx) => SafeArea(
-                                child: Wrap(children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.photo_library),
-                                    title: const Text('Galería'),
-                                    onTap: () =>
-                                        Navigator.pop(ctx, ImageSource.gallery),
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.photo_camera),
-                                    title: const Text('Cámara'),
-                                    onTap: () =>
-                                        Navigator.pop(ctx, ImageSource.camera),
-                                  ),
-                                ]),
-                              ),
-                            );
-                            if (src == null) return;
-                            final picker = ImagePicker();
-                            final x = await picker.pickImage(
-                                source: src, imageQuality: 85);
-                            if (x == null) return;
-                            // Copiar a carpeta de documentos de la app para persistencia
-                            final dir =
-                                await getApplicationDocumentsDirectory();
-                            final picsDir =
-                                Directory(p.join(dir.path, 'product_images'));
-                            if (!await picsDir.exists())
-                              await picsDir.create(recursive: true);
-                            final fileName =
-                                '${DateTime.now().millisecondsSinceEpoch}_${p.basename(x.path)}';
-                            final destPath = p.join(picsDir.path, fileName);
-                            await File(x.path).copy(destPath);
-                            if (!mounted) return;
-                            setState(() => _imagenPath = destPath);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        if (_imagenPath != null && _imagenPath!.isNotEmpty)
-                          TextButton.icon(
-                            onPressed: () => setState(() => _imagenPath = null),
-                            icon: const Icon(Icons.delete_outline),
-                            label: const Text('Quitar'),
-                          ),
-                      ],
-                    ),
+                    // Imagen del producto (preview y acciones)
+                    _buildImageSection(),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _nombre,

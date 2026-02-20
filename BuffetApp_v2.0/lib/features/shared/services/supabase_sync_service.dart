@@ -172,71 +172,25 @@ class SupaSyncService {
     return c;
   }
 
+  /// [DEPRECATED] Auto-sync legacy.
+  /// El flujo principal de sync es `syncEventoCompleto()` (manual, por evento).
+  /// Este método se mantiene como no-op para no romper llamadas existentes.
   Future<void> syncNow() async {
-    if (_busy) return;
-    _busy = true;
-    try {
-      // Reiniciar métricas de última corrida
-      _lastOkCaja = 0;
-      _lastFailCaja = 0;
-      _lastOkItem = 0;
-      _lastFailItem = 0;
-      _lastOkErrorRows = 0;
-      _lastErrors.clear();
-      final db = await AppDatabase.instance();
-      // Calcular total inicial de pendientes.
-      // Importante: por decisión de producto, los logs (tipo='error') NO se envían automáticamente.
-      final totalPend = (Sqflite.firstIntValue(await db.rawQuery(
-              "SELECT COUNT(1) FROM sync_outbox WHERE estado='pending' AND tipo IN ('caja')")) ??
-          0);
-      int procesados = 0;
-      _progressCtrl.add(SyncProgress(
-          processed: procesados, total: totalPend, stage: 'inicio'));
-      // Ejecutar en lotes hasta agotar pendientes
-      while (true) {
-        int batch = 0;
-        batch += await _pushTipo(
-            db,
-            'caja',
-            (rows) => _sb
-                .from('caja_cierre_resumen')
-                .upsert(rows, onConflict: 'codigo_caja'));
-        if (batch == -1) {
-          _lastErrors.add('sync abort: sin conectividad (caja_cierre_resumen)');
-          break;
-        }
-        if (batch > 0) {
-          procesados += batch;
-          _progressCtrl.add(SyncProgress(
-              processed: procesados, total: totalPend, stage: 'cajas'));
-        }
-        if (batch == 0) {
-          // Revisar si quedan pendientes; si no, terminamos
-          final remaining = Sqflite.firstIntValue(await db.rawQuery(
-                  "SELECT COUNT(1) FROM sync_outbox WHERE estado='pending' AND tipo IN ('caja')")) ??
-              0;
-          if (remaining == 0) break;
-        }
-      }
-      _lastSyncAt = DateTime.now();
-    } finally {
-      _busy = false;
-    }
+    // No-op: la tabla legacy caja_cierre_resumen ya no existe en Supabase.
+    // Usar syncEventoCompleto() para sincronizar eventos/cajas.
   }
 
   /// Busca cajas de OTRO dispositivo para el mismo evento (fecha + disciplina).
-  /// Usa `fecha` (date) y opcionalmente `descripcion_evento`.
+  /// Usa tabla `caja_diaria` en Supabase.
   Future<List<Map<String, dynamic>>> findOtherCajasSameEvent({
     required String fecha,
     required String disciplina,
     String? descripcionEvento,
     required String excludeCodigoCaja,
   }) async {
-    const cols =
-        'codigo_caja,estado,punto_venta_codigo,alias_dispositivo,device_info,fecha,disciplina,descripcion_evento,hora_apertura,fecha_apertura,hora_cierre,fecha_cierre,total_ventas,ventas_efectivo,ventas_transferencia,ingresos,retiros,tickets_emitidos,tickets_anulados,entradas_vendidas,ticket_promedio,payload,created_at';
     var q = _sb
-        .from('caja_cierre_resumen')
-        .select(cols)
+        .from('caja_diaria')
+        .select('*')
         .eq('disciplina', disciplina)
         .eq('fecha', fecha)
         .neq('codigo_caja', excludeCodigoCaja);
@@ -251,16 +205,15 @@ class SupaSyncService {
         .toList(growable: false);
   }
 
+  /// Busca una caja en Supabase por su código. Usa tabla `caja_diaria`.
   Future<Map<String, dynamic>?> fetchCajaCierreResumenByCodigo(
       String codigoCaja) async {
     final codigo = codigoCaja.trim();
     if (codigo.isEmpty) return null;
 
-    const cols =
-        'codigo_caja,estado,punto_venta_codigo,alias_dispositivo,device_info,fecha,disciplina,descripcion_evento,hora_apertura,fecha_apertura,cajero_apertura,usuario_apertura,observaciones_apertura,hora_cierre,fecha_cierre,cajero_cierre,usuario_cierre,obs_cierre,fondo_inicial,conteo_efectivo_final,diferencia,total_ventas,ventas_efectivo,ventas_transferencia,ingresos,retiros,tickets_emitidos,tickets_anulados,entradas_vendidas,ticket_promedio,payload,created_at';
     final res = await _sb
-        .from('caja_cierre_resumen')
-        .select(cols)
+        .from('caja_diaria')
+        .select('*')
         .eq('codigo_caja', codigo)
         .maybeSingle();
     if (res == null) return null;
@@ -411,7 +364,7 @@ class SupaSyncService {
 
     final remoteProducts = remoteProductIds.isEmpty
         ? const <Map<String, dynamic>>[]
-        : (await _sb.from('products').select('*').inFilter(
+        : (await _sb.from('productos').select('*').inFilter(
                 'id', remoteProductIds.toList(growable: false)) as List)
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList(growable: false);
@@ -572,17 +525,12 @@ class SupaSyncService {
     });
   }
 
+  /// [DEPRECATED] La tabla `caja_items` ya no existe en Supabase.
+  /// Para obtener items, usar las tablas `ventas`, `venta_items`, `tickets`.
   Future<List<Map<String, dynamic>>> fetchCajaItemsByCodigo(
       String codigoCaja) async {
-    final res = await _sb
-        .from('caja_items')
-        .select(
-            'codigo_caja,ticket_id,producto_id,categoria_id,total_ticket,fecha_hora,status,codigo_producto,producto_nombre,categoria,metodo_pago_id,metodo_pago')
-        .eq('codigo_caja', codigoCaja)
-        .order('ticket_id', ascending: true);
-    return (res as List)
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList(growable: false);
+    // Tabla legacy caja_items ya no existe. Retornamos vacío.
+    return const [];
   }
 
   /// Guarda localmente (SQLite) un cierre descargado desde Supabase para consulta offline.
@@ -1636,6 +1584,26 @@ class SupaSyncService {
               ? <String, int>{}
               : await _ensureRemoteVentaIdByUuid(ventaUuids);
 
+          // Asegurar que los productos referenciados existan en Supabase
+          // (previene FK violation al insertar venta_items y tickets)
+          final allProductIds = <int>{};
+          final prodIdRows = await db.rawQuery('''
+            SELECT DISTINCT vi.producto_id
+            FROM venta_items vi
+            JOIN ventas v ON v.id = vi.venta_id
+            WHERE v.caja_id = ? AND vi.producto_id IS NOT NULL
+            UNION
+            SELECT DISTINCT t.producto_id
+            FROM tickets t
+            JOIN ventas v ON v.id = t.venta_id
+            WHERE v.caja_id = ? AND t.producto_id IS NOT NULL
+          ''', [cajaId, cajaId]);
+          for (final r in prodIdRows) {
+            final pid = (r['producto_id'] as num?)?.toInt();
+            if (pid != null) allProductIds.add(pid);
+          }
+          await _ensureProductosRemote(db, allProductIds);
+
           // venta_items
           final vItems = await db.rawQuery('''
           SELECT
@@ -1865,6 +1833,63 @@ class SupaSyncService {
         return;
       }
       rethrow;
+    }
+  }
+
+  /// Asegura que los productos referenciados por ventas/tickets de una caja
+  /// existan en Supabase (tabla `productos`). Si faltan, los sube desde SQLite local.
+  /// Esto previene errores de FK al insertar venta_items y tickets.
+  Future<void> _ensureProductosRemote(Database db, Set<int> productoIds) async {
+    if (productoIds.isEmpty) return;
+
+    final ids = productoIds.toList(growable: false);
+    // Verificar cuáles ya existen en Supabase
+    final existing = await _sb
+        .from('productos')
+        .select('id')
+        .inFilter('id', ids);
+    final existingIds = (existing as List)
+        .map((e) => ((e as Map)['id'] as num?)?.toInt())
+        .whereType<int>()
+        .toSet();
+
+    final missing = ids.where((id) => !existingIds.contains(id)).toList();
+    if (missing.isEmpty) return;
+
+    // Leer productos faltantes desde SQLite local
+    final localProducts = await db.query(
+      'products',
+      where: 'id IN (${List.filled(missing.length, '?').join(',')})',
+      whereArgs: missing,
+    );
+
+    final payload = <Map<String, dynamic>>[];
+    for (final p in localProducts) {
+      payload.add({
+        'id': (p['id'] as num).toInt(),
+        'codigo_producto': (p['codigo_producto'] ?? '').toString(),
+        'nombre': (p['nombre'] ?? '').toString(),
+        'precio_compra': (p['precio_compra'] as num?)?.toInt(),
+        'precio_venta': (p['precio_venta'] as num?)?.toInt() ?? 0,
+        'stock_actual': (p['stock_actual'] as num?)?.toInt() ?? 0,
+        'stock_minimo': (p['stock_minimo'] as num?)?.toInt() ?? 3,
+        'orden_visual': (p['orden_visual'] as num?)?.toInt(),
+        'categoria_id': (p['categoria_id'] as num?)?.toInt(),
+        'visible': (p['visible'] as num?)?.toInt() ?? 1,
+        'color': p['color'],
+        'imagen': p['imagen'],
+      });
+    }
+
+    if (payload.isNotEmpty) {
+      await _insertChunkedWithFallback(
+        table: 'productos',
+        rows: payload,
+        optionalCols: const [
+          'color', 'imagen', 'orden_visual', 'precio_compra',
+          'stock_actual', 'stock_minimo',
+        ],
+      );
     }
   }
 
