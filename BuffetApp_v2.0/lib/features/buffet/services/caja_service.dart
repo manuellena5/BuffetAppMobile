@@ -2,6 +2,9 @@ import '../../../data/dao/db.dart';
 import '../../shared/services/supabase_sync_service.dart';
 
 class CajaService {
+  /// Usa AppDatabase.medioPagoColumnReady (seteado por _onOpen).
+  static bool get _hasMedioPagoColumn => AppDatabase.medioPagoColumnReady;
+
   static String? puntoVentaFromCodigoCaja(String codigoCaja) {
     final s = codigoCaja.trim();
     if (s.isEmpty) return null;
@@ -247,19 +250,28 @@ class CajaService {
     ''', [cajaId]);
       final ingresos = (movTotals.first['ingresos'] as num?)?.toDouble() ?? 0.0;
       final retiros = (movTotals.first['retiros'] as num?)?.toDouble() ?? 0.0;
-      // Obtener desglose por medio de pago
-      final movMpTotals = await db.rawQuery('''
-      SELECT 
-        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
-        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
-        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
-        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
-      FROM caja_movimiento cm
-      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-      WHERE cm.caja_id = ?
-    ''', [cajaId]);
-      final ingEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
-      final retEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+      // Obtener desglose por medio de pago (defensivo: verificar columna)
+      double ingEfec = 0.0;
+      double retEfec = 0.0;
+      final hasMpCol = _hasMedioPagoColumn;
+      if (hasMpCol) {
+        final movMpTotals = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
+        FROM caja_movimiento cm
+        LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+        WHERE cm.caja_id = ?
+      ''', [cajaId]);
+        ingEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
+        retEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+      } else {
+        // Sin columna medio_pago_id: asumir todo como efectivo
+        ingEfec = ingresos;
+        retEfec = retiros;
+      }
       // Fórmula con desglose por medio de pago
       final totalPorFormula =
           (efectivoEnCaja - fondo - ingEfec + retEfec) + transferencias;

@@ -7,6 +7,7 @@ import 'bulk_edit_products_page.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/bill_counter_dialog.dart';
 import '../../shared/pages/punto_venta_setup_page.dart';
 import '../../tesoreria/pages/unidad_gestion_selector_page.dart';
 
@@ -464,7 +465,23 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _fondo,
-                  decoration: const InputDecoration(labelText: 'Fondo inicial'),
+                  decoration: InputDecoration(
+                    labelText: 'Fondo inicial',
+                    suffixIcon: TextButton.icon(
+                      icon: const Icon(Icons.calculate_outlined, size: 20),
+                      label: const Text('Contar billetes', style: TextStyle(fontSize: 12)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        final result = await showBillCounterDialog(context);
+                        if (result != null) {
+                          _fondo.text = result.toStringAsFixed(0);
+                        }
+                      },
+                    ),
+                  ),
                   keyboardType: TextInputType.number,
                   validator: (v) {
                     final val = parseLooseDouble(v ?? '');

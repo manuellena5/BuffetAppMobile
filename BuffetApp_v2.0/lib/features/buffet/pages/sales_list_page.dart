@@ -26,6 +26,7 @@ class _SalesListPageState extends State<SalesListPage> {
   List<String> _productos = const [];
   List<String> _metodosPago = const [];
   List<String> _categorias = const [];
+  bool _isVentasView = false;
 
   @override
   void initState() {
@@ -44,7 +45,7 @@ class _SalesListPageState extends State<SalesListPage> {
     final args = cajaId == null ? <Object?>[] : <Object?>[cajaId];
     final v = await db.rawQuery('''
       SELECT t.id, t.fecha_hora, t.total_ticket, t.identificador_ticket, t.status,
-             v.metodo_pago_id, mp.descripcion AS metodo_pago_desc,
+             v.id AS venta_id, v.metodo_pago_id, mp.descripcion AS metodo_pago_desc,
              COALESCE(p.nombre, c.descripcion) AS item_nombre,
              COALESCE(cp.descripcion, c.descripcion, 'Sin cat.') AS categoria_desc
       FROM tickets t
@@ -83,9 +84,10 @@ class _SalesListPageState extends State<SalesListPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final filtered = _filteredRows();
+    final ventasGrouped = _isVentasView ? _buildVentasGrouped(filtered) : <Map<String, dynamic>>[];
     final appBarTitle = widget.codigoCaja != null
-        ? 'Tickets · ${widget.codigoCaja}'
-        : 'Tickets';
+        ? 'Historial · ${widget.codigoCaja}'
+        : 'Historial';
 
     return Scaffold(
       appBar: AppBar(title: Text(appBarTitle)),
@@ -94,6 +96,18 @@ class _SalesListPageState extends State<SalesListPage> {
           children: [
             // ─── RESUMEN SUPERIOR ───
             _buildResumen(context),
+            // ─── TOGGLE VISTA ───
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Tickets'), icon: Icon(Icons.receipt_long, size: 18)),
+                  ButtonSegment(value: true, label: Text('Ventas'), icon: Icon(Icons.shopping_bag, size: 18)),
+                ],
+                selected: {_isVentasView},
+                onSelectionChanged: (s) => setState(() => _isVentasView = s.first),
+              ),
+            ),
             // ─── FILTROS FILA 1 ───
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
@@ -174,57 +188,21 @@ class _SalesListPageState extends State<SalesListPage> {
               child: Row(
                 children: [
                   Text(
-                    '${filtered.length} ticket${filtered.length == 1 ? '' : 's'}',
+                    _isVentasView
+                        ? '${ventasGrouped.length} venta${ventasGrouped.length == 1 ? '' : 's'}'
+                        : '${filtered.length} ticket${filtered.length == 1 ? '' : 's'}',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
             ),
-            // ─── LISTA DE TICKETS ───
+            // ─── LISTA ───
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _load,
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, i) {
-                    try {
-                      final r = filtered[i];
-                      return _TicketCard(
-                        monto: ((r['total_ticket'] as num?) ?? 0).toDouble(),
-                        producto: (r['item_nombre'] as String?) ?? '—',
-                        medioPago: (r['metodo_pago_desc'] as String?) ?? 'Sin MP',
-                        fechaHora: (r['fecha_hora'] as String?) ?? '',
-                        codigo: (r['identificador_ticket'] as String?) ?? '#${r['id']}',
-                        estado: _normEstado((r['status'] as String?) ?? ''),
-                        ticketId: r['id'] as int,
-                        onTap: () async {
-                          final nav = Navigator.of(context);
-                          final changed = await nav.push(MaterialPageRoute(
-                              builder: (_) =>
-                                  SaleDetailPage(ticketId: r['id'] as int)));
-                          if (changed == true) {
-                            if (!mounted) return;
-                            _load();
-                          }
-                        },
-                      );
-                    } catch (e, stack) {
-                      AppDatabase.logLocalError(
-                        scope: 'sales_list.render_item',
-                        error: e.toString(),
-                        stackTrace: stack,
-                        payload: {'index': i},
-                      );
-                      return Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.warning, color: Colors.orange),
-                          title: const Text('Error al mostrar ticket'),
-                        ),
-                      );
-                    }
-                  },
-                ),
+                child: _isVentasView
+                    ? _buildVentasList(ventasGrouped)
+                    : _buildTicketsList(filtered),
               ),
             ),
           ],
@@ -262,7 +240,7 @@ class _SalesListPageState extends State<SalesListPage> {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -314,6 +292,137 @@ class _SalesListPageState extends State<SalesListPage> {
     if (t == 'no impreso') return 'no impreso';
     if (t == 'todos') return 'todos';
     return t;
+  }
+
+  // ─── TICKETS LIST ───
+  Widget _buildTicketsList(List<Map<String, dynamic>> filtered) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+      itemCount: filtered.length,
+      itemBuilder: (ctx, i) {
+        try {
+          final r = filtered[i];
+          return _TicketCard(
+            monto: ((r['total_ticket'] as num?) ?? 0).toDouble(),
+            producto: (r['item_nombre'] as String?) ?? '—',
+            medioPago: (r['metodo_pago_desc'] as String?) ?? 'Sin MP',
+            fechaHora: (r['fecha_hora'] as String?) ?? '',
+            codigo: (r['identificador_ticket'] as String?) ?? '#${r['id']}',
+            estado: _normEstado((r['status'] as String?) ?? ''),
+            ticketId: r['id'] as int,
+            onTap: () async {
+              final nav = Navigator.of(context);
+              final changed = await nav.push(MaterialPageRoute(
+                  builder: (_) =>
+                      SaleDetailPage(ticketId: r['id'] as int)));
+              if (changed == true) {
+                if (!mounted) return;
+                _load();
+              }
+            },
+          );
+        } catch (e, stack) {
+          AppDatabase.logLocalError(
+            scope: 'sales_list.render_item',
+            error: e.toString(),
+            stackTrace: stack,
+            payload: {'index': i},
+          );
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.warning, color: Colors.orange),
+              title: const Text('Error al mostrar ticket'),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // ─── VENTAS GROUPED LIST ───
+  List<Map<String, dynamic>> _buildVentasGrouped(List<Map<String, dynamic>> filtered) {
+    final Map<int, List<Map<String, dynamic>>> groups = {};
+    for (final r in filtered) {
+      final ventaId = r['venta_id'] as int;
+      groups.putIfAbsent(ventaId, () => []).add(r);
+    }
+    final ventas = groups.entries.map((e) {
+      final tickets = e.value;
+      double total = 0;
+      final itemCounts = <String, int>{};
+      String medioPago = '';
+      String fechaHora = '';
+      bool allAnulados = true;
+
+      for (final t in tickets) {
+        total += ((t['total_ticket'] as num?) ?? 0).toDouble();
+        final item = (t['item_nombre'] as String?) ?? '';
+        if (item.isNotEmpty) {
+          itemCounts[item] = (itemCounts[item] ?? 0) + 1;
+        }
+        medioPago = (t['metodo_pago_desc'] as String?) ?? '';
+        final fh = (t['fecha_hora'] as String?) ?? '';
+        if (fechaHora.isEmpty || (fh.isNotEmpty && fh.compareTo(fechaHora) < 0)) {
+          fechaHora = fh;
+        }
+        if (_normEstado((t['status'] as String?) ?? '') != 'anulado') {
+          allAnulados = false;
+        }
+      }
+
+      // Build items description: "2x Hamburguesa, 1x Coca Cola"
+      final itemsDesc = itemCounts.entries
+          .map((e) => e.value > 1 ? '${e.value}x ${e.key}' : e.key)
+          .join(', ');
+
+      return {
+        'venta_id': e.key,
+        'total': total,
+        'items_desc': itemsDesc,
+        'metodo_pago': medioPago,
+        'fecha_hora': fechaHora,
+        'cant_tickets': tickets.length,
+        'all_anulados': allAnulados,
+      };
+    }).toList();
+
+    // Sort by fecha_hora DESC
+    ventas.sort((a, b) =>
+        (b['fecha_hora'] as String).compareTo(a['fecha_hora'] as String));
+    return ventas;
+  }
+
+  Widget _buildVentasList(List<Map<String, dynamic>> ventas) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+      itemCount: ventas.length,
+      itemBuilder: (ctx, i) {
+        try {
+          final v = ventas[i];
+          return _VentaCard(
+            total: (v['total'] as num).toDouble(),
+            itemsDesc: v['items_desc'] as String,
+            medioPago: v['metodo_pago'] as String,
+            fechaHora: v['fecha_hora'] as String,
+            cantTickets: v['cant_tickets'] as int,
+            isAnulado: v['all_anulados'] as bool,
+          );
+        } catch (e, stack) {
+          AppDatabase.logLocalError(
+            scope: 'sales_list.render_venta',
+            error: e.toString(),
+            stackTrace: stack,
+            payload: {'index': i},
+          );
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.warning, color: Colors.orange),
+              title: const Text('Error al mostrar venta'),
+            ),
+          );
+        }
+      },
+    );
   }
 }
 
@@ -525,5 +634,130 @@ class _MedioPagoBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ─── WIDGET: TARJETA DE VENTA (AGRUPADA) ───
+
+class _VentaCard extends StatelessWidget {
+  final double total;
+  final String itemsDesc;
+  final String medioPago;
+  final String fechaHora;
+  final int cantTickets;
+  final bool isAnulado;
+
+  const _VentaCard({
+    required this.total,
+    required this.itemsDesc,
+    required this.medioPago,
+    required this.fechaHora,
+    required this.cantTickets,
+    required this.isAnulado,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hora = _extractHora(fechaHora);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: isAnulado ? 0 : 1,
+      shadowColor: Colors.black26,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isAnulado
+            ? BorderSide(color: Colors.red.shade200, width: 1)
+            : BorderSide.none,
+      ),
+      color: isAnulado ? Colors.red.shade50 : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── LÍNEA 1: Monto + Badge medio de pago ──
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    formatCurrencyNoDecimals(total),
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      color: isAnulado ? Colors.red.shade400 : null,
+                      decoration: isAnulado ? TextDecoration.lineThrough : null,
+                      decorationColor: Colors.red.shade400,
+                    ),
+                  ),
+                ),
+                _MedioPagoBadge(medioPago: medioPago),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // ── LÍNEA 2: Items ──
+            Text(
+              itemsDesc.isNotEmpty ? itemsDesc : '—',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: isAnulado ? Colors.grey.shade500 : Colors.grey.shade800,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            // ── LÍNEA 3: Hora · Cant. tickets ──
+            Row(
+              children: [
+                Text(
+                  hora,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.receipt_long, size: 13, color: Colors.grey.shade400),
+                const SizedBox(width: 3),
+                Text(
+                  '$cantTickets ticket${cantTickets == 1 ? '' : 's'}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+            // ── LÍNEA 4: Estado anulado ──
+            if (isAnulado) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.cancel, size: 15, color: Colors.red.shade600),
+                  const SizedBox(width: 4),
+                  Text(
+                    'ANULADO',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.red.shade700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _extractHora(String fechaHora) {
+    try {
+      final dt = DateTime.tryParse(fechaHora);
+      if (dt != null) {
+        return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      }
+    } catch (_) {}
+    final match = RegExp(r'(\d{2}:\d{2})').firstMatch(fechaHora);
+    if (match != null) return match.group(1)!;
+    return fechaHora;
   }
 }

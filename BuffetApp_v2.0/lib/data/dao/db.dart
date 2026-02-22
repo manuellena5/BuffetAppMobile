@@ -18,6 +18,11 @@ class AppDatabase {
   static bool _desktopFactoryInitialized = false;
   static DatabaseFactory? _explicitFactory;
 
+  /// Flag público: se pone en `true` cuando _onOpen confirma que
+  /// la columna medio_pago_id existe en caja_movimiento.
+  /// Los servicios pueden consultarlo para saltear PRAGMA checks.
+  static bool medioPagoColumnReady = false;
+
   // ========================================================================
   // CONFIGURACIÓN Y CICLO DE VIDA
   // ========================================================================
@@ -30,6 +35,7 @@ class AppDatabase {
     _db = null;
     _desktopFactoryInitialized = false;
     _explicitFactory = null;
+    medioPagoColumnReady = false;
   }
 
   static void _ensureDesktopFactory() {
@@ -85,6 +91,7 @@ class AppDatabase {
         onConfigure: _onConfigure,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
+        onOpen: _onOpen,
       ),
     );
 
@@ -100,6 +107,28 @@ class AppDatabase {
     await db.rawQuery('PRAGMA foreign_keys=ON');
     await db.rawQuery('PRAGMA journal_mode=WAL');
     await db.rawQuery('PRAGMA synchronous=NORMAL');
+  }
+
+  /// Se ejecuta SIEMPRE al abrir la DB, sin importar la versión.
+  /// Repara columnas que pudieron fallar en migraciones anteriores.
+  static Future<void> _onOpen(Database db) async {
+    try {
+      await _ensureMedioPagoIdColumn(db);
+      // Verificar que realmente existe después del repair
+      final cols = await db.rawQuery("PRAGMA table_info(caja_movimiento)");
+      medioPagoColumnReady = cols.any((c) => c['name'] == 'medio_pago_id');
+      if (!medioPagoColumnReady) {
+        print('⚠ CRÍTICO: medio_pago_id NO existe después de _ensureMedioPagoIdColumn');
+      }
+    } catch (e, stack) {
+      medioPagoColumnReady = false;
+      print('⚠ Error en _onOpen repair: $e');
+      await logLocalError(
+        scope: 'db._onOpen',
+        error: e.toString(),
+        stackTrace: stack,
+      );
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -238,26 +267,66 @@ class AppDatabase {
     
     // Migración a versión 20: Agregar medio_pago_id a caja_movimiento
     if (oldVersion < 20) {
-      try {
-        await db.execute('''
-          ALTER TABLE caja_movimiento 
-          ADD COLUMN medio_pago_id INTEGER NOT NULL DEFAULT 1 REFERENCES metodos_pago(id)
-        ''');
-        print('✓ Migración v19→v20: Columna medio_pago_id agregada a caja_movimiento (default=1 Efectivo)');
-        // Índice para consultas agrupadas por medio de pago
-        await db.execute('''
-          CREATE INDEX IF NOT EXISTS idx_mov_caja_mp 
-          ON caja_movimiento(caja_id, medio_pago_id)
-        ''');
-        print('✓ Migración v19→v20: Índice idx_mov_caja_mp creado');
-      } catch (e) {
-        if (!e.toString().contains('duplicate column')) {
-          print('⚠ Error en migración v19→v20: $e');
-        }
-      }
+      await _ensureMedioPagoIdColumn(db);
     }
     
+    // Reasegurar columna medio_pago_id (por si la migración original falló en v20)
+    await _ensureMedioPagoIdColumn(db);
+    
     // Futuras migraciones irán aquí...
+  }
+
+  /// Asegura que la columna medio_pago_id exista en caja_movimiento.
+  /// Idempotente: si ya existe, no hace nada.
+  /// Se desactivan FK temporalmente porque ALTER TABLE + REFERENCES
+  /// falla en SQLite cuando PRAGMA foreign_keys=ON.
+  static Future<void> _ensureMedioPagoIdColumn(Database db) async {
+    try {
+      final cols = await db.rawQuery("PRAGMA table_info(caja_movimiento)");
+      final hasMpCol = cols.any((c) => c['name'] == 'medio_pago_id');
+      if (hasMpCol) {
+        print('✓ medio_pago_id ya existe en caja_movimiento');
+        return;
+      }
+
+      // Desactivar FK temporalmente para que ALTER TABLE no falle
+      await db.execute('PRAGMA foreign_keys=OFF');
+
+      await db.execute(
+        'ALTER TABLE caja_movimiento ADD COLUMN medio_pago_id INTEGER DEFAULT 1',
+      );
+      print('✓ Columna medio_pago_id agregada a caja_movimiento');
+
+      // Backfill: asegurar que no queden NULLs
+      await db.execute(
+        'UPDATE caja_movimiento SET medio_pago_id = 1 WHERE medio_pago_id IS NULL',
+      );
+      print('✓ Backfill medio_pago_id = 1 (Efectivo) completado');
+
+      // Re-activar FK
+      await db.execute('PRAGMA foreign_keys=ON');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_mov_caja_mp 
+        ON caja_movimiento(caja_id, medio_pago_id)
+      ''');
+      print('✓ Índice idx_mov_caja_mp creado');
+    } catch (e, stack) {
+      // Intentar re-activar FK incluso si falló algo
+      try {
+        await db.execute('PRAGMA foreign_keys=ON');
+      } catch (_) {}
+
+      if (!e.toString().contains('duplicate column')) {
+        print('⚠ Error asegurando medio_pago_id: $e');
+        await logLocalError(
+          scope: 'db._ensureMedioPagoIdColumn',
+          error: e.toString(),
+          stackTrace: stack,
+          payload: {'table': 'caja_movimiento', 'column': 'medio_pago_id'},
+        );
+      }
+    }
   }
 
   /// FASE 32: Crea índices compuestos para optimizar queries de paginación

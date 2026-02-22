@@ -20,6 +20,9 @@ import 'usb_printer_service.dart';
 class PrintService {
   final _usb = UsbPrinterService();
 
+  /// Usa AppDatabase.medioPagoColumnReady (seteado por _onOpen).
+  bool get _hasMedioPagoColumn => AppDatabase.medioPagoColumnReady;
+
   Future<String?> _buildPvLabelFromCajaCodigo(String codigoCaja) async {
     try {
       final pvCodigo = CajaService.puntoVentaFromCodigoCaja(codigoCaja);
@@ -139,28 +142,49 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-    final movimientos = await db.rawQuery('''
-      SELECT cm.*, mp.descripcion as medio_pago_desc
-      FROM caja_movimiento cm
-      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-      WHERE cm.caja_id=?
-      ORDER BY cm.created_ts ASC
-    ''', [cajaId]);
+    final hasMpCol = _hasMedioPagoColumn;
+    final movimientos = hasMpCol
+        ? await db.rawQuery('''
+            SELECT cm.*, mp.descripcion as medio_pago_desc
+            FROM caja_movimiento cm
+            LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+            WHERE cm.caja_id=?
+            ORDER BY cm.created_ts ASC
+          ''', [cajaId])
+        : await db.rawQuery('''
+            SELECT cm.*, 'Efectivo' as medio_pago_desc
+            FROM caja_movimiento cm
+            WHERE cm.caja_id=?
+            ORDER BY cm.created_ts ASC
+          ''', [cajaId]);
     // Desglose de movimientos por medio de pago
-    final movMpTotals = await db.rawQuery('''
-      SELECT 
-        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
-        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
-        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
-        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
-      FROM caja_movimiento cm
-      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-      WHERE cm.caja_id=?
-    ''', [cajaId]);
-    final movIngEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
-    final movRetEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
-    final movIngTransf = (movMpTotals.first['ing_transf'] as num?)?.toDouble() ?? 0.0;
-    final movRetTransf = (movMpTotals.first['ret_transf'] as num?)?.toDouble() ?? 0.0;
+    double movIngEfec = 0.0, movRetEfec = 0.0, movIngTransf = 0.0, movRetTransf = 0.0;
+    if (hasMpCol) {
+      final movMpTotals = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
+        FROM caja_movimiento cm
+        LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+        WHERE cm.caja_id=?
+      ''', [cajaId]);
+      movIngEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
+      movRetEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+      movIngTransf = (movMpTotals.first['ing_transf'] as num?)?.toDouble() ?? 0.0;
+      movRetTransf = (movMpTotals.first['ret_transf'] as num?)?.toDouble() ?? 0.0;
+    } else {
+      // Sin columna medio_pago_id: asumir todo como efectivo
+      final totSimple = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ing,
+          COALESCE(SUM(CASE WHEN tipo='RETIRO'  THEN monto END),0) as ret
+        FROM caja_movimiento WHERE caja_id=?
+      ''', [cajaId]);
+      movIngEfec = (totSimple.first['ing'] as num?)?.toDouble() ?? 0.0;
+      movRetEfec = (totSimple.first['ret'] as num?)?.toDouble() ?? 0.0;
+    }
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final efectivoDeclarado =
@@ -1455,28 +1479,48 @@ class PrintService {
     final caja = await db.query('caja_diaria',
         where: 'id=?', whereArgs: [cajaId], limit: 1);
     final resumen = await CajaService().resumenCaja(cajaId);
-    final movimientos = await db.rawQuery('''
-      SELECT cm.*, mp.descripcion as medio_pago_desc
-      FROM caja_movimiento cm
-      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-      WHERE cm.caja_id=?
-      ORDER BY cm.created_ts ASC
-    ''', [cajaId]);
+    final hasMpCol = _hasMedioPagoColumn;
+    final movimientos = hasMpCol
+        ? await db.rawQuery('''
+            SELECT cm.*, mp.descripcion as medio_pago_desc
+            FROM caja_movimiento cm
+            LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+            WHERE cm.caja_id=?
+            ORDER BY cm.created_ts ASC
+          ''', [cajaId])
+        : await db.rawQuery('''
+            SELECT cm.*, 'Efectivo' as medio_pago_desc
+            FROM caja_movimiento cm
+            WHERE cm.caja_id=?
+            ORDER BY cm.created_ts ASC
+          ''', [cajaId]);
     // Desglose de movimientos por medio de pago (ESC/POS)
-    final movMpTotalsEsc = await db.rawQuery('''
-      SELECT 
-        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
-        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
-        COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
-        COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
-      FROM caja_movimiento cm
-      LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-      WHERE cm.caja_id=?
-    ''', [cajaId]);
-    final movIngEfecEsc = (movMpTotalsEsc.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
-    final movRetEfecEsc = (movMpTotalsEsc.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
-    final movIngTransfEsc = (movMpTotalsEsc.first['ing_transf'] as num?)?.toDouble() ?? 0.0;
-    final movRetTransfEsc = (movMpTotalsEsc.first['ret_transf'] as num?)?.toDouble() ?? 0.0;
+    double movIngEfecEsc = 0.0, movRetEfecEsc = 0.0, movIngTransfEsc = 0.0, movRetTransfEsc = 0.0;
+    if (hasMpCol) {
+      final movMpTotalsEsc = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
+          COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ing_transf,
+          COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%transfer%' THEN cm.monto END),0) as ret_transf
+        FROM caja_movimiento cm
+        LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+        WHERE cm.caja_id=?
+      ''', [cajaId]);
+      movIngEfecEsc = (movMpTotalsEsc.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
+      movRetEfecEsc = (movMpTotalsEsc.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
+      movIngTransfEsc = (movMpTotalsEsc.first['ing_transf'] as num?)?.toDouble() ?? 0.0;
+      movRetTransfEsc = (movMpTotalsEsc.first['ret_transf'] as num?)?.toDouble() ?? 0.0;
+    } else {
+      final totSimple = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ing,
+          COALESCE(SUM(CASE WHEN tipo='RETIRO'  THEN monto END),0) as ret
+        FROM caja_movimiento WHERE caja_id=?
+      ''', [cajaId]);
+      movIngEfecEsc = (totSimple.first['ing'] as num?)?.toDouble() ?? 0.0;
+      movRetEfecEsc = (totSimple.first['ret'] as num?)?.toDouble() ?? 0.0;
+    }
     final c = caja.isNotEmpty ? caja.first : <String, Object?>{};
     final fondo = ((c['fondo_inicial'] as num?) ?? 0).toDouble();
     final efectivoDeclarado =

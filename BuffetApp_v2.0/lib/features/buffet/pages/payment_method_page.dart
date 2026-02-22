@@ -128,12 +128,14 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                   itemBuilder: (ctx, i) {
                     final it = cart.items[i];
                     return ListTile(
-                      dense: true,
-                      title: Text(it.nombre),
+                      title: Text(it.nombre,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                       subtitle: Text(
-                          '${it.cantidad} x ${formatCurrency(it.precioUnitario)}'),
-                      trailing:
-                          Text(formatCurrency(it.precioUnitario * it.cantidad)),
+                          '${it.cantidad} x ${formatCurrency(it.precioUnitario)}',
+                          style: const TextStyle(fontSize: 16)),
+                      trailing: Text(
+                          formatCurrency(it.precioUnitario * it.cantidad),
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                     );
                   },
                 ),

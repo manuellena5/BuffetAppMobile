@@ -290,8 +290,9 @@ class _CashPaymentDialogState extends State<_CashPaymentDialog> {
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
-          onPressed: _canConfirm ? () => Navigator.pop(context, true) : null,
-          child: const Text('Confirmar Compra'),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Confirmar Compra',
+              style: TextStyle(fontSize: 15)),
         ),
       ],
     );
@@ -522,7 +523,8 @@ class _TransferPaymentDialog extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Confirmar Compra'),
+          child: const Text('Confirmar Compra',
+              style: TextStyle(fontSize: 15)),
         ),
       ],
     );
@@ -602,7 +604,8 @@ class _SimpleCashPaymentDialog extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Confirmar Compra'),
+          child: const Text('Confirmar Compra',
+              style: TextStyle(fontSize: 15)),
         ),
       ],
     );

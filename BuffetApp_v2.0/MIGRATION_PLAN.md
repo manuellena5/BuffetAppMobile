@@ -3394,3 +3394,37 @@ Crear un reporte que muestre montos por cada jugador/staff CT por mes, permitien
 - ⏳ **35.1**: Reporte mensual de plantel (0/19 tareas completadas)
 
 **Estado:** ⏳ EN PROGRESO (0/19 tareas)
+
+---
+
+## ⚠️ Deuda técnica: Queries defensivas `medio_pago_id` (v1.3.2)
+
+### Contexto
+La migración v19→v20 que agrega `medio_pago_id` a `caja_movimiento` falló silenciosamente en algunos dispositivos. Para evitar crashes se implementaron:
+
+1. **`_onOpen` en `db.dart`**: Ejecuta `_ensureMedioPagoIdColumn()` cada vez que se abre la DB para reparar la columna faltante.
+2. **`PRAGMA table_info` + caché** en `MovimientoService`, `PrintService` y `CajaService`: Verifican si la columna existe antes de ejecutar queries con JOIN a `medio_pago_id`.
+3. **Fallback a queries simples** (sin JOIN) asumiendo todo como "Efectivo" si la columna no existe.
+
+### Impacto en performance
+- **`_onOpen`**: Ejecuta un `PRAGMA table_info` extra en cada apertura de la DB (~1ms, despreciable).
+- **`_hasMedioPagoColumn`**: Un `PRAGMA` por sesión (cacheado en `static bool?`). Impacto mínimo.
+- **Queries duplicadas**: Donde antes había 1 query, ahora se bifurca en 2 ramas (con/sin columna). NO se ejecutan ambas, solo la rama correspondiente. Sin impacto real.
+
+### Plan de limpieza (futuro)
+Una vez que **todos los dispositivos** hayan ejecutado al menos una vez la app con `_onOpen` (es decir, la columna ya existe en todos):
+
+1. **Eliminar `_onOpen`** y la llamada a `_ensureMedioPagoIdColumn()` desde allí (dejar solo en `onUpgrade`).
+2. **Eliminar los helpers `_hasMedioPagoColumn`** de `MovimientoService`, `PrintService` y `CajaService`.
+3. **Eliminar las ramas fallback** (queries sin JOIN) — volver a queries directas con `cm.medio_pago_id`.
+4. **Resetear caché estática** (`_medioPagoColumnExists`, `_medioPagoColCache`).
+
+### Archivos afectados
+- `lib/data/dao/db.dart` — `_onOpen`, `_ensureMedioPagoIdColumn`
+- `lib/features/shared/services/movimiento_service.dart` — `_hasMedioPagoColumn`, bifurcaciones en `listarPorCaja`, `crear`, `actualizar`, `totalesPorCajaPorMp`
+- `lib/features/shared/services/print_service.dart` — `_hasMedioPagoColumn`, bifurcaciones en `buildCajaResumenPdf`, `buildCajaResumenEscPos`
+- `lib/features/buffet/services/caja_service.dart` — `_hasMedioPagoColumn`, bifurcación en `cerrarCaja`
+
+### Criterio para revertir
+- Cuando se confirme que **ningún dispositivo** tiene una DB sin `medio_pago_id` (se puede verificar remotamente vía logs de error: si nunca más aparece `no such column: cm.medio_pago_id`, es seguro limpiar).
+- Estimación: 2-4 semanas después de que todos los dispositivos actualicen a v1.3.2+.

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.2+16 — Productos: Tabs por categoría y mejora de imágenes
+
+### Nuevas funcionalidades
+- **Tabs por categoría en Productos:** La pantalla de productos ahora muestra pestañas (Todos, Comida, Bebida, Otros) para filtrar y encontrar productos más fácilmente.
+- **Gestión mejorada de imágenes de productos:**
+  - Redimensión y compresión automática (máx 400px, JPEG 80%) para ahorrar espacio.
+  - Nombrado determinístico (`prod_{id}.jpg`) preparado para futura sincronización con Supabase Storage.
+  - Botón "Cambiar" para reemplazar imagen existente sin necesidad de quitar primero.
+  - Confirmación al quitar imagen para evitar eliminaciones accidentales.
+  - Vista completa de la imagen al tocarla (con zoom).
+  - Limpieza automática de imágenes anteriores al cambiar o quitar.
+
+### Técnico
+- Nuevo servicio: `ProductImageService` (`lib/features/shared/services/product_image_service.dart`)
+- Versión: `1.3.1+15` → `1.3.2+16`
+- Archivos modificados: `products_page.dart`, `app_version.dart`, `pubspec.yaml`
+
+---
+
 ## 1.3.1+15 — Mejoras UX Android y Export Excel
 
 ### Nuevas funcionalidades

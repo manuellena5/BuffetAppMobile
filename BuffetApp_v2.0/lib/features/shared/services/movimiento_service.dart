@@ -6,13 +6,21 @@ class MovimientoService {
   Future<List<Map<String, dynamic>>> listarPorCaja(int cajaId) async {
     try {
       final db = await AppDatabase.instance();
-      final rows = await db.rawQuery('''
-        SELECT cm.*, mp.descripcion as medio_pago_desc
-        FROM caja_movimiento cm
-        LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-        WHERE cm.caja_id=?
-        ORDER BY cm.created_ts DESC
-      ''', [cajaId]);
+      final hasMpCol = AppDatabase.medioPagoColumnReady;
+      final rows = hasMpCol
+          ? await db.rawQuery('''
+              SELECT cm.*, mp.descripcion as medio_pago_desc
+              FROM caja_movimiento cm
+              LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
+              WHERE cm.caja_id=?
+              ORDER BY cm.created_ts DESC
+            ''', [cajaId])
+          : await db.rawQuery('''
+              SELECT cm.*, 'Efectivo' as medio_pago_desc
+              FROM caja_movimiento cm
+              WHERE cm.caja_id=?
+              ORDER BY cm.created_ts DESC
+            ''', [cajaId]);
       return rows.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'mov.listar', error: e, stackTrace: st, payload: {'cajaId': cajaId});
@@ -23,6 +31,7 @@ class MovimientoService {
   Future<int> crear({required int cajaId, required String tipo, required double monto, String? observacion, int medioPagoId = 1}) async {
     try {
       final db = await AppDatabase.instance();
+      // _onOpen ya garantiza que medio_pago_id existe → incluir siempre
       return await db.insert('caja_movimiento', {
         'caja_id': cajaId,
         'tipo': tipo.toUpperCase(),
@@ -39,6 +48,7 @@ class MovimientoService {
   Future<void> actualizar({required int id, required String tipo, required double monto, String? observacion, int medioPagoId = 1}) async {
     try {
       final db = await AppDatabase.instance();
+      // _onOpen ya garantiza que medio_pago_id existe → incluir siempre
       await db.update('caja_movimiento', {
         'tipo': tipo.toUpperCase(),
         'monto': monto,
@@ -87,6 +97,27 @@ class MovimientoService {
   Future<Map<String, double>> totalesPorCajaPorMp(int cajaId) async {
     try {
       final db = await AppDatabase.instance();
+      final hasMpCol = AppDatabase.medioPagoColumnReady;
+
+      if (!hasMpCol) {
+        // Sin columna medio_pago_id: asumir todo como efectivo
+        final rows = await db.rawQuery('''
+          SELECT 
+            COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ingresos_total,
+            COALESCE(SUM(CASE WHEN tipo='RETIRO'  THEN monto END),0) as retiros_total
+          FROM caja_movimiento WHERE caja_id=?
+        ''', [cajaId]);
+        final r = rows.first;
+        return {
+          'ingresosEfectivo': (r['ingresos_total'] as num).toDouble(),
+          'retirosEfectivo': (r['retiros_total'] as num).toDouble(),
+          'ingresosTransferencia': 0.0,
+          'retirosTransferencia': 0.0,
+          'ingresosTotal': (r['ingresos_total'] as num).toDouble(),
+          'retirosTotal': (r['retiros_total'] as num).toDouble(),
+        };
+      }
+
       final rows = await db.rawQuery('''
         SELECT 
           COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ingresos_efectivo,
