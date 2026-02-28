@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../shared/state/app_mode.dart';
 import '../shared/state/app_settings.dart';
+import '../shared/pages/update_page.dart';
 import '../buffet/pages/buffet_home_page.dart';
 import '../tesoreria/pages/tesoreria_home_page.dart';
 import '../tesoreria/pages/unidad_gestion_selector_page.dart';
@@ -87,14 +88,23 @@ class _MainMenuPageState extends State<MainMenuPage> {
                       ),
                     ),
                     if (_appVersion != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'v$_appVersion',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.onSurface.withValues(alpha: 0.4),
-                        ),
-                      ),
-                    ],
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'v$_appVersion',
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurface.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(builder: (_) => const UpdatePage()),
+                                          );
+                                        },
+                                        child: const Text('Buscar actualizaciones'),
+                                      ),
+                                    ],
                     const SizedBox(height: 8),
                     Text(
                       'Seleccioná un módulo para comenzar',

@@ -19,6 +19,7 @@ class AppSettings extends ChangeNotifier {
   
   // Buffet: ayuda de vuelto en efectivo
   static const _kCashChangeHelper = 'cash_change_helper';
+  static const _kUpdateMetadataUrl = 'update_metadata_url';
 
   // Unidad de Gestión activa para Tesorería
   static const _kUnidadGestionActivaId = 'unidad_gestion_activa_id';
@@ -58,6 +59,9 @@ class AppSettings extends ChangeNotifier {
   // Buffet: mostrar calculador de vuelto en pago efectivo
   bool _cashChangeHelper = true;
   bool get cashChangeHelper => _cashChangeHelper;
+
+  String? _updateMetadataUrl;
+  String? get updateMetadataUrl => _updateMetadataUrl;
 
   // Unidad de Gestión activa para Tesorería
   int? _unidadGestionActivaId;
@@ -119,9 +123,22 @@ class AppSettings extends ChangeNotifier {
     // Buffet: ayuda de vuelto
     _cashChangeHelper = sp.getBool(_kCashChangeHelper) ?? true;
 
+    _updateMetadataUrl = sp.getString(_kUpdateMetadataUrl);
+
     // Unidad de Gestión activa para Tesorería
     _unidadGestionActivaId = sp.getInt(_kUnidadGestionActivaId);
 
+    notifyListeners();
+  }
+
+  Future<void> setUpdateMetadataUrl(String? url) async {
+    _updateMetadataUrl = url?.trim();
+    final sp = await SharedPreferences.getInstance();
+    if (url == null || url.trim().isEmpty) {
+      await sp.remove(_kUpdateMetadataUrl);
+    } else {
+      await sp.setString(_kUpdateMetadataUrl, _updateMetadataUrl!);
+    }
     notifyListeners();
   }
 
