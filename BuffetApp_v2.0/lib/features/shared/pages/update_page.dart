@@ -23,11 +23,20 @@ class _UpdatePageState extends State<UpdatePage> {
   @override
   void initState() {
     super.initState();
-    // Precargar URL desde AppSettings si existe
+    // Precargar URL o Supabase config desde AppSettings si existe
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final settings = context.read<AppSettings>();
-      final saved = settings.updateMetadataUrl ?? '';
-      _metaController.text = saved;
+      // Si hay config de Supabase y bucket, preconstruimos la URL pública de metadata
+      if (settings.supabaseProjectUrl != null && settings.releasesBucket != null) {
+        final proj = settings.supabaseProjectUrl!.trim();
+        final bucket = settings.releasesBucket!.trim();
+        final metaPath = 'update.json';
+        final metaUrl = '${proj.replaceAll(RegExp(r'\/$'), '')}/storage/v1/object/public/$bucket/$metaPath';
+        _metaController.text = metaUrl;
+      } else {
+        final saved = settings.updateMetadataUrl ?? '';
+        _metaController.text = saved;
+      }
     });
   }
 
@@ -38,17 +47,22 @@ class _UpdatePageState extends State<UpdatePage> {
   }
 
   Future<void> _checkForUpdate() async {
-    final urlText = _metaController.text.trim();
-    if (urlText.isEmpty) {
-      setState(() => _status = 'Ingresá la URL del metadata (update.json)');
-      return;
+    String urlText = _metaController.text.trim();
+
+    // If there is Supabase config in settings, build the metadata URL automatically
+    final settings = context.read<AppSettings>();
+    if ((settings.supabaseProjectUrl != null) && (settings.releasesBucket != null)) {
+      final proj = settings.supabaseProjectUrl!.trim();
+      final bucket = settings.releasesBucket!.trim();
+      urlText = '${proj.replaceAll(RegExp(r'\/$'), '')}/storage/v1/object/public/$bucket/update.json';
+      // persist the constructed URL for visibility
+      try { await settings.setUpdateMetadataUrl(urlText); } catch (_) {}
     }
 
-    // Guardar la URL en AppSettings para futuras consultas
-    try {
-      final settings = context.read<AppSettings>();
-      await settings.setUpdateMetadataUrl(urlText);
-    } catch (_) {}
+    if (urlText.isEmpty) {
+      setState(() => _status = 'No hay metadata configurada. Configurala en ajustes.');
+      return;
+    }
 
     setState(() { _status = 'Consultando metadata...'; _progress = 0.0; });
     final meta = await _service.fetchRemoteMeta(Uri.parse(urlText));
@@ -150,8 +164,36 @@ class _UpdatePageState extends State<UpdatePage> {
                 ),
                 const SizedBox(width: 12),
                 TextButton(
-                  onPressed: () { _metaController.clear(); setState(() => _status = null); },
-                  child: const Text('Limpiar'),
+                  onPressed: () async {
+                    // abrir modal para configurar Supabase project/bucket
+                    final settings = context.read<AppSettings>();
+                    final projectCtrl = TextEditingController(text: settings.supabaseProjectUrl ?? '');
+                    final bucketCtrl = TextEditingController(text: settings.releasesBucket ?? 'releases');
+                    final res = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Configurar Supabase'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextField(controller: projectCtrl, decoration: const InputDecoration(labelText: 'Project URL (ej: https://xyz.supabase.co)')),
+                            TextField(controller: bucketCtrl, decoration: const InputDecoration(labelText: 'Bucket (ej: releases)')),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+                          ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Guardar')),
+                        ],
+                      ),
+                    );
+                    if (res == true) {
+                      await settings.setSupabaseConfig(projectUrl: projectCtrl.text, releasesBucket: bucketCtrl.text);
+                      final metaUrl = '${settings.supabaseProjectUrl!.replaceAll(RegExp(r'\/$'), '')}/storage/v1/object/public/${settings.releasesBucket}/update.json';
+                      _metaController.text = metaUrl;
+                      setState(() => _status = 'Configuración guardada.');
+                    }
+                  },
+                  child: const Text('Configurar Supabase'),
                 ),
               ],
             ),

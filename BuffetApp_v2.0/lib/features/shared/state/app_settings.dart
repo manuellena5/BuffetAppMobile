@@ -20,6 +20,8 @@ class AppSettings extends ChangeNotifier {
   // Buffet: ayuda de vuelto en efectivo
   static const _kCashChangeHelper = 'cash_change_helper';
   static const _kUpdateMetadataUrl = 'update_metadata_url';
+  static const _kSupabaseProjectUrl = 'supabase_project_url';
+  static const _kReleasesBucket = 'releases_bucket';
 
   // Unidad de Gestión activa para Tesorería
   static const _kUnidadGestionActivaId = 'unidad_gestion_activa_id';
@@ -62,6 +64,10 @@ class AppSettings extends ChangeNotifier {
 
   String? _updateMetadataUrl;
   String? get updateMetadataUrl => _updateMetadataUrl;
+  String? _supabaseProjectUrl;
+  String? get supabaseProjectUrl => _supabaseProjectUrl;
+  String? _releasesBucket;
+  String? get releasesBucket => _releasesBucket;
 
   // Unidad de Gestión activa para Tesorería
   int? _unidadGestionActivaId;
@@ -124,6 +130,8 @@ class AppSettings extends ChangeNotifier {
     _cashChangeHelper = sp.getBool(_kCashChangeHelper) ?? true;
 
     _updateMetadataUrl = sp.getString(_kUpdateMetadataUrl);
+    _supabaseProjectUrl = sp.getString(_kSupabaseProjectUrl);
+    _releasesBucket = sp.getString(_kReleasesBucket);
 
     // Unidad de Gestión activa para Tesorería
     _unidadGestionActivaId = sp.getInt(_kUnidadGestionActivaId);
@@ -139,6 +147,27 @@ class AppSettings extends ChangeNotifier {
     } else {
       await sp.setString(_kUpdateMetadataUrl, _updateMetadataUrl!);
     }
+    notifyListeners();
+  }
+
+  Future<void> setSupabaseConfig({String? projectUrl, String? releasesBucket}) async {
+    final sp = await SharedPreferences.getInstance();
+    if (projectUrl == null || projectUrl.trim().isEmpty) {
+      _supabaseProjectUrl = null;
+      await sp.remove(_kSupabaseProjectUrl);
+    } else {
+      _supabaseProjectUrl = projectUrl.trim();
+      await sp.setString(_kSupabaseProjectUrl, _supabaseProjectUrl!);
+    }
+
+    if (releasesBucket == null || releasesBucket.trim().isEmpty) {
+      _releasesBucket = null;
+      await sp.remove(_kReleasesBucket);
+    } else {
+      _releasesBucket = releasesBucket.trim();
+      await sp.setString(_kReleasesBucket, _releasesBucket!);
+    }
+
     notifyListeners();
   }
 
