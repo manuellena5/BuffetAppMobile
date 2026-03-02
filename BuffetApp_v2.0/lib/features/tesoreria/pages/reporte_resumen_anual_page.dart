@@ -182,7 +182,7 @@ class _ReporteResumenAnualPageState extends State<ReporteResumenAnualPage> {
       final savedPath = await FileSaver.instance.saveFile(
         name: filename,
         bytes: Uint8List.fromList(excelBytes),
-        ext: 'xlsx',
+        fileExtension: 'xlsx',
         mimeType: MimeType.microsoftExcel,
       );
       

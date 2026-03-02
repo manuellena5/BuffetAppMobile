@@ -398,7 +398,7 @@ class ExportService {
       final savedPath = await FileSaver.instance.saveFile(
         name: name,
         bytes: bytes,
-        ext: 'csv',
+        fileExtension: 'csv',
         mimeType: MimeType.text,
       );
       return savedPath;
@@ -711,7 +711,7 @@ class ExportService {
       final savedPath = await FileSaver.instance.saveFile(
         name: 'cajas_historial',
         bytes: bytes,
-        ext: 'csv',
+        fileExtension: 'csv',
         mimeType: MimeType.text,
       );
       return savedPath;
@@ -789,7 +789,7 @@ class ExportService {
       final savedPath = await FileSaver.instance.saveFile(
         name: cleanFilename.replaceAll('.csv', ''),
         bytes: bytes,
-        ext: 'csv',
+        fileExtension: 'csv',
         mimeType: MimeType.text,
       );
 
@@ -1045,7 +1045,7 @@ class ExportService {
       final savedPath = await FileSaver.instance.saveFile(
         name: cleanFilename,
         bytes: Uint8List.fromList(excelBytes),
-        ext: 'xlsx',
+        fileExtension: 'xlsx',
         mimeType: MimeType.microsoftExcel,
       );
 
@@ -1274,7 +1274,7 @@ class ExportService {
       final savedPath = await FileSaver.instance.saveFile(
         name: cleanFilename,
         bytes: Uint8List.fromList(excelBytes),
-        ext: 'xlsx',
+        fileExtension: 'xlsx',
         mimeType: MimeType.microsoftExcel,
       );
 
@@ -1643,7 +1643,7 @@ class ExportService {
       final savedPath = await FileSaver.instance.saveFile(
         name: 'caja_$cleanCodigo',
         bytes: Uint8List.fromList(excelBytes),
-        ext: 'xlsx',
+        fileExtension: 'xlsx',
         mimeType: MimeType.microsoftExcel,
       );
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../../env/supabase_env.dart';
 import '../../../app_version.dart';
@@ -123,13 +124,45 @@ class _UpdatePageState extends State<UpdatePage> {
 
       setState(() { _status = 'Descarga completa. Abriendo instalador...'; _progress = 1.0; });
       try {
-        await _service.openApk(file);
-        if (mounted) {
-          setState(() { _status = 'Instalador abierto. Completá la instalación en el dispositivo.'; _checking = false; });
+        final result = await _service.openApk(file);
+        if (!mounted) return;
+
+        switch (result.type) {
+          case ResultType.done:
+            setState(() {
+              _status = 'Instalador abierto. Completá la instalación en el dispositivo.';
+              _checking = false;
+            });
+            break;
+          case ResultType.permissionDenied:
+            setState(() {
+              _status = 'Permiso denegado. Habilitá "Instalar apps desconocidas" '
+                  'para esta app en Configuración > Apps > Permisos especiales.';
+              _checking = false;
+            });
+            break;
+          case ResultType.fileNotFound:
+            setState(() {
+              _status = 'No se encontró el archivo descargado. Intentá de nuevo.';
+              _checking = false;
+            });
+            break;
+          case ResultType.noAppToOpen:
+            setState(() {
+              _status = 'No hay instalador de paquetes disponible en el dispositivo.';
+              _checking = false;
+            });
+            break;
+          case ResultType.error:
+            setState(() {
+              _status = 'Error al abrir el instalador: ${result.message}';
+              _checking = false;
+            });
+            break;
         }
       } catch (e) {
         if (mounted) {
-          setState(() { _status = 'No se pudo abrir el instalador.'; _checking = false; });
+          setState(() { _status = 'No se pudo abrir el instalador: $e'; _checking = false; });
         }
       }
     } catch (e, st) {

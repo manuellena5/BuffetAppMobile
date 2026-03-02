@@ -955,7 +955,7 @@ class _DetalleMovimientosEntidadPageState extends State<DetalleMovimientosEntida
       final filePath = await FileSaver.instance.saveFile(
         name: cleanFilename,
         bytes: Uint8List.fromList(excelBytes),
-        ext: 'xlsx',
+        fileExtension: 'xlsx',
         mimeType: MimeType.microsoftExcel,
       );
 

@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.3.4+18 — Fix instalación de actualizaciones
+
+### Correcciones
+- **Instalador APK no se abría:** Corregido un problema donde, al descargar una actualización, el instalador de Android no se abría en el dispositivo.
+  - Agregado permiso `REQUEST_INSTALL_PACKAGES` (requerido desde Android 8).
+  - El APK ahora se descarga en almacenamiento externo (accesible por el instalador del sistema).
+  - Se especifica el tipo de archivo correcto al abrir el APK.
+- **Mensajes claros según resultado:** La pantalla de actualización ahora muestra mensajes específicos si falta un permiso, si no se encuentra el archivo o si hay otro problema.
+
+### Mejoras
+- **Pantalla de Ayuda rediseñada:** Contenido reorganizado con secciones claras (Navegación, Eventos y Cajas, Detalle de Caja, Impresión, Excel, Actualizaciones, Fórmulas). Tips visuales y tarjetas de fórmulas.
+- **Script de deploy mejorado:** `deploy-apk.ps1` ahora acepta `-Notes "texto"` como parámetro para evitar el prompt interactivo.
+
+### Técnico
+- Versión: `1.3.3+17` → `1.3.4+18`
+- Archivos modificados: `AndroidManifest.xml`, `update_service.dart`, `update_page.dart`, `help_page.dart`, `deploy-apk.ps1`
+
+---
+
+## 1.3.3+17 — Sistema de actualizaciones in-app
+
+### Nuevas funcionalidades
+- **Buscar actualizaciones desde la app:** Nueva pantalla para verificar, descargar e instalar actualizaciones directamente desde el dispositivo.
+  - Verifica automáticamente contra el servidor (Supabase Storage) si hay una versión más nueva.
+  - Muestra versión actual vs. disponible, notas de la actualización y tamaño del archivo.
+  - Descarga con barra de progreso y confirmación antes de instalar.
+- **Acceso desde Ajustes:** Nuevo ítem "Buscar actualizaciones" en la pantalla de Ajustes, mostrando la versión actual.
+- **Script de deploy (`deploy-apk.ps1`):** Pipeline completo para compilar, subir APK a Supabase Storage y generar metadata (`update.json`) con signed-URL.
+  - Compilación `--split-per-abi` para reducir tamaño (arm64 ≈ 24 MB vs. 67 MB universal).
+  - Subida vía REST API (compatible con Windows sin Supabase CLI).
+
+### Técnico
+- Nuevos archivos: `update_service.dart`, `update_page.dart`, `deploy-apk.ps1`
+- Dependencia agregada: `dio: ^5.9.1` (descarga con progreso)
+- Versión: `1.3.2+16` → `1.3.3+17`
+- Archivos modificados: `settings_page.dart`, `pubspec.yaml`, `app_version.dart`
+
+---
+
 ## 1.3.2+16 — Productos: Tabs por categoría y mejora de imágenes
 
 ### Nuevas funcionalidades

@@ -38,12 +38,17 @@ class UpdateService {
     }
   }
 
-  /// Descarga el APK y lo guarda en el directorio de descargas de la app.
+  /// Descarga el APK y lo guarda en el cache externo de la app.
+  /// Usamos external cache porque el instalador de Android necesita acceso
+  /// al archivo via FileProvider (content:// URI).
   /// onProgress recibe (received, total)
   Future<File?> downloadApk(String apkUrl, String fileName, void Function(int, int)? onProgress) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      // Preferir external cache (accesible via FileProvider de open_filex)
+      final dir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
       final out = File('${dir.path}/$fileName');
+      // Eliminar APK viejo si existe para evitar conflictos
+      if (await out.exists()) await out.delete();
       await _dio.download(apkUrl, out.path, onReceiveProgress: onProgress);
       return out;
     } catch (e, st) {
@@ -52,9 +57,23 @@ class UpdateService {
     }
   }
 
-  Future<void> openApk(File apkFile) async {
+  /// Abre el APK con el instalador del sistema.
+  /// Retorna un [OpenResult] con el estado.
+  /// En Android, requiere permiso REQUEST_INSTALL_PACKAGES en AndroidManifest.
+  Future<OpenResult> openApk(File apkFile) async {
     try {
-      await OpenFilex.open(apkFile.path);
+      final result = await OpenFilex.open(
+        apkFile.path,
+        type: 'application/vnd.android.package-archive',
+      );
+      if (result.type != ResultType.done) {
+        await AppDatabase.logLocalError(
+          scope: 'update.open_apk',
+          error: 'OpenFilex result: ${result.type} - ${result.message}',
+          payload: {'path': apkFile.path, 'resultType': result.type.toString()},
+        );
+      }
+      return result;
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'update.open_apk', error: e, stackTrace: st, payload: {'path': apkFile.path});
       rethrow;

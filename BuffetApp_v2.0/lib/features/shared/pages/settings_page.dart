@@ -8,12 +8,14 @@ import 'dart:async';
 import 'dart:io' show File, Platform;
 import 'dart:typed_data';
 import '../../../data/dao/db.dart';
+import '../../../app_version.dart';
 import '../services/print_service.dart';
 import '../services/usb_printer_service.dart';
 import '../state/app_settings.dart';
 import '../state/app_mode.dart';
 import '../state/drawer_state.dart';
 import 'punto_venta_setup_page.dart';
+import 'update_page.dart';
 import '../../home/main_menu_page.dart';
 import '../../home/home_page.dart';
 import '../../buffet/pages/buffet_home_page.dart';
@@ -764,6 +766,20 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ],
             ),
+          ),
+          const Divider(),
+          // ── Actualizaciones ──
+          ListTile(
+            leading: const Icon(Icons.system_update),
+            title: const Text('Buscar actualizaciones'),
+            subtitle: Text('Versión actual: v${AppBuildInfo.version}+${AppBuildInfo.buildNumber}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UpdatePage()),
+              );
+            },
           ),
           const Divider(),
           SwitchListTile(
