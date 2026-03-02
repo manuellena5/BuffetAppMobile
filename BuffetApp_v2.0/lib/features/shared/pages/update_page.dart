@@ -2,10 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'package:provider/provider.dart';
-import '../../shared/state/app_settings.dart';
+import '../../../env/supabase_env.dart';
+import '../../../app_version.dart';
 import '../services/update_service.dart';
+import '../../../data/dao/db.dart';
 
+/// Pantalla que verifica si hay una nueva versión disponible en Supabase Storage.
+/// No requiere que el usuario pegue URLs: la metadata se obtiene automáticamente
+/// del bucket público "releases/update.json".
 class UpdatePage extends StatefulWidget {
   const UpdatePage({super.key});
 
@@ -14,209 +18,193 @@ class UpdatePage extends StatefulWidget {
 }
 
 class _UpdatePageState extends State<UpdatePage> {
-  final _metaController = TextEditingController();
+  static const _bucket = 'releases';
+  static const _metaFile = 'update.json';
+
   final _service = UpdateService();
 
+  bool _checking = false;
   String? _status;
   double _progress = 0.0;
 
-  @override
-  void initState() {
-    super.initState();
-    // Precargar URL o Supabase config desde AppSettings si existe
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final settings = context.read<AppSettings>();
-      // Si hay config de Supabase y bucket, preconstruimos la URL pública de metadata
-      if (settings.supabaseProjectUrl != null && settings.releasesBucket != null) {
-        final proj = settings.supabaseProjectUrl!.trim();
-        final bucket = settings.releasesBucket!.trim();
-        final metaPath = 'update.json';
-        final metaUrl = '${proj.replaceAll(RegExp(r'\/$'), '')}/storage/v1/object/public/$bucket/$metaPath';
-        _metaController.text = metaUrl;
-      } else {
-        final saved = settings.updateMetadataUrl ?? '';
-        _metaController.text = saved;
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _metaController.dispose();
-    super.dispose();
-  }
+  String get _metaUrl =>
+      '${SupabaseEnv.url}/storage/v1/object/public/$_bucket/$_metaFile';
 
   Future<void> _checkForUpdate() async {
-    String urlText = _metaController.text.trim();
+    if (_checking) return;
+    setState(() { _checking = true; _status = 'Consultando...'; _progress = 0.0; });
 
-    // If there is Supabase config in settings, build the metadata URL automatically
-    final settings = context.read<AppSettings>();
-    if ((settings.supabaseProjectUrl != null) && (settings.releasesBucket != null)) {
-      final proj = settings.supabaseProjectUrl!.trim();
-      final bucket = settings.releasesBucket!.trim();
-      urlText = '${proj.replaceAll(RegExp(r'\/$'), '')}/storage/v1/object/public/$bucket/update.json';
-      // persist the constructed URL for visibility
-      try { await settings.setUpdateMetadataUrl(urlText); } catch (_) {}
-    }
+    try {
+      final meta = await _service.fetchRemoteMeta(Uri.parse(_metaUrl));
+      if (!mounted) return;
 
-    if (urlText.isEmpty) {
-      setState(() => _status = 'No hay metadata configurada. Configurala en ajustes.');
-      return;
-    }
+      if (meta == null) {
+        setState(() { _status = 'No se pudo obtener información de versión.'; _checking = false; });
+        return;
+      }
 
-    setState(() { _status = 'Consultando metadata...'; _progress = 0.0; });
-    final meta = await _service.fetchRemoteMeta(Uri.parse(urlText));
-    if (meta == null) {
-      setState(() => _status = 'No se pudo leer metadata.');
-      return;
-    }
+      final int remoteCode = (meta['versionCode'] is int)
+          ? meta['versionCode']
+          : int.tryParse('${meta['versionCode']}') ?? 0;
+      final String remoteName = '${meta['versionName'] ?? ''}';
+      final String? apkUrl = meta['apk_url'] ?? meta['apkUrl'];
+      final String? notes = meta['notes'] as String?;
 
-    final int remoteCode = (meta['versionCode'] is int) ? meta['versionCode'] : int.tryParse('${meta['versionCode']}') ?? 0;
-    final String remoteName = '${meta['versionName'] ?? ''}';
-    final String? apkUrl = meta['apk_url'] ?? meta['apkUrl'] ?? meta['apk_path'];
+      final currentCode = AppBuildInfo.buildNumber;
 
-    final currentCode = await _service.currentVersionCode();
+      if (remoteCode <= currentCode) {
+        setState(() {
+          _status = 'Ya tenés la última versión (v${AppBuildInfo.version}+$currentCode).';
+          _checking = false;
+        });
+        return;
+      }
 
-    if (remoteCode <= currentCode) {
-      setState(() => _status = 'La app ya está en la misma versión o más nueva.');
-      return;
-    }
-
-    // Mostrar modal de confirmación
-    final doInstall = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Actualización disponible'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Versión: $remoteName'),
-            const SizedBox(height: 8),
-            if (meta['notes'] != null) Text('${meta['notes']}'),
-            const SizedBox(height: 8),
-            const Text('¿Deseás descargar e instalar ahora?'),
+      // ── Modal de confirmación ──
+      final doInstall = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.system_update, color: Theme.of(c).colorScheme.primary, size: 28),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('Actualización disponible')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Nueva versión: $remoteName', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Versión actual: v${AppBuildInfo.version}+$currentCode'),
+              if (notes != null && notes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Notas:', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(notes),
+              ],
+              const SizedBox(height: 16),
+              const Text('¿Deseás descargar e instalar ahora?'),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Ahora no')),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(c, true),
+              icon: const Icon(Icons.download),
+              label: const Text('Descargar'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Descargar')),
-        ],
-      ),
-    );
+      );
 
-    if (doInstall != true) {
-      setState(() => _status = 'Actualización cancelada por el usuario.');
-      return;
-    }
+      if (doInstall != true) {
+        setState(() { _status = 'Actualización pospuesta.'; _checking = false; });
+        return;
+      }
 
-    if (apkUrl == null) {
-      setState(() => _status = 'Metadata incompleta: falta apk_url');
-      return;
-    }
+      if (apkUrl == null || apkUrl.isEmpty) {
+        setState(() { _status = 'Metadata incompleta: falta apk_url.'; _checking = false; });
+        return;
+      }
 
-    setState(() { _status = 'Descargando APK...'; _progress = 0.0; });
-    final fileName = 'buffet_update_${remoteName.replaceAll('.', '_')}.apk';
-    final file = await _service.downloadApk(apkUrl, fileName, (r, t) {
-      setState(() { _progress = t > 0 ? r / t : 0.0; });
-    });
+      // ── Descarga ──
+      setState(() { _status = 'Descargando APK...'; _progress = 0.0; });
+      final fileName = 'buffet_update_${remoteName.replaceAll('.', '_')}.apk';
+      final file = await _service.downloadApk(apkUrl, fileName, (r, t) {
+        if (mounted) setState(() { _progress = t > 0 ? r / t : 0.0; });
+      });
 
-    if (file == null) {
-      setState(() => _status = 'Fallo la descarga.');
-      return;
-    }
+      if (!mounted) return;
+      if (file == null) {
+        setState(() { _status = 'No se pudo descargar el APK. Intentá de nuevo.'; _checking = false; });
+        return;
+      }
 
-    setState(() => _status = 'Descarga completa. Abriendo instalador...');
-    try {
-      await _service.openApk(file);
-      setState(() => _status = 'Instalador abierto. Completá la instalación en el dispositivo.');
-    } catch (_) {
-      setState(() => _status = 'No se pudo abrir el instalador.');
+      setState(() { _status = 'Descarga completa. Abriendo instalador...'; _progress = 1.0; });
+      try {
+        await _service.openApk(file);
+        if (mounted) {
+          setState(() { _status = 'Instalador abierto. Completá la instalación en el dispositivo.'; _checking = false; });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() { _status = 'No se pudo abrir el instalador.'; _checking = false; });
+        }
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(scope: 'update_page.check', error: e, stackTrace: st);
+      if (mounted) {
+        setState(() { _status = 'Error inesperado. Intentá de nuevo.'; _checking = false; });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Buscar actualizaciones')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('URL del metadata (update.json):'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _metaController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'https://.../update.json',
+      appBar: AppBar(title: const Text('Actualizaciones')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.system_update_alt, size: 72, color: cs.primary.withValues(alpha: 0.6)),
+              const SizedBox(height: 20),
+
+              Text('v${AppBuildInfo.version}+${AppBuildInfo.buildNumber}',
+                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+
+              Text('Versión actual instalada',
+                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
+              const SizedBox(height: 32),
+
+              // ── Botón principal ──
+              SizedBox(
+                width: 260,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _checking ? null : _checkForUpdate,
+                  icon: _checking
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh),
+                  label: Text(_checking ? 'Verificando...' : 'Buscar actualizaciones'),
+                ),
               ),
-              keyboardType: TextInputType.url,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                ElevatedButton(
-                  onPressed: _checkForUpdate,
-                  child: const Text('Buscar actualizaciones'),
+
+              const SizedBox(height: 24),
+
+              // ── Barra de progreso ──
+              if (_progress > 0 && _progress < 1.0) ...[
+                SizedBox(
+                  width: 260,
+                  child: Column(
+                    children: [
+                      LinearProgressIndicator(value: _progress),
+                      const SizedBox(height: 6),
+                      Text('${(_progress * 100).toStringAsFixed(0)}%',
+                        style: theme.textTheme.bodySmall),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 12),
-                TextButton(
-                  onPressed: () async {
-                    // abrir modal para configurar Supabase project/bucket
-                    final settings = context.read<AppSettings>();
-                    final projectCtrl = TextEditingController(text: settings.supabaseProjectUrl ?? '');
-                    final bucketCtrl = TextEditingController(text: settings.releasesBucket ?? 'releases');
-                    final res = await showDialog<bool>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text('Configurar Supabase'),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextField(controller: projectCtrl, decoration: const InputDecoration(labelText: 'Project URL (ej: https://xyz.supabase.co)')),
-                            TextField(controller: bucketCtrl, decoration: const InputDecoration(labelText: 'Bucket (ej: releases)')),
-                          ],
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-                          ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Guardar')),
-                        ],
-                      ),
-                    );
-                    if (res == true) {
-                      await settings.setSupabaseConfig(projectUrl: projectCtrl.text, releasesBucket: bucketCtrl.text);
-                      final metaUrl = '${settings.supabaseProjectUrl!.replaceAll(RegExp(r'\/$'), '')}/storage/v1/object/public/${settings.releasesBucket}/update.json';
-                      _metaController.text = metaUrl;
-                      setState(() => _status = 'Configuración guardada.');
-                    }
-                  },
-                  child: const Text('Configurar Supabase'),
-                ),
+                const SizedBox(height: 16),
               ],
-            ),
 
-            const SizedBox(height: 20),
-            if (_status != null) ...[
-              Text(_status!, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 8),
+              // ── Mensaje de estado ──
+              if (_status != null)
+                Text(_status!, textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: _status!.contains('Error') || _status!.contains('No se pudo')
+                        ? Colors.red.shade700
+                        : cs.onSurface.withValues(alpha: 0.8),
+                  )),
             ],
-
-            if (_progress > 0 && _progress < 1.0) ...[
-              LinearProgressIndicator(value: _progress),
-              const SizedBox(height: 8),
-              Text('${(_progress * 100).toStringAsFixed(0)}%'),
-            ],
-
-            const Spacer(),
-            Text('Notas:', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 6),
-            const Text('- La instalación requiere confirmación del usuario.'),
-            const Text('- Asegurate que el APK esté firmado con la misma clave y que el versionCode sea mayor.'),
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
       ),
     );
