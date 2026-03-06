@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
-import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import 'detalle_jugador_page.dart';
 import 'gestionar_jugadores_page.dart';
 
@@ -131,9 +134,11 @@ class _PlantelPageState extends State<PlantelPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/plantel',
       title: 'Plantel - ${_nombreMes(_mesActual)} $_anioActual',
-      currentRouteName: '/plantel',
       actions: [
         IconButton(
           icon: Icon(_vistaTabla ? Icons.view_module : Icons.table_chart),
@@ -143,41 +148,63 @@ class _PlantelPageState extends State<PlantelPage> {
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _irAGestionar,
-        backgroundColor: Colors.teal,
         icon: const Icon(Icons.settings),
         label: const Text('Gestionar'),
       ),
-      body: ResponsiveContainer(
-        maxWidth: 1000,
-        child: RefreshIndicator(
-          onRefresh: _cargarDatos,
-          child: _cargando
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  children: [
-                    // BLOQUE 1: Resumen General
-                    _buildResumenGeneral(),
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Plantel - ${_nombreMes(_mesActual)} $_anioActual',
+              subtitle: '${_entidadesConEstado.length} entidades',
+            ),
+          Expanded(
+            child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1000),
+          child: RefreshIndicator(
+            onRefresh: _cargarDatos,
+            child: _cargando
+                ? SkeletonLoader.cards(count: 4)
+                : SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Column(
+                    children: [
+                      // BLOQUE 1: Resumen General
+                      _buildResumenGeneral(),
 
-                    const Divider(height: 1),
+                      const Divider(height: 1),
 
-                    // Filtros
-                    _buildFiltros(),
+                      // Filtros
+                      _buildFiltros(),
 
-                    const Divider(height: 1),
+                      const Divider(height: 1),
 
-                    // BLOQUE 2: Lista de jugadores
-                    if (_entidadesConEstado.isEmpty)
-                      _buildEmpty()
-                    else if (_vistaTabla)
-                      _buildTabla()
-                    else
-                      _buildTarjetas(),
-                  ],
+                      // BLOQUE 2: Lista de jugadores
+                      if (_entidadesConEstado.isEmpty)
+                        EmptyState(
+                          icon: Icons.people_outline,
+                          title: 'No hay entidades para mostrar',
+                          action: ElevatedButton.icon(
+                            onPressed: _irAGestionar,
+                            icon: const Icon(Icons.settings),
+                            label: const Text('Gestionar jugadores'),
+                          ),
+                        )
+                      else if (_vistaTabla)
+                        _buildTabla()
+                      else
+                        _buildTarjetas(),
+                    ],
+                  ),
                 ),
-              ),
+          ),
         ),
+      ),
+          ),
+        ],
       ),
     );
   }
@@ -360,27 +387,6 @@ class _PlantelPageState extends State<PlantelPage> {
     );
   }
 
-  Widget _buildEmpty() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'No hay entidades para mostrar',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: _irAGestionar,
-            icon: const Icon(Icons.settings),
-            label: const Text('Gestionar jugadores'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildTarjetas() {
     return ListView.builder(

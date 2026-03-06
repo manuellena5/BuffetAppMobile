@@ -4,6 +4,7 @@ import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/services/acuerdos_service.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/breadcrumb.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/format.dart';
 import 'editar_jugador_page.dart';
 import 'detalle_acuerdo_page.dart';
@@ -130,7 +131,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar detalle: $e')),
+          const SnackBar(content: Text('Error al cargar detalle. Intente nuevamente.')),
         );
       }
     } finally {
@@ -251,7 +252,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         ],
       ),
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? SkeletonLoader.list(count: 5)
           : ResponsiveContainer(
               maxWidth: 800,
               child: RefreshIndicator(
@@ -837,7 +838,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                 : const Icon(Icons.person),
             title: Text(nombre),
             subtitle: Text(
-              '\$${monto.toStringAsFixed(2)} - $frecuencia',
+              '${Format.money(monto)} - $frecuencia',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             trailing: Row(

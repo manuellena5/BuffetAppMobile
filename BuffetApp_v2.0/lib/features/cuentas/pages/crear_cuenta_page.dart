@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
+import '../../shared/format.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../tesoreria/services/cuenta_service.dart';
 
@@ -107,7 +108,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
               _buildInfoRow('ID', cuentaId.toString()),
               _buildInfoRow('Nombre', _nombreCtrl.text.trim()),
               _buildInfoRow('Tipo', _tipo),
-              _buildInfoRow('Saldo Inicial', '\$${saldoInicial.toStringAsFixed(2)}'),
+              _buildInfoRow('Saldo Inicial', Format.money(saldoInicial)),
               if (_tieneComision && comisionPorcentaje != null)
                 _buildInfoRow('Comisión', '${comisionPorcentaje.toStringAsFixed(2)}%'),
               if (_bancoNombreCtrl.text.trim().isNotEmpty)

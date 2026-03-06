@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'core/theme/app_theme.dart';
 import 'features/home/home_page.dart';
 import 'features/home/main_menu_page.dart';
 import 'features/buffet/state/cart_model.dart';
@@ -61,49 +62,19 @@ class App extends StatelessWidget {
       child: Consumer<AppSettings>(
         builder: (_, settings, __) {
           final scale = settings.uiScale <= 0 ? 1.0 : settings.uiScale;
-          // VisualDensity: valores negativos compactan, positivos expanden.
-          // Queremos que scale<1 compacte un poco, y scale>1 expanda un poco.
-          final density = ((scale - 1.0) * 2.0).clamp(-2.0, 2.0);
 
-          final baseTheme = ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
-            useMaterial3: true,
-          );
-          final baseDarkTheme = ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.blueGrey,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          );
-
-          ThemeData applyScale(ThemeData t) {
-            final baseIconSize = t.iconTheme.size ?? 24.0;
-            return t.copyWith(
-              visualDensity:
-                  VisualDensity(horizontal: density, vertical: density),
-              iconTheme: t.iconTheme.copyWith(size: baseIconSize * scale),
-              primaryIconTheme:
-                  t.primaryIconTheme.copyWith(size: baseIconSize * scale),
-              appBarTheme: t.appBarTheme.copyWith(
-                iconTheme: (t.appBarTheme.iconTheme ?? t.iconTheme)
-                    .copyWith(size: baseIconSize * scale),
-                actionsIconTheme:
-                    (t.appBarTheme.actionsIconTheme ?? t.iconTheme)
-                        .copyWith(size: baseIconSize * scale),
-              ),
-            );
-          }
+          // Design System ERP: light + dark con fuente Inter
+          final lightTheme = AppTheme.applyScale(AppTheme.light(), scale);
+          final darkTheme = AppTheme.applyScale(AppTheme.dark(), scale);
 
           return MaterialApp(
             title: 'BuffetApp',
-            theme: applyScale(baseTheme),
-            darkTheme: applyScale(baseDarkTheme),
+            theme: lightTheme,
+            darkTheme: darkTheme,
             themeMode: settings.materialThemeMode,
             builder: (context, child) {
               if (child == null) return const SizedBox.shrink();
               final mq = MediaQuery.of(context);
-              // Escala de texto global sin achicar el canvas (evita márgenes negros).
               return MediaQuery(
                 data: mq.copyWith(textScaler: TextScaler.linear(scale)),
                 child: child,

@@ -1,37 +1,59 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart' as p;
 import 'package:buffet_app/data/dao/db.dart';
 import 'package:buffet_app/features/shared/services/movimiento_service.dart';
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-// Mock para PathProvider en tests
-class FakePathProviderPlatform extends Fake
-    with MockPlatformInterfaceMixin
-    implements PathProviderPlatform {
-  @override
-  Future<String?> getApplicationDocumentsPath() async {
-    return '/tmp/test_db';
-  }
-}
+late String _tempDir;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
   
-  setUpAll(() {
-    PathProviderPlatform.instance = FakePathProviderPlatform();
+  setUpAll(() async {
+    const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+    _tempDir = await Directory.systemTemp.createTemp('buffet_test_adjunto').then((d) => d.path);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      pathChannel,
+      (MethodCall call) async => _tempDir,
+    );
   });
   
   setUp(() async {
-    await AppDatabase.resetForTests();
+    await AppDatabase.close();
+    final dbFile = File(p.join(_tempDir, 'barcancha.db'));
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+    }
   });
 
   tearDown(() async {
-    await AppDatabase.resetForTests();
+    await AppDatabase.close();
   });
 
   test('Insertar movimiento con archivo adjunto', () async {
+    final db = await AppDatabase.instance();
+    // Seed: unidad_gestion y cuenta_fondos requeridos por FK
+    await db.insert('unidades_gestion', {
+      'nombre': 'Test UG',
+      'tipo': 'DISCIPLINA',
+      'activo': 1,
+      'created_ts': DateTime.now().millisecondsSinceEpoch,
+      'updated_ts': DateTime.now().millisecondsSinceEpoch,
+    });
+    await db.insert('cuentas_fondos', {
+      'unidad_gestion_id': 1,
+      'nombre': 'Caja Test',
+      'tipo': 'CAJA',
+      'activa': 1,
+      'eliminado': 0,
+      'created_ts': DateTime.now().millisecondsSinceEpoch,
+      'updated_ts': DateTime.now().millisecondsSinceEpoch,
+    });
+
     final svc = EventoMovimientoService();
     
     // Crear movimiento con todos los campos de archivo
@@ -55,7 +77,6 @@ void main() {
     expect(movId, greaterThan(0));
     
     // Verificar que se guardó correctamente
-    final db = await AppDatabase.instance();
     final rows = await db.query('evento_movimiento', where: 'id=?', whereArgs: [movId]);
     
     expect(rows.length, 1);
@@ -78,6 +99,24 @@ void main() {
   });
 
   test('Insertar movimiento SIN archivo adjunto', () async {
+    final db = await AppDatabase.instance();
+    await db.insert('unidades_gestion', {
+      'nombre': 'Test UG',
+      'tipo': 'DISCIPLINA',
+      'activo': 1,
+      'created_ts': DateTime.now().millisecondsSinceEpoch,
+      'updated_ts': DateTime.now().millisecondsSinceEpoch,
+    });
+    await db.insert('cuentas_fondos', {
+      'unidad_gestion_id': 1,
+      'nombre': 'Caja Test',
+      'tipo': 'CAJA',
+      'activa': 1,
+      'eliminado': 0,
+      'created_ts': DateTime.now().millisecondsSinceEpoch,
+      'updated_ts': DateTime.now().millisecondsSinceEpoch,
+    });
+
     final svc = EventoMovimientoService();
     
     // Crear movimiento sin campos de archivo (deben ser null)
@@ -94,7 +133,6 @@ void main() {
     expect(movId, greaterThan(0));
     
     // Verificar que los campos de archivo son null
-    final db = await AppDatabase.instance();
     final rows = await db.query('evento_movimiento', where: 'id=?', whereArgs: [movId]);
     
     expect(rows.length, 1);

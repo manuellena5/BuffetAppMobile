@@ -1,17 +1,41 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart' as p;
 import 'package:buffet_app/data/dao/db.dart';
 import 'package:buffet_app/features/tesoreria/services/saldo_inicial_service.dart';
 
-void main() {
+late String _tempDir;
+
+Future<void> _setupTestEnv() async {
   TestWidgetsFlutterBinding.ensureInitialized();
-  
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+  _tempDir = await Directory.systemTemp.createTemp('buffet_test_saldo').then((d) => d.path);
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+    pathChannel,
+    (MethodCall call) async => _tempDir,
+  );
+}
+
+void main() {
+  setUpAll(() async {
+    await _setupTestEnv();
+  });
+
   group('SaldoInicialService', () {
     setUp(() async {
-      await AppDatabase.resetForTests();
+      await AppDatabase.close();
+      final dbFile = File(p.join(_tempDir, 'barcancha.db'));
+      if (await dbFile.exists()) {
+        await dbFile.delete();
+      }
     });
 
     tearDown(() async {
-      await AppDatabase.resetForTests();
+      await AppDatabase.close();
     });
 
     test('crear - debe crear un saldo inicial anual correctamente', () async {

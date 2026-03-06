@@ -8,6 +8,7 @@ import 'package:buffet_app/features/shared/state/app_settings.dart';
 import 'package:buffet_app/features/shared/state/drawer_state.dart';
 import 'package:buffet_app/features/shared/state/app_mode.dart';
 import 'package:buffet_app/features/shared/widgets/tesoreria_scaffold.dart';
+import 'package:buffet_app/layout/erp_layout.dart';
 import 'package:buffet_app/features/tesoreria/pages/tesoreria_home_page.dart';
 import 'package:buffet_app/features/tesoreria/pages/unidad_gestion_selector_page.dart';
 import 'package:buffet_app/features/tesoreria/pages/movimientos_list_page.dart';
@@ -74,7 +75,7 @@ void main() {
       });
     });
 
-    testWidgets('MovimientosListPage debe tener drawer', (tester) async {
+    testWidgets('MovimientosListPage debe usar ErpLayout', (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -91,11 +92,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Debe usar TesoreriaScaffold que tiene drawer
-      expect(find.byType(TesoreriaScaffold), findsOneWidget);
+      // Debe usar ErpLayout con sidebar integrado
+      expect(find.byType(ErpLayout), findsOneWidget);
     });
 
-    testWidgets('AcuerdosPage debe tener drawer', (tester) async {
+    testWidgets('AcuerdosPage debe usar ErpLayout', (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -112,10 +113,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(TesoreriaScaffold), findsOneWidget);
+      expect(find.byType(ErpLayout), findsOneWidget);
     });
 
-    testWidgets('PlantelPage debe tener drawer', (tester) async {
+    testWidgets('PlantelPage debe usar ErpLayout', (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -132,10 +133,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(TesoreriaScaffold), findsOneWidget);
+      expect(find.byType(ErpLayout), findsOneWidget);
     });
 
-    testWidgets('SaldosInicialesListPage debe tener drawer', (tester) async {
+    testWidgets('SaldosInicialesListPage debe usar ErpLayout', (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -152,7 +153,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.byType(TesoreriaScaffold), findsOneWidget);
+      expect(find.byType(ErpLayout), findsOneWidget);
     });
 
     testWidgets('ReporteCategoriasPage debe tener drawer', (tester) async {
@@ -312,12 +313,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // El contenido debe estar dentro de un TesoreriaScaffold
-      final scaffold = tester.widget<TesoreriaScaffold>(
-        find.byType(TesoreriaScaffold),
+      // El contenido debe estar dentro de un ErpLayout
+      final layout = tester.widget<ErpLayout>(
+        find.byType(ErpLayout),
       );
       
-      expect(scaffold, isNotNull);
+      expect(layout, isNotNull);
 
       // Restaurar tamaño original
       await tester.binding.setSurfaceSize(null);

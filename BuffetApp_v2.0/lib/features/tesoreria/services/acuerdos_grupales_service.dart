@@ -256,25 +256,12 @@ class AcuerdosGrupalesService {
             
             // Si debe generar compromisos, crearlos dentro de la transacción
             if (generaCompromisos) {
-              try {
-                await _generarCompromisosEnTransaccion(txn, acuerdoId);
-              } catch (e) {
-                await AppDatabase.logLocalError(
-                  scope: 'acuerdos_grupales.generar_compromisos',
-                  error: e.toString(),
-                  payload: {'acuerdo_id': acuerdoId, 'jugador_id': jugador.id},
-                );
-                // Relanzar para que la transacción haga rollback
-                rethrow;
-              }
+              await _generarCompromisosEnTransaccion(txn, acuerdoId);
             }
           } catch (e) {
+            // NO llamar a AppDatabase.logLocalError() dentro de la transacción:
+            // usaría la conexión DB principal que está bloqueada → deadlock.
             errores.add('${jugador.nombre}: ${e.toString()}');
-            await AppDatabase.logLocalError(
-              scope: 'acuerdos_grupales.crear_acuerdo_individual',
-              error: e.toString(),
-              payload: {'jugador_id': jugador.id, 'jugador_nombre': jugador.nombre},
-            );
             // Relanzar para rollback completo
             rethrow;
           }
@@ -380,12 +367,12 @@ class AcuerdosGrupalesService {
       'cuotas': cuotas,
       'fecha_inicio': fechaInicio,
       'fecha_fin': fechaFin,
+      'fecha_vigencia_desde': fechaInicio,
       'categoria': categoria,
       'observaciones': observaciones,
       'activo': 1,
       'origen_grupal': origenGrupal ? 1 : 0,
       'acuerdo_grupal_ref': acuerdoGrupalRef,
-      'cuotas_confirmadas': 0,
       'eliminado': 0,
       'sync_estado': 'PENDIENTE',
       'created_ts': now,
@@ -395,10 +382,15 @@ class AcuerdosGrupalesService {
     return acuerdoId;
   }
 
-  /// FASE 23: Generar compromisos dentro de una transacción existente
-  Future<void> _generarCompromisosEnTransaccion(dynamic txn, int acuerdoId) async {
+  /// FASE 23: Generar compromiso + cuotas dentro de una transacción existente.
+  ///
+  /// Crea 1 registro en `compromisos` con los datos del acuerdo y luego
+  /// N registros en `compromiso_cuotas` (uno por cuota).
+  Future<void> _generarCompromisosEnTransaccion(
+      dynamic txn, int acuerdoId) async {
     // Obtener acuerdo
-    final acuerdos = await txn.query('acuerdos', where: 'id = ?', whereArgs: [acuerdoId]);
+    final acuerdos =
+        await txn.query('acuerdos', where: 'id = ?', whereArgs: [acuerdoId]);
     if (acuerdos.isEmpty) {
       throw Exception('Acuerdo no encontrado');
     }
@@ -406,9 +398,11 @@ class AcuerdosGrupalesService {
     final acuerdo = acuerdos.first;
     final modalidad = acuerdo['modalidad'] as String;
     final cuotas = acuerdo['cuotas'] as int?;
-    final fechaInicio = DateTime.parse(acuerdo['fecha_inicio'] as String);
+    final fechaInicioStr = acuerdo['fecha_inicio'] as String;
+    final fechaInicio = DateTime.parse(fechaInicioStr);
     final frecuencia = acuerdo['frecuencia'] as String;
     final tipo = acuerdo['tipo'] as String;
+    final nombre = acuerdo['nombre'] as String;
 
     // Calcular montos por cuota
     double montoCuota;
@@ -424,37 +418,72 @@ class AcuerdosGrupalesService {
       cantidadCuotas = cuotas ?? 12; // Default si no está definido
     }
 
-    // Generar compromisos
     final now = DateTime.now().millisecondsSinceEpoch;
 
+    // 1. Crear registro padre en `compromisos`
+    final compromisoId = await txn.insert('compromisos', {
+      'acuerdo_id': acuerdoId,
+      'unidad_gestion_id': acuerdo['unidad_gestion_id'],
+      'entidad_plantel_id': acuerdo['entidad_plantel_id'],
+      'nombre': nombre,
+      'tipo': tipo,
+      'modalidad': modalidad,
+      'monto': montoCuota,
+      'frecuencia': frecuencia,
+      'cuotas': cantidadCuotas,
+      'cuotas_confirmadas': 0,
+      'fecha_inicio': fechaInicioStr,
+      'fecha_fin': acuerdo['fecha_fin'],
+      'categoria': acuerdo['categoria'],
+      'observaciones': acuerdo['observaciones'],
+      'activo': 1,
+      'eliminado': 0,
+      'sync_estado': 'PENDIENTE',
+      'created_ts': now,
+      'updated_ts': now,
+    });
+
+    // 2. Crear cuotas individuales en `compromiso_cuotas`
     for (var i = 0; i < cantidadCuotas; i++) {
-      DateTime fechaVencimiento = fechaInicio;
-      
+      DateTime fechaCuota = fechaInicio;
+
       switch (frecuencia) {
         case 'MENSUAL':
-          fechaVencimiento = DateTime(fechaInicio.year, fechaInicio.month + i, fechaInicio.day);
+          fechaCuota = DateTime(
+              fechaInicio.year, fechaInicio.month + i, fechaInicio.day);
           break;
         case 'QUINCENAL':
-          fechaVencimiento = fechaInicio.add(Duration(days: 15 * i));
+          fechaCuota = fechaInicio.add(Duration(days: 15 * i));
           break;
         case 'SEMANAL':
-          fechaVencimiento = fechaInicio.add(Duration(days: 7 * i));
+          fechaCuota = fechaInicio.add(Duration(days: 7 * i));
           break;
+        case 'BIMESTRAL':
+          fechaCuota = DateTime(
+              fechaInicio.year, fechaInicio.month + (i * 2), fechaInicio.day);
+          break;
+        case 'TRIMESTRAL':
+          fechaCuota = DateTime(
+              fechaInicio.year, fechaInicio.month + (i * 3), fechaInicio.day);
+          break;
+        case 'SEMESTRAL':
+          fechaCuota = DateTime(
+              fechaInicio.year, fechaInicio.month + (i * 6), fechaInicio.day);
+          break;
+        case 'ANUAL':
+          fechaCuota = DateTime(fechaInicio.year + i, fechaInicio.month, fechaInicio.day);
+          break;
+        default:
+          // UNICA u otras
+          fechaCuota = fechaInicio;
       }
 
-      await txn.insert('compromisos', {
-        'acuerdo_id': acuerdoId,
-        'unidad_gestion_id': acuerdo['unidad_gestion_id'],
-        'entidad_plantel_id': acuerdo['entidad_plantel_id'],
-        'tipo': tipo,
-        'categoria': acuerdo['categoria'],
-        'monto': montoCuota,
-        'fecha_vencimiento': fechaVencimiento.toIso8601String().split('T')[0],
+      await txn.insert('compromiso_cuotas', {
+        'compromiso_id': compromisoId,
+        'numero_cuota': i + 1,
+        'fecha_programada': fechaCuota.toIso8601String().split('T')[0],
+        'monto_esperado': montoCuota,
         'estado': 'ESPERADO',
-        'activo': 1,
-        'observaciones': 'Cuota ${i + 1}/$cantidadCuotas - ${acuerdo['nombre']}',
-        'eliminado': 0,
-        'sync_estado': 'PENDIENTE',
         'created_ts': now,
         'updated_ts': now,
       });

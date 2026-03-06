@@ -6,15 +6,21 @@ import 'package:provider/provider.dart';
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/state/app_settings.dart';
+import '../../../features/shared/format.dart';
 import '../../../data/dao/db.dart';
 import '../services/categoria_movimiento_service.dart';
+import '../../shared/utils/category_icon_helper.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../widgets/ayuda_tesoreria_dialog.dart';
 
-/// Página para editar un compromiso financiero existente.
-/// FASE 13.5: Implementación con modalidades y cuotas.
+/// Pagina para editar un compromiso financiero existente.
+///
+/// Compromisos PAGO_UNICO (manuales): se editan todos los campos.
+/// Compromisos generados por Acuerdo: solo se editan nombre, observaciones
+/// y fecha. Para cambiar montos/frecuencia, editar el Acuerdo origen.
 class EditarCompromisoPage extends StatefulWidget {
   final int compromisoId;
-  
+
   const EditarCompromisoPage({
     super.key,
     required this.compromisoId,
@@ -28,37 +34,30 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
   final _formKey = GlobalKey<FormState>();
   final _compromisosService = CompromisosService.instance;
   final _plantelService = PlantelService.instance;
-  
+
   // Controllers
   final _nombreController = TextEditingController();
   final _montoController = TextEditingController();
-  final _cuotasController = TextEditingController();
-  final _frecuenciaDiasController = TextEditingController();
-  final _categoriaController = TextEditingController();
   final _observacionesController = TextEditingController();
-  
+
   // Form values
   String _tipo = 'INGRESO';
-  String _modalidad = 'PAGO_UNICO'; // PAGO_UNICO | MONTO_TOTAL_CUOTAS | RECURRENTE
-  String _frecuencia = 'MENSUAL';
+  String _modalidad = 'PAGO_UNICO';
+  String _frecuencia = 'UNICA_VEZ';
   DateTime _fechaInicio = DateTime.now();
-  DateTime? _fechaFin;
   int _unidadGestionId = 1;
-  String? _codigoCategoria; // Código de categoría seleccionada
-  
-  // Vista previa de cuotas
-  List<Map<String, dynamic>> _cuotasGeneradas = [];
-  List<Map<String, dynamic>> _cuotasExistentes = []; // Cuotas ya guardadas en DB
-  bool _distribucionManual = false;
-  final List<TextEditingController> _montoCuotaControllers = [];
-  
+  String? _codigoCategoria;
+  int? _entidadPlantelId;
+  int? _acuerdoId;
+
   bool _isLoading = true;
   bool _isSubmitting = false;
   String? _error;
-  List<Map<String, dynamic>> _frecuencias = [];
-  List<Map<String, dynamic>> _entidadesPlantel = [];
   List<Map<String, dynamic>> _categorias = [];
-  int? _entidadPlantelId;
+  List<Map<String, dynamic>> _entidadesPlantel = [];
+
+  /// true si el compromiso fue generado automaticamente por un Acuerdo
+  bool get _esDeAcuerdo => _acuerdoId != null;
 
   @override
   void initState() {
@@ -70,13 +69,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
   void dispose() {
     _nombreController.dispose();
     _montoController.dispose();
-    _cuotasController.dispose();
-    _frecuenciaDiasController.dispose();
-    _categoriaController.dispose();
     _observacionesController.dispose();
-    for (var controller in _montoCuotaControllers) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
@@ -85,14 +78,14 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       _isLoading = true;
       _error = null;
     });
-    
+
     try {
       final db = await AppDatabase.instance();
       final settings = Provider.of<AppSettings>(context, listen: false);
-      
+
       // Cargar compromiso
       final compromiso = await _compromisosService.obtenerCompromiso(widget.compromisoId);
-      
+
       if (compromiso == null) {
         setState(() {
           _error = 'Compromiso no encontrado';
@@ -100,60 +93,40 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         });
         return;
       }
-      
-      // Cargar cuotas existentes
-      final cuotasExistentes = await _compromisosService.obtenerCuotas(widget.compromisoId);
-      
-      // Cargar entidades del plantel (solo activas)
+
+      // Cargar entidades del plantel
       final entidades = await _plantelService.listarEntidades(soloActivos: true);
-      
-      // Cargar frecuencias
-      final frecuencias = await db.query('frecuencias', orderBy: 'descripcion');
-      
-      // Cargar categorías
+
+      // Cargar categorias
       final categorias = await CategoriaMovimientoService.obtenerCategoriasPorTipo(
         tipo: compromiso['tipo'] as String? ?? 'INGRESO',
       );
-      
+
       // Llenar campos con datos existentes
       _nombreController.text = compromiso['nombre'] as String? ?? '';
       _montoController.text = (compromiso['monto'] as double?)?.toString() ?? '';
-      _cuotasController.text = (compromiso['cuotas'] as int?)?.toString() ?? '';
-      _frecuenciaDiasController.text = (compromiso['frecuencia_dias'] as int?)?.toString() ?? '';
-      _codigoCategoria = compromiso['categoria'] as String?; // Usar código
+      _codigoCategoria = compromiso['categoria'] as String?;
       _observacionesController.text = compromiso['observaciones'] as String? ?? '';
-      
+
       _tipo = compromiso['tipo'] as String? ?? 'INGRESO';
       _modalidad = compromiso['modalidad'] as String? ?? 'PAGO_UNICO';
-      _frecuencia = compromiso['frecuencia'] as String? ?? 'MENSUAL';
-      
-      // Heredar unidad de gestión del contexto si está disponible
+      _frecuencia = compromiso['frecuencia'] as String? ?? 'UNICA_VEZ';
+      _acuerdoId = compromiso['acuerdo_id'] as int?;
+
       final unidadActivaId = settings.unidadGestionActivaId;
       _unidadGestionId = unidadActivaId ?? compromiso['unidad_gestion_id'] as int? ?? 1;
-      
+
       if (compromiso['fecha_inicio'] != null) {
         _fechaInicio = DateTime.parse(compromiso['fecha_inicio'] as String);
       }
-      
-      if (compromiso['fecha_fin'] != null) {
-        _fechaFin = DateTime.parse(compromiso['fecha_fin'] as String);
-      }
-      
-      // Pre-cargar entidad del plantel si está asociada
+
       _entidadPlantelId = compromiso['entidad_plantel_id'] as int?;
-      
+
       setState(() {
-        _frecuencias = frecuencias;
         _categorias = categorias;
         _entidadesPlantel = entidades;
-        _cuotasExistentes = cuotasExistentes;
         _isLoading = false;
       });
-      
-      // Generar vista previa inicial
-      if (_cuotasExistentes.isNotEmpty) {
-        _cargarCuotasExistentes();
-      }
     } catch (e, st) {
       await AppDatabase.logLocalError(
         scope: 'editar_compromiso.cargar',
@@ -161,178 +134,102 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         stackTrace: st,
         payload: {'compromisoId': widget.compromisoId},
       );
-      
+
       setState(() {
-        _error = 'Error al cargar datos: $e';
+        _error = 'Error al cargar los datos del compromiso.';
         _isLoading = false;
       });
     }
   }
 
-  /// Recarga categorías cuando cambia el tipo (INGRESO/EGRESO)
+  /// Recarga categorias cuando cambia el tipo (INGRESO/EGRESO)
   Future<void> _cargarCategorias() async {
     try {
       final cats = await CategoriaMovimientoService.obtenerCategoriasPorTipo(tipo: _tipo);
       setState(() {
         _categorias = cats;
-        // Validar que la categoría actual sea válida para el nuevo tipo
         if (_codigoCategoria != null) {
           final esValida = _categorias.any((cat) => cat['codigo'] == _codigoCategoria);
           if (!esValida) {
-            _codigoCategoria = null; // Limpiar si no es válida
+            _codigoCategoria = null;
           }
         }
       });
     } catch (e) {
-      // No hacer nada, mantener lista vacía
+      // Mantener lista vacia
     }
-  }
-
-  /// Carga cuotas existentes en la vista previa
-  void _cargarCuotasExistentes() {
-    setState(() {
-      _cuotasGeneradas = List.from(_cuotasExistentes);
-      _montoCuotaControllers.clear();
-      for (var cuota in _cuotasGeneradas) {
-        final controller = TextEditingController(
-          text: (cuota['monto_esperado'] as double?)?.toString() ?? '',
-        );
-        _montoCuotaControllers.add(controller);
-      }
-    });
-  }
-
-  /// Genera vista previa de cuotas según modalidad y parámetros actuales
-  Future<void> _generarVistaPrevia() async {
-    // Limpiar controladores previos
-    for (var controller in _montoCuotaControllers) {
-      controller.dispose();
-    }
-    _montoCuotaControllers.clear();
-
-    // Validar que haya monto
-    if (_montoController.text.isEmpty) {
-      setState(() => _cuotasGeneradas = []);
-      return;
-    }
-
-    final monto = double.tryParse(_montoController.text);
-    if (monto == null || monto <= 0) {
-      setState(() => _cuotasGeneradas = []);
-      return;
-    }
-
-    // Para MONTO_TOTAL_CUOTAS, validar cantidad de cuotas
-    if (_modalidad == 'MONTO_TOTAL_CUOTAS') {
-      if (_cuotasController.text.isEmpty) {
-        setState(() => _cuotasGeneradas = []);
-        return;
-      }
-      final cuotas = int.tryParse(_cuotasController.text);
-      if (cuotas == null || cuotas <= 0) {
-        setState(() => _cuotasGeneradas = []);
-        return;
-      }
-    }
-
-    try {
-      // Crear compromiso temporal para generar cuotas
-      final tempId = await _compromisosService.crearCompromiso(
-        unidadGestionId: _unidadGestionId,
-        nombre: 'TEMP',
-        tipo: _tipo,
-        modalidad: _modalidad,
-        monto: monto,
-        frecuencia: _frecuencia,
-        fechaInicio: DateFormat('yyyy-MM-dd').format(_fechaInicio),
-        cuotas: _modalidad == 'MONTO_TOTAL_CUOTAS' ? int.parse(_cuotasController.text) : null,
-        frecuenciaDias: _frecuencia == 'PERSONALIZADA' && _frecuenciaDiasController.text.isNotEmpty
-            ? int.parse(_frecuenciaDiasController.text)
-            : null,
-        fechaFin: _fechaFin != null ? DateFormat('yyyy-MM-dd').format(_fechaFin!) : null,
-        categoria: '',
-      );
-
-      // Generar cuotas
-      final cuotasGeneradas = await _compromisosService.generarCuotas(tempId);
-      
-      // Eliminar compromiso temporal
-      final db = await AppDatabase.instance();
-      await db.delete('compromisos', where: 'id = ?', whereArgs: [tempId]);
-
-      // Actualizar estado
-      setState(() {
-        _cuotasGeneradas = cuotasGeneradas;
-        
-        // Crear controladores para edición manual
-        _montoCuotaControllers.clear();
-        for (var cuota in _cuotasGeneradas) {
-          final controller = TextEditingController(
-            text: (cuota['monto_esperado'] as double?)?.toString() ?? '',
-          );
-          _montoCuotaControllers.add(controller);
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al generar vista previa: $e')),
-        );
-      }
-    }
-  }
-
-  /// Valida que la suma de montos manuales sea igual al total
-  String? _validarSumaMontosManuales() {
-    if (!_distribucionManual || _modalidad != 'MONTO_TOTAL_CUOTAS') {
-      return null;
-    }
-
-    final total = double.tryParse(_montoController.text);
-    if (total == null) return null;
-
-    double suma = 0;
-    for (var controller in _montoCuotaControllers) {
-      final monto = double.tryParse(controller.text);
-      if (monto == null || monto <= 0) {
-        return 'Todos los montos deben ser válidos y mayores a cero';
-      }
-      suma += monto;
-    }
-
-    if ((suma - total).abs() > 0.01) {
-      return 'La suma (\$${suma.toStringAsFixed(2)}) no coincide con el total (\$${total.toStringAsFixed(2)})';
-    }
-
-    return null;
   }
 
   Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    // Validar suma de montos manuales
-    final errorSuma = _validarSumaMontosManuales();
-    if (errorSuma != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorSuma), backgroundColor: Colors.red),
-      );
-      return;
-    }
-    
+    final monto = double.parse(_montoController.text);
+
+    // Modal de confirmacion
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.help_outline, color: Colors.orange[700]),
+            const SizedBox(width: 12),
+            const Text('Confirmar Cambios'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Guardar los cambios del compromiso?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _nombreController.text.trim(),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildInfoRow('Tipo', _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso'),
+                  _buildInfoRow('Monto', Format.money(monto)),
+                  _buildInfoRow('Fecha', DateFormat('dd/MM/yyyy').format(_fechaInicio)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
     setState(() => _isSubmitting = true);
-    
+
     try {
-      final monto = double.parse(_montoController.text);
-      final cuotas = _cuotasController.text.isNotEmpty 
-          ? int.parse(_cuotasController.text) 
-          : null;
-      final frecuenciaDias = _frecuencia == 'PERSONALIZADA' && _frecuenciaDiasController.text.isNotEmpty
-          ? int.parse(_frecuenciaDiasController.text)
-          : null;
-      
-      // Actualizar compromiso
       await _compromisosService.actualizarCompromiso(
         widget.compromisoId,
         nombre: _nombreController.text.trim(),
@@ -341,75 +238,53 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         monto: monto,
         frecuencia: _frecuencia,
         fechaInicio: DateFormat('yyyy-MM-dd').format(_fechaInicio),
-        frecuenciaDias: frecuenciaDias,
-        cuotas: cuotas,
-        fechaFin: _fechaFin != null ? DateFormat('yyyy-MM-dd').format(_fechaFin!) : null,
         categoria: _codigoCategoria ?? '',
-        observaciones: _observacionesController.text.trim().isNotEmpty 
-            ? _observacionesController.text.trim() 
+        observaciones: _observacionesController.text.trim().isNotEmpty
+            ? _observacionesController.text.trim()
             : null,
         entidadPlantelId: _entidadPlantelId,
       );
 
-      // Regenerar y guardar cuotas si se modificaron parámetros relevantes
-      if (_cuotasGeneradas.isNotEmpty) {
-        // Primero eliminar cuotas existentes
+      // Para PAGO_UNICO sin acuerdo, regenerar la unica cuota
+      if (!_esDeAcuerdo) {
         final db = await AppDatabase.instance();
-        await db.delete('compromiso_cuotas', where: 'compromiso_id = ?', whereArgs: [widget.compromisoId]);
-        
-        // Aplicar montos manuales si corresponde
-        if (_distribucionManual && _modalidad == 'MONTO_TOTAL_CUOTAS') {
-          for (int i = 0; i < _cuotasGeneradas.length; i++) {
-            final montoManual = double.parse(_montoCuotaControllers[i].text);
-            _cuotasGeneradas[i]['monto_esperado'] = montoManual;
-          }
-        }
-        
-        // Guardar nuevas cuotas
-        await _compromisosService.guardarCuotas(widget.compromisoId, _cuotasGeneradas);
+        await db.delete('compromiso_cuotas',
+            where: 'compromiso_id = ?', whereArgs: [widget.compromisoId]);
+        final cuotas = await _compromisosService.generarCuotas(widget.compromisoId);
+        await _compromisosService.guardarCuotas(widget.compromisoId, cuotas);
       }
-      
+
       if (mounted) {
-        // Modal de confirmación exitosa
         await showDialog(
           context: context,
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             title: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 32),
-                SizedBox(width: 12),
-                Text('Compromiso Actualizado'),
+                const Icon(Icons.check_circle, color: Colors.green, size: 32),
+                const SizedBox(width: 12),
+                const Text('Compromiso Actualizado'),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'El compromiso se actualizó correctamente:',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                SizedBox(height: 16),
+                const Text('El compromiso se actualizo correctamente.'),
+                const SizedBox(height: 12),
                 _buildInfoRow('Nombre', _nombreController.text.trim()),
                 _buildInfoRow('Tipo', _tipo),
-                _buildInfoRow('Modalidad', _modalidad),
-                _buildInfoRow('Monto', '\$${double.parse(_montoController.text).toStringAsFixed(2)}'),
-                _buildInfoRow('Frecuencia', _frecuencia),
-                if (cuotas != null)
-                  _buildInfoRow('Cuotas', cuotas.toString()),
-                _buildInfoRow('Fecha Inicio', DateFormat('dd/MM/yyyy').format(_fechaInicio)),
-                if (_fechaFin != null)
-                  _buildInfoRow('Fecha Fin', DateFormat('dd/MM/yyyy').format(_fechaFin!)),
+                _buildInfoRow('Monto', Format.money(monto)),
+                _buildInfoRow('Fecha', DateFormat('dd/MM/yyyy').format(_fechaInicio)),
               ],
             ),
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context); // Cierra el dialog
-                  Navigator.pop(context, true); // Retorna a la pantalla anterior
+                  Navigator.pop(context); // Cierra dialog
+                  Navigator.pop(context, true); // Retorna a pantalla anterior
                 },
-                child: Text('Aceptar'),
+                child: const Text('Aceptar'),
               ),
             ],
           ),
@@ -422,28 +297,27 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         stackTrace: st,
         payload: {'compromisoId': widget.compromisoId},
       );
-      
+
       setState(() => _isSubmitting = false);
-      
+
       if (mounted) {
-        // Modal de error
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: Row(
               children: [
-                Icon(Icons.error, color: Colors.red, size: 32),
-                SizedBox(width: 12),
-                Text('Error al Actualizar'),
+                const Icon(Icons.error, color: Colors.red, size: 32),
+                const SizedBox(width: 12),
+                const Text('Error al Actualizar'),
               ],
             ),
-            content: Text(
-              'No se pudo actualizar el compromiso. Por favor, intente nuevamente.\n\nDetalle: $e',
+            content: const Text(
+              'No se pudo actualizar el compromiso. Por favor, intente nuevamente.',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text('Cerrar'),
+                child: const Text('Cerrar'),
               ),
             ],
           ),
@@ -458,6 +332,11 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
       appBar: AppBar(
         title: const Text('Editar Compromiso'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Ayuda',
+            onPressed: () => AyudaTesoreriaDialog.show(context),
+          ),
           if (!_isLoading && !_isSubmitting)
             TextButton(
               onPressed: _guardar,
@@ -476,7 +355,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (_error != null) {
       return Center(
         child: Column(
@@ -494,249 +373,87 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
         ),
       );
     }
-    
+
     return ResponsiveContainer(
       maxWidth: 800,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Nombre
-            TextFormField(
-              controller: _nombreController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre *',
-                hintText: 'ej: Sueldo Entrenador',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.title),
-              ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
-              enabled: !_isSubmitting,
-            ),
-            const SizedBox(height: 16),
-            
-            // Tipo
-            DropdownButtonFormField<String>(
-              value: _tipo,
-              decoration: const InputDecoration(
-                labelText: 'Tipo *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.swap_vert),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
-                DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
-              ],
-              onChanged: _isSubmitting ? null : (v) {
-                if (v != null) {
-                  setState(() => _tipo = v);
-                  _cargarCategorias(); // Recargar categorías
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // MODALIDAD (selector principal)
-            Card(
-              color: Colors.blue.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Modalidad del compromiso *',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 12),
-                    RadioListTile<String>(
-                      title: const Text('Pago Único'),
-                      subtitle: const Text('Un solo pago en fecha específica'),
-                      value: 'PAGO_UNICO',
-                      groupValue: _modalidad,
-                      onChanged: _isSubmitting ? null : (v) {
-                        setState(() {
-                          _modalidad = v!;
-                          _generarVistaPrevia();
-                        });
-                      },
-                    ),
-                    RadioListTile<String>(
-                      title: const Text('Monto Total en Cuotas'),
-                      subtitle: const Text('Dividir un monto total en X cuotas'),
-                      value: 'MONTO_TOTAL_CUOTAS',
-                      groupValue: _modalidad,
-                      onChanged: _isSubmitting ? null : (v) {
-                        setState(() {
-                          _modalidad = v!;
-                          _generarVistaPrevia();
-                        });
-                      },
-                    ),
-                    RadioListTile<String>(
-                      title: const Text('Recurrente'),
-                      subtitle: const Text('Monto fijo que se repite periódicamente'),
-                      value: 'RECURRENTE',
-                      groupValue: _modalidad,
-                      onChanged: _isSubmitting ? null : (v) {
-                        setState(() {
-                          _modalidad = v!;
-                          _generarVistaPrevia();
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Monto
-            TextFormField(
-              controller: _montoController,
-              decoration: InputDecoration(
-                labelText: _modalidad == 'MONTO_TOTAL_CUOTAS' 
-                    ? 'Monto total * (a dividir)'
-                    : 'Monto * (por cuota)',
-                hintText: 'ej: 50000',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.attach_money),
-              ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-              ],
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Requerido';
-                final monto = double.tryParse(v);
-                if (monto == null || monto <= 0) return 'Debe ser mayor a cero';
-                return null;
-              },
-              onChanged: (_) => _generarVistaPrevia(),
-              enabled: !_isSubmitting,
-            ),
-            const SizedBox(height: 16),
-            
-            // Frecuencia
-            DropdownButtonFormField<String>(
-              value: _frecuencia,
-              decoration: const InputDecoration(
-                labelText: 'Frecuencia *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.calendar_today),
-              ),
-              items: _frecuencias.map((f) {
-                return DropdownMenuItem(
-                  value: f['codigo'] as String,
-                  child: Text(f['descripcion'] as String),
-                );
-              }).toList(),
-              onChanged: _isSubmitting ? null : (v) {
-                if (v != null) {
-                  setState(() => _frecuencia = v);
-                  _generarVistaPrevia();
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // Frecuencia días (solo PERSONALIZADA)
-            if (_frecuencia == 'PERSONALIZADA')
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Banner si es de acuerdo
+              if (_esDeAcuerdo) _buildBannerAcuerdo(),
+              if (_esDeAcuerdo) const SizedBox(height: 16),
+
+              // Banner informativo
+              _buildBannerInfo(),
+              const SizedBox(height: 24),
+
+              // Nombre
               TextFormField(
-                controller: _frecuenciaDiasController,
+                controller: _nombreController,
                 decoration: const InputDecoration(
-                  labelText: 'Días de frecuencia *',
-                  hintText: 'ej: 15',
+                  labelText: 'Nombre *',
+                  hintText: 'ej: Pago arbitro del sabado',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.event_repeat),
+                  prefixIcon: Icon(Icons.title),
                 ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                validator: (v) {
-                  if (_frecuencia == 'PERSONALIZADA') {
-                    if (v == null || v.trim().isEmpty) return 'Requerido';
-                    final dias = int.tryParse(v);
-                    if (dias == null || dias <= 0) return 'Debe ser mayor a cero';
-                  }
-                  return null;
-                },
-                onChanged: (_) => _generarVistaPrevia(),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
                 enabled: !_isSubmitting,
               ),
-            if (_frecuencia == 'PERSONALIZADA') const SizedBox(height: 16),
-            
-            // Cantidad de cuotas (solo MONTO_TOTAL_CUOTAS)
-            if (_modalidad == 'MONTO_TOTAL_CUOTAS')
-              TextFormField(
-                controller: _cuotasController,
+              const SizedBox(height: 16),
+
+              // Tipo (no editable si es de acuerdo)
+              DropdownButtonFormField<String>(
+                value: _tipo,
                 decoration: const InputDecoration(
-                  labelText: 'Cantidad de cuotas *',
-                  hintText: 'ej: 12',
+                  labelText: 'Tipo *',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.repeat),
-                  helperText: 'En cuántas cuotas dividir el monto total',
+                  prefixIcon: Icon(Icons.swap_vert),
                 ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                validator: (v) {
-                  if (_modalidad == 'MONTO_TOTAL_CUOTAS') {
-                    if (v == null || v.trim().isEmpty) return 'Requerido';
-                    final cuotas = int.tryParse(v);
-                    if (cuotas == null || cuotas <= 0) return 'Debe ser mayor a cero';
+                items: const [
+                  DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
+                  DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
+                ],
+                onChanged: (_isSubmitting || _esDeAcuerdo) ? null : (v) {
+                  if (v != null) {
+                    setState(() => _tipo = v);
+                    _cargarCategorias();
                   }
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Monto (no editable si es de acuerdo)
+              TextFormField(
+                controller: _montoController,
+                decoration: const InputDecoration(
+                  labelText: 'Monto *',
+                  hintText: 'ej: 50000',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.attach_money),
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Requerido';
+                  final monto = double.tryParse(v);
+                  if (monto == null || monto <= 0) return 'Debe ser mayor a cero';
                   return null;
                 },
-                onChanged: (_) => _generarVistaPrevia(),
-                enabled: !_isSubmitting,
+                enabled: !_isSubmitting && !_esDeAcuerdo,
               ),
-            if (_modalidad == 'MONTO_TOTAL_CUOTAS') const SizedBox(height: 16),
-            
-            // Fecha inicio
-            ListTile(
-              title: const Text('Fecha de inicio *'),
-              subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaInicio)),
-              leading: const Icon(Icons.calendar_month),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-                side: const BorderSide(color: Colors.grey),
-              ),
-              onTap: _isSubmitting ? null : () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _fechaInicio,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2100),
-                );
-                if (picked != null) {
-                  setState(() => _fechaInicio = picked);
-                  _generarVistaPrevia();
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // Fecha fin (solo para RECURRENTE)
-            if (_modalidad == 'RECURRENTE')
+              const SizedBox(height: 16),
+
+              // Fecha
               ListTile(
-                title: const Text('Fecha de fin (opcional)'),
-                subtitle: Text(
-                  _fechaFin != null 
-                      ? DateFormat('dd/MM/yyyy').format(_fechaFin!)
-                      : 'Hasta fin de año ${DateTime.now().year}',
-                ),
-                leading: const Icon(Icons.event_busy),
-                trailing: _fechaFin != null
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: _isSubmitting ? null : () {
-                          setState(() => _fechaFin = null);
-                          _generarVistaPrevia();
-                        },
-                      )
-                    : null,
+                title: const Text('Fecha programada *'),
+                subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaInicio)),
+                leading: const Icon(Icons.calendar_month),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(4),
                   side: const BorderSide(color: Colors.grey),
@@ -744,209 +461,247 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
                 onTap: _isSubmitting ? null : () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _fechaFin ?? _fechaInicio.add(const Duration(days: 365)),
-                    firstDate: _fechaInicio,
+                    initialDate: _fechaInicio,
+                    firstDate: DateTime(2020),
                     lastDate: DateTime(2100),
                   );
                   if (picked != null) {
-                    setState(() => _fechaFin = picked);
-                    _generarVistaPrevia();
+                    setState(() => _fechaInicio = picked);
                   }
                 },
               ),
-            if (_modalidad == 'RECURRENTE') const SizedBox(height: 16),
-            
-            // Categoría (dropdown con categorías del tipo)
-            DropdownButtonFormField<String>(
-              value: _codigoCategoria,
-              decoration: const InputDecoration(
-                labelText: 'Categoría',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.category),
-                hintText: 'Seleccione una categoría',
-              ),
-              items: _categorias.map((cat) {
-                final codigo = cat['codigo'] as String;
-                final nombre = cat['nombre'] as String;
-                return DropdownMenuItem<String>(
-                  value: codigo,
-                  child: Text(nombre),
-                );
-              }).toList(),
-              onChanged: _isSubmitting ? null : (v) => setState(() => _codigoCategoria = v),
-              validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
-            ),
-            const SizedBox(height: 16),
-            
-            // Jugador/Staff del plantel
-            if (_entidadesPlantel.isNotEmpty)
-              DropdownButtonFormField<int>(
-                value: _entidadPlantelId,
-                decoration: const InputDecoration(
-                  labelText: 'Jugador / Staff (opcional)',
-                  border: OutlineInputBorder(),
-                  hintText: 'Asociar a un jugador o miembro del cuerpo técnico',
-                  helperText: 'Útil para sueldos, viandas, combustibles del plantel',
-                  prefixIcon: Icon(Icons.person),
-                ),
-                items: [
-                  const DropdownMenuItem<int>(
-                    value: null,
-                    child: Text('-- Sin asociar --'),
-                  ),
-                  ..._entidadesPlantel.map((entidad) {
-                    final id = entidad['id'] as int;
-                    final nombre = entidad['nombre'] as String;
-                    final rol = entidad['rol'] as String;
-                    return DropdownMenuItem<int>(
-                      value: id,
-                      child: Text('$nombre ($rol)'),
-                    );
-                  }),
-                ],
-                onChanged: !_isSubmitting ? (v) => setState(() => _entidadPlantelId = v) : null,
-              ),
-            const SizedBox(height: 16),
-            
-            // Observaciones
-            TextFormField(
-              controller: _observacionesController,
-              decoration: const InputDecoration(
-                labelText: 'Observaciones',
-                hintText: 'Notas adicionales...',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.notes),
-              ),
-              maxLines: 3,
-              enabled: !_isSubmitting,
-            ),
-            const SizedBox(height: 24),
-            
-            // Vista previa de cuotas
-            if (_cuotasGeneradas.isNotEmpty) ...[
-              Card(
-                color: Colors.green.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Vista previa de cuotas',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              const SizedBox(height: 16),
+
+              // Categoria
+              if (_categorias.isNotEmpty)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Autocomplete<Map<String, dynamic>>(
+                      initialValue: _codigoCategoria != null
+                          ? TextEditingValue(
+                              text: _categorias
+                                  .where((c) => c['codigo'] == _codigoCategoria)
+                                  .map((c) => c['nombre'].toString())
+                                  .firstOrNull ?? '',
+                            )
+                          : TextEditingValue.empty,
+                      displayStringForOption: (cat) => cat['nombre'].toString(),
+                      optionsBuilder: (textEditingValue) {
+                        if (textEditingValue.text.isEmpty) return _categorias;
+                        final query = textEditingValue.text.toLowerCase();
+                        return _categorias.where((cat) {
+                          final nombre = cat['nombre'].toString().toLowerCase();
+                          final codigo = cat['codigo'].toString().toLowerCase();
+                          return nombre.contains(query) || codigo.contains(query);
+                        });
+                      },
+                      onSelected: (cat) {
+                        setState(() => _codigoCategoria = cat['codigo'].toString());
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextFormField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Categoria (opcional)',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.category),
+                            hintText: 'Escribi para buscar...',
                           ),
-                          Text(
-                            '${_cuotasGeneradas.length} cuotas',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      // Opción de distribución manual (solo MONTO_TOTAL_CUOTAS)
-                      if (_modalidad == 'MONTO_TOTAL_CUOTAS')
-                        SwitchListTile(
-                          title: const Text('Distribución manual'),
-                          subtitle: const Text('Editar monto de cada cuota individualmente'),
-                          value: _distribucionManual,
-                          onChanged: (v) => setState(() => _distribucionManual = v),
-                        ),
-                      
-                      const Divider(),
-                      
-                      // Lista de cuotas
-                      ...List.generate(_cuotasGeneradas.length, (index) {
-                        final cuota = _cuotasGeneradas[index];
-                        final fecha = cuota['fecha_programada'] as String;
-                        final monto = cuota['monto_esperado'] as double;
-                        
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: Text('Cuota ${cuota['numero_cuota']}:'),
+                          enabled: !_isSubmitting,
+                          onChanged: (text) {
+                            final match = _categorias.where(
+                              (c) => c['nombre'].toString().toLowerCase() == text.toLowerCase(),
+                            );
+                            if (match.isEmpty) _codigoCategoria = null;
+                          },
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            borderRadius: BorderRadius.circular(8),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: 250,
+                                maxWidth: constraints.maxWidth,
                               ),
-                              Expanded(
-                                flex: 3,
-                                child: Text(DateFormat('dd/MM/yyyy').format(DateTime.parse(fecha))),
+                              child: ListView.separated(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: options.length,
+                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final cat = options.elementAt(index);
+                                  return ListTile(
+                                    dense: true,
+                                    leading: Icon(
+                                        CategoryIconHelper.fromName(cat['icono'] as String?),
+                                        size: 20),
+                                    title: Text(cat['nombre'].toString()),
+                                    subtitle: Text(
+                                      cat['codigo'].toString(),
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                    ),
+                                    onTap: () => onSelected(cat),
+                                  );
+                                },
                               ),
-                              Expanded(
-                                flex: 3,
-                                child: _distribucionManual && _modalidad == 'MONTO_TOTAL_CUOTAS'
-                                    ? TextFormField(
-                                        controller: _montoCuotaControllers[index],
-                                        decoration: const InputDecoration(
-                                          prefix: Text('\$'),
-                                          isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                        ),
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                                        ],
-                                      )
-                                    : Text('\$${monto.toStringAsFixed(2)}'),
-                              ),
-                            ],
+                            ),
                           ),
                         );
-                      }),
-                      
-                      // Validación de suma
-                      if (_distribucionManual && _modalidad == 'MONTO_TOTAL_CUOTAS') ...[
-                        const Divider(),
-                        Builder(
-                          builder: (context) {
-                            final error = _validarSumaMontosManuales();
-                            if (error != null) {
-                              return Text(
-                                error,
-                                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                              );
-                            }
-                            return const Text(
-                              '✓ Suma válida',
-                              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                            );
-                          },
-                        ),
-                      ],
-                    ],
+                      },
+                    );
+                  },
+                )
+              else
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Categoria',
+                    border: OutlineInputBorder(),
+                  ),
+                  child: Text(
+                    'Sin categorias disponibles',
+                    style: TextStyle(color: Colors.grey.shade500),
                   ),
                 ),
+              const SizedBox(height: 16),
+
+              // Jugador/Staff del plantel
+              if (_entidadesPlantel.isNotEmpty)
+                DropdownButtonFormField<int>(
+                  value: _entidadPlantelId,
+                  decoration: const InputDecoration(
+                    labelText: 'Jugador / Staff (opcional)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('-- Sin asociar --'),
+                    ),
+                    ..._entidadesPlantel.map((entidad) {
+                      final id = entidad['id'] as int;
+                      final nombre = entidad['nombre'] as String;
+                      final rol = entidad['rol'] as String;
+                      return DropdownMenuItem<int>(
+                        value: id,
+                        child: Text('$nombre ($rol)'),
+                      );
+                    }),
+                  ],
+                  onChanged: !_isSubmitting ? (v) => setState(() => _entidadPlantelId = v) : null,
+                ),
+              const SizedBox(height: 16),
+
+              // Observaciones
+              TextFormField(
+                controller: _observacionesController,
+                decoration: const InputDecoration(
+                  labelText: 'Observaciones',
+                  hintText: 'Notas adicionales...',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.notes),
+                ),
+                maxLines: 3,
+                enabled: !_isSubmitting,
               ),
               const SizedBox(height: 24),
-            ],
-            
-            // Botón guardar
-            ElevatedButton.icon(
-              onPressed: _isSubmitting ? null : _guardar,
-              icon: _isSubmitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save),
-              label: Text(_isSubmitting ? 'Guardando...' : 'Guardar Cambios'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
+
+              // Boton guardar
+              ElevatedButton.icon(
+                onPressed: _isSubmitting ? null : _guardar,
+                icon: _isSubmitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save),
+                label: Text(_isSubmitting ? 'Guardando...' : 'Guardar Cambios'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
-  
+
+  /// Banner informativo
+  Widget _buildBannerInfo() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Editando compromiso puntual. Los campos marcados con * son obligatorios.',
+              style: TextStyle(color: Colors.blue.shade800, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner para compromisos generados por un Acuerdo
+  Widget _buildBannerAcuerdo() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.purple.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.purple.shade300),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.handshake, color: Colors.purple.shade700, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Este compromiso fue generado por un Acuerdo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.purple.shade900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'El tipo y monto no se pueden modificar directamente. '
+                  'Para cambiar esos valores, edita el Acuerdo origen.',
+                  style: TextStyle(
+                    color: Colors.purple.shade800,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -966,7 +721,7 @@ class _EditarCompromisoPageState extends State<EditarCompromisoPage> {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(fontWeight: FontWeight.w500),
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ),
         ],

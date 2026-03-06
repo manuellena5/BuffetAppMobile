@@ -1,23 +1,16 @@
 import 'package:intl/intl.dart';
 
 import '../../../data/dao/db.dart';
+import '../../../domain/paginated_result.dart';
 
 class MovimientoService {
   Future<List<Map<String, dynamic>>> listarPorCaja(int cajaId) async {
     try {
       final db = await AppDatabase.instance();
-      final hasMpCol = AppDatabase.medioPagoColumnReady;
-      final rows = hasMpCol
-          ? await db.rawQuery('''
+      final rows = await db.rawQuery('''
               SELECT cm.*, mp.descripcion as medio_pago_desc
               FROM caja_movimiento cm
               LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
-              WHERE cm.caja_id=?
-              ORDER BY cm.created_ts DESC
-            ''', [cajaId])
-          : await db.rawQuery('''
-              SELECT cm.*, 'Efectivo' as medio_pago_desc
-              FROM caja_movimiento cm
               WHERE cm.caja_id=?
               ORDER BY cm.created_ts DESC
             ''', [cajaId]);
@@ -97,26 +90,6 @@ class MovimientoService {
   Future<Map<String, double>> totalesPorCajaPorMp(int cajaId) async {
     try {
       final db = await AppDatabase.instance();
-      final hasMpCol = AppDatabase.medioPagoColumnReady;
-
-      if (!hasMpCol) {
-        // Sin columna medio_pago_id: asumir todo como efectivo
-        final rows = await db.rawQuery('''
-          SELECT 
-            COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ingresos_total,
-            COALESCE(SUM(CASE WHEN tipo='RETIRO'  THEN monto END),0) as retiros_total
-          FROM caja_movimiento WHERE caja_id=?
-        ''', [cajaId]);
-        final r = rows.first;
-        return {
-          'ingresosEfectivo': (r['ingresos_total'] as num).toDouble(),
-          'retirosEfectivo': (r['retiros_total'] as num).toDouble(),
-          'ingresosTransferencia': 0.0,
-          'retirosTransferencia': 0.0,
-          'ingresosTotal': (r['ingresos_total'] as num).toDouble(),
-          'retirosTotal': (r['retiros_total'] as num).toDouble(),
-        };
-      }
 
       final rows = await db.rawQuery('''
         SELECT 
@@ -155,6 +128,7 @@ class EventoMovimientoService {
     String? categoria,
     required double monto,
     required int medioPagoId,
+    int? unidadGestionId,
     DateTime? fecha,
     String? observacion,
     String? dispositivoId,
@@ -180,6 +154,7 @@ class EventoMovimientoService {
       return await db.insert('evento_movimiento', {
         'evento_id': eventoId,
         'disciplina_id': disciplinaId,
+        'unidad_gestion_id': unidadGestionId ?? disciplinaId,
         'cuenta_id': cuentaId,
         'tipo': tipo.toUpperCase(),
         'categoria': categoria,
@@ -296,6 +271,102 @@ class EventoMovimientoService {
     }
   }
 
+  /// Lista movimientos con paginación real (COUNT + LIMIT/OFFSET).
+  /// Filtra por mes, tipo y estado directamente en SQL.
+  Future<PaginatedResult<Map<String, dynamic>>> listarPaginado({
+    int? disciplinaId,
+    String? eventoId,
+    required int year,
+    required int month,
+    String? tipo,
+    String? estado,
+    int page = 1,
+    int pageSize = 50,
+    bool incluirEliminados = false,
+  }) async {
+    try {
+      final db = await AppDatabase.instance();
+      final where = <String>[];
+      final args = <Object?>[];
+
+      if (!incluirEliminados) {
+        where.add('(em.eliminado IS NULL OR em.eliminado = 0)');
+      }
+      if (disciplinaId != null) {
+        where.add('em.disciplina_id=?');
+        args.add(disciplinaId);
+      }
+      if (eventoId != null) {
+        where.add('em.evento_id=?');
+        args.add(eventoId);
+      }
+
+      // Filtro por mes: calcular rango epoch ms
+      final mesInicio = DateTime(year, month);
+      final mesFin = (month == 12)
+          ? DateTime(year + 1, 1)
+          : DateTime(year, month + 1);
+      where.add('em.created_ts >= ? AND em.created_ts < ?');
+      args.add(mesInicio.millisecondsSinceEpoch);
+      args.add(mesFin.millisecondsSinceEpoch);
+
+      if (tipo != null) {
+        where.add('em.tipo=?');
+        args.add(tipo);
+      }
+      if (estado != null) {
+        where.add("(em.estado IS NULL AND ?='CONFIRMADO' OR em.estado=?)");
+        args.add(estado);
+        args.add(estado);
+      }
+
+      final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+      final offset = (page - 1) * pageSize;
+
+      // COUNT total
+      final countResult = await db.rawQuery(
+        'SELECT COUNT(*) as total FROM evento_movimiento em $whereSql',
+        args,
+      );
+      final totalCount = (countResult.first['total'] as int?) ?? 0;
+
+      // Datos paginados
+      final rows = await db.rawQuery('''
+        SELECT
+          em.*,
+          mp.descripcion as medio_pago_desc,
+          c.nombre as compromiso_nombre
+        FROM evento_movimiento em
+        LEFT JOIN metodos_pago mp ON mp.id = em.medio_pago_id
+        LEFT JOIN compromisos c ON c.id = em.compromiso_id
+        $whereSql
+        ORDER BY em.created_ts DESC
+        LIMIT $pageSize OFFSET $offset
+      ''', args);
+
+      return PaginatedResult<Map<String, dynamic>>(
+        items: rows.map((e) => Map<String, dynamic>.from(e)).toList(),
+        totalCount: totalCount,
+        currentPage: page,
+        pageSize: pageSize,
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+          scope: 'evento_mov.listarPaginado',
+          error: e,
+          stackTrace: st,
+          payload: {
+            'disciplinaId': disciplinaId,
+            'year': year,
+            'month': month,
+            'tipo': tipo,
+            'estado': estado,
+            'page': page,
+          });
+      rethrow;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> listarPendientes({
     int? disciplinaId,
     int limit = 200,
@@ -343,6 +414,7 @@ class EventoMovimientoService {
     String? categoria,
     required double monto,
     required int medioPagoId,
+    int? unidadGestionId,
     String? observacion,
     String? archivoLocalPath,
     String? archivoNombre,
@@ -355,6 +427,7 @@ class EventoMovimientoService {
       await db.update('evento_movimiento', {
         'evento_id': eventoId,
         'disciplina_id': disciplinaId,
+        'unidad_gestion_id': unidadGestionId ?? disciplinaId,
         'cuenta_id': cuentaId,
         'tipo': tipo.toUpperCase(),
         'categoria': categoria,

@@ -7,7 +7,7 @@ class MovimientoService {
     try {
       final db = await AppDatabase.instance();
     final rows = await db.query('caja_movimiento',
-      where: 'caja_id=?', whereArgs: [cajaId], orderBy: 'created_ts DESC');
+      where: 'caja_id=? AND eliminado=0', whereArgs: [cajaId], orderBy: 'created_ts DESC');
       return rows.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'mov.listar', error: e, stackTrace: st, payload: {'cajaId': cajaId});
@@ -48,7 +48,9 @@ class MovimientoService {
   Future<void> eliminar(int id) async {
     try {
       final db = await AppDatabase.instance();
-      await db.delete('caja_movimiento', where: 'id=?', whereArgs: [id]);
+      await db.update('caja_movimiento', {
+        'eliminado': 1,
+      }, where: 'id=?', whereArgs: [id]);
     } catch (e, st) {
       await AppDatabase.logLocalError(scope: 'mov.eliminar', error: e, stackTrace: st, payload: {'id': id});
       rethrow;
@@ -62,7 +64,7 @@ class MovimientoService {
       SELECT 
         COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto END),0) as ingresos,
         COALESCE(SUM(CASE WHEN tipo='RETIRO' THEN monto END),0) as retiros
-      FROM caja_movimiento WHERE caja_id=?
+      FROM caja_movimiento WHERE caja_id=? AND eliminado=0
       ''', [cajaId]);
       final r = rows.first;
       return {
@@ -79,11 +81,13 @@ class MovimientoService {
 class EventoMovimientoService {
   Future<int> crear({
     required int disciplinaId,
+    required int cuentaId,
     String? eventoId,
     required String tipo,
     String? categoria,
     required double monto,
     required int medioPagoId,
+    String? fecha,
     String? observacion,
     String? dispositivoId,
     int? compromisoId,
@@ -93,13 +97,16 @@ class EventoMovimientoService {
   }) async {
     try {
       final db = await AppDatabase.instance();
+      final fechaStr = fecha ?? DateTime.now().toIso8601String().substring(0, 10);
       return await db.insert('evento_movimiento', {
         'evento_id': eventoId,
         'disciplina_id': disciplinaId,
+        'cuenta_id': cuentaId,
         'tipo': tipo.toUpperCase(),
         'categoria': categoria,
         'monto': monto,
         'medio_pago_id': medioPagoId,
+        'fecha': fechaStr,
         'observacion': observacion,
         'dispositivo_id': dispositivoId,
         'compromiso_id': compromisoId,

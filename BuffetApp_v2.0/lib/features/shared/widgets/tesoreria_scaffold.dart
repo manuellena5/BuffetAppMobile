@@ -141,6 +141,13 @@ class _TesoreriaScaffoldState extends State<TesoreriaScaffold> {
             backgroundColor: widget.appBarColor ?? Colors.teal,
             foregroundColor: Colors.white,
             automaticallyImplyLeading: !drawerState.isFixed && widget.showBackButton,
+            // I.6: Mostrar botón volver cuando drawer fijo y hay ruta previa
+            leading: drawerState.isFixed && widget.showBackButton && Navigator.canPop(context)
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.pop(context),
+                  )
+                : null,
             actions: widget.actions,
             bottom: widget.bottom,
           ),

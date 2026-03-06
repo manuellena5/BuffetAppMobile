@@ -1,10 +1,8 @@
 import '../../../data/dao/db.dart';
+import '../../../domain/safe_map.dart';
 import '../../shared/services/supabase_sync_service.dart';
 
 class CajaService {
-  /// Usa AppDatabase.medioPagoColumnReady (seteado por _onOpen).
-  static bool get _hasMedioPagoColumn => AppDatabase.medioPagoColumnReady;
-
   static String? puntoVentaFromCodigoCaja(String codigoCaja) {
     final s = codigoCaja.trim();
     if (s.isEmpty) return null;
@@ -30,7 +28,7 @@ class CajaService {
       final db = await AppDatabase.instance();
       final r = await db.query('disciplinas',
           columns: ['nombre'], orderBy: 'id ASC');
-      return r.map((e) => (e['nombre'] as String)).toList();
+      return r.map((e) => e.safeString('nombre')).toList();
     } catch (e, st) {
       await AppDatabase.logLocalError(
           scope: 'caja.listarDisciplinas', error: e, stackTrace: st);
@@ -97,7 +95,7 @@ class CajaService {
       if (existentes.isNotEmpty) {
         int maxSufijo = 1; // 1 implica que existe el base sin sufijo
         for (final row in existentes) {
-          final cc = (row['codigo_caja'] as String?) ?? '';
+          final cc = row.safeString('codigo_caja');
           if (cc == baseCodigo) {
             if (maxSufijo < 1) maxSufijo = 1;
             continue;
@@ -204,7 +202,7 @@ class CajaService {
       JOIN ventas v ON v.id = t.venta_id
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
     ''', [cajaId]);
-      final totalVentas = (tot.first['total'] as num?)?.toDouble() ?? 0.0;
+      final totalVentas = tot.first.safeDouble('total');
       // Ventas por efectivo (para total_efectivo_teorico)
       final tef = await db.rawQuery('''
       SELECT COALESCE(SUM(t.total_ticket),0) as total
@@ -214,7 +212,7 @@ class CajaService {
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado' AND LOWER(m.descripcion) = 'efectivo'
     ''', [cajaId]);
       final totalEfectivoVentas =
-          (tef.first['total'] as num?)?.toDouble() ?? 0.0;
+          tef.first.safeDouble('total');
       // Tickets emitidos (sin contar anulados)
       final tk = await db.rawQuery('''
       SELECT COALESCE(COUNT(1),0) as c
@@ -222,7 +220,7 @@ class CajaService {
       JOIN ventas v ON v.id = t.venta_id
       WHERE v.caja_id = ? AND v.activo = 1 AND t.status <> 'Anulado'
     ''', [cajaId]);
-      final totalTicketsEmitidos = (tk.first['c'] as num?)?.toInt() ?? 0;
+      final totalTicketsEmitidos = tk.first.safeInt('c');
       // Fórmula ajustada (incluye ingresos/retiros):
       // Diferencia = ((Efectivo - Fondo - Ingresos + Retiros) + Transferencias) - TotalVentas
       final cajaRow = await db.query('caja_diaria',
@@ -239,7 +237,7 @@ class CajaService {
           where: 'id=?',
           whereArgs: [cajaId],
           limit: 1);
-      final fondo = ((cajaRow.first['fondo_inicial'] as num?) ?? 0).toDouble();
+      final fondo = cajaRow.first.safeDouble('fondo_inicial');
       // Obtener totales de movimientos para aplicar fórmula ajustada
       final movTotals = await db.rawQuery('''
       SELECT 
@@ -248,14 +246,12 @@ class CajaService {
       FROM caja_movimiento
       WHERE caja_id = ?
     ''', [cajaId]);
-      final ingresos = (movTotals.first['ingresos'] as num?)?.toDouble() ?? 0.0;
-      final retiros = (movTotals.first['retiros'] as num?)?.toDouble() ?? 0.0;
-      // Obtener desglose por medio de pago (defensivo: verificar columna)
+      final ingresos = movTotals.first.safeDouble('ingresos');
+      final retiros = movTotals.first.safeDouble('retiros');
+      // Obtener desglose por medio de pago
       double ingEfec = 0.0;
       double retEfec = 0.0;
-      final hasMpCol = _hasMedioPagoColumn;
-      if (hasMpCol) {
-        final movMpTotals = await db.rawQuery('''
+      final movMpTotals = await db.rawQuery('''
         SELECT 
           COALESCE(SUM(CASE WHEN cm.tipo='INGRESO' AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ing_efec,
           COALESCE(SUM(CASE WHEN cm.tipo='RETIRO'  AND LOWER(mp.descripcion) LIKE '%efectivo%' THEN cm.monto END),0) as ret_efec,
@@ -265,13 +261,8 @@ class CajaService {
         LEFT JOIN metodos_pago mp ON mp.id = cm.medio_pago_id
         WHERE cm.caja_id = ?
       ''', [cajaId]);
-        ingEfec = (movMpTotals.first['ing_efec'] as num?)?.toDouble() ?? 0.0;
-        retEfec = (movMpTotals.first['ret_efec'] as num?)?.toDouble() ?? 0.0;
-      } else {
-        // Sin columna medio_pago_id: asumir todo como efectivo
-        ingEfec = ingresos;
-        retEfec = retiros;
-      }
+      ingEfec = movMpTotals.first.safeDouble('ing_efec');
+      retEfec = movMpTotals.first.safeDouble('ret_efec');
       // Fórmula con desglose por medio de pago
       final totalPorFormula =
           (efectivoEnCaja - fondo - ingEfec + retEfec) + transferencias;
@@ -305,7 +296,7 @@ class CajaService {
           where: 'id=?',
           whereArgs: [cajaId]);
       // Encolar cierre (incluye totales y diferencia)
-      final codigo = (cajaRow.first['codigo_caja'] as String?) ?? '';
+      final codigo = cajaRow.first.safeString('codigo_caja');
       await SupaSyncService.I.enqueueCaja({
         'codigo_caja': codigo,
         'caja_local_id': cajaId,

@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
+import '../../shared/state/app_settings.dart';
 import '../services/reporte_categorias_service.dart';
+import '../services/reporte_pdf_service.dart';
 import '../../shared/format.dart';
+import '../../../data/dao/db.dart';
 
 /// Pantalla de Reportes de Movimientos por Categorías
 class ReporteCategoriasPage extends StatefulWidget {
@@ -50,14 +56,19 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
   Future<void> _cargarDatos() async {
     setState(() => _loading = true);
     try {
+      final settings = context.read<AppSettings>();
+      final unidadGestionId = settings.unidadGestionActivaId;
+
       final datos = await ReporteCategoriasService.obtenerResumenPorCategoria(
         fechaDesde: _fechaDesde,
         fechaHasta: _fechaHasta,
+        unidadGestionId: unidadGestionId,
       );
       
       final totales = await ReporteCategoriasService.obtenerTotalesGenerales(
         fechaDesde: _fechaDesde,
         fechaHasta: _fechaHasta,
+        unidadGestionId: unidadGestionId,
       );
       
       setState(() {
@@ -69,7 +80,7 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar datos: $e')),
+          const SnackBar(content: Text('Error al cargar datos. Intente nuevamente.')),
         );
       }
     }
@@ -216,7 +227,7 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
       if (mounted) {
         setState(() => _exportando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al exportar: $e')),
+          const SnackBar(content: Text('Error al exportar. Intente nuevamente.')),
         );
       }
     }
@@ -242,6 +253,35 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
       currentRouteName: '/reportes/categorias',
       appBarColor: Colors.green,
       actions: [
+        IconButton(
+          icon: const Icon(Icons.picture_as_pdf),
+          onPressed: _datos.isEmpty
+              ? null
+              : () async {
+                  try {
+                    final mesAnio = _usandoFiltroPersonalizado
+                        ? '${DateFormat('dd/MM/yyyy').format(_fechaDesde)} - ${DateFormat('dd/MM/yyyy').format(_fechaHasta)}'
+                        : DateFormat('MMMM yyyy', 'es_AR').format(_mesSeleccionado);
+                    await ReportePdfService.instance.shareReporteCategorias(
+                      datos: _datos,
+                      totales: _totales.map((k, v) => MapEntry(k, v as dynamic)),
+                      mesAnio: mesAnio,
+                    );
+                  } catch (e, st) {
+                    await AppDatabase.logLocalError(
+                      scope: 'reporte_categorias.export_pdf',
+                      error: e,
+                      stackTrace: st,
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Error al generar PDF. Intente nuevamente.')),
+                      );
+                    }
+                  }
+                },
+          tooltip: 'Exportar a PDF',
+        ),
         IconButton(
           icon: _exportando
               ? const SizedBox(
@@ -430,20 +470,11 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
           // Tabla de datos
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? SkeletonLoader.table(rows: 5, columns: 4)
                 : _datos.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.inbox, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text(
-                              'No hay movimientos en el período seleccionado',
-                              style: TextStyle(color: Colors.grey, fontSize: 16),
-                            ),
-                          ],
-                        ),
+                    ? const EmptyState(
+                        icon: Icons.inbox,
+                        title: 'No hay movimientos en el período seleccionado',
                       )
                     : SingleChildScrollView(
                         scrollDirection: Axis.horizontal,

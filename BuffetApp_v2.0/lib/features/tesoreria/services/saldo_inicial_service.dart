@@ -18,51 +18,57 @@ class SaldoInicialService {
     required double monto,
     String? observacion,
   }) async {
-    // Validaciones básicas
-    if (periodoTipo != 'ANIO' && periodoTipo != 'MES') {
-      throw Exception('Tipo de período inválido. Debe ser ANIO o MES.');
-    }
-
-    if (periodoTipo == 'ANIO') {
-      // Validar formato YYYY
-      final anioRegex = RegExp(r'^\d{4}$');
-      if (!anioRegex.hasMatch(periodoValor)) {
-        throw Exception('Valor de año inválido. Formato esperado: YYYY');
+    try {
+      // Validaciones básicas
+      if (periodoTipo != 'ANIO' && periodoTipo != 'MES') {
+        throw Exception('Tipo de período inválido. Debe ser ANIO o MES.');
       }
-    } else if (periodoTipo == 'MES') {
-      // Validar formato YYYY-MM
-      final mesRegex = RegExp(r'^\d{4}-\d{2}$');
-      if (!mesRegex.hasMatch(periodoValor)) {
-        throw Exception('Valor de mes inválido. Formato esperado: YYYY-MM');
+
+      if (periodoTipo == 'ANIO') {
+        final anioRegex = RegExp(r'^\d{4}$');
+        if (!anioRegex.hasMatch(periodoValor)) {
+          throw Exception('Valor de año inválido. Formato esperado: YYYY');
+        }
+      } else if (periodoTipo == 'MES') {
+        final mesRegex = RegExp(r'^\d{4}-\d{2}$');
+        if (!mesRegex.hasMatch(periodoValor)) {
+          throw Exception('Valor de mes inválido. Formato esperado: YYYY-MM');
+        }
       }
-    }
 
-    if (monto < 0) {
-      throw Exception('El monto no puede ser negativo.');
-    }
+      if (monto < 0) {
+        throw Exception('El monto no puede ser negativo.');
+      }
 
-    // Verificar que no exista ya un saldo para esta unidad y período
-    final existe = await AppDatabase.existeSaldoInicial(
-      unidadGestionId: unidadGestionId,
-      periodoTipo: periodoTipo,
-      periodoValor: periodoValor,
-    );
-
-    if (existe) {
-      throw Exception(
-        'Ya existe un saldo inicial para esta unidad y período. '
-        'Por favor, edítelo en lugar de crear uno nuevo.',
+      final existe = await AppDatabase.existeSaldoInicial(
+        unidadGestionId: unidadGestionId,
+        periodoTipo: periodoTipo,
+        periodoValor: periodoValor,
       );
-    }
 
-    // Insertar el nuevo saldo
-    return await AppDatabase.insertSaldoInicial(
-      unidadGestionId: unidadGestionId,
-      periodoTipo: periodoTipo,
-      periodoValor: periodoValor,
-      monto: monto,
-      observacion: observacion,
-    );
+      if (existe) {
+        throw Exception(
+          'Ya existe un saldo inicial para esta unidad y período. '
+          'Por favor, edítelo en lugar de crear uno nuevo.',
+        );
+      }
+
+      return await AppDatabase.insertSaldoInicial(
+        unidadGestionId: unidadGestionId,
+        periodoTipo: periodoTipo,
+        periodoValor: periodoValor,
+        monto: monto,
+        observacion: observacion,
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.crear',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId, 'tipo': periodoTipo, 'valor': periodoValor},
+      );
+      rethrow;
+    }
   }
 
   /// Actualiza un saldo inicial existente.
@@ -72,28 +78,48 @@ class SaldoInicialService {
     required double monto,
     String? observacion,
   }) async {
-    if (monto < 0) {
-      throw Exception('El monto no puede ser negativo.');
-    }
+    try {
+      if (monto < 0) {
+        throw Exception('El monto no puede ser negativo.');
+      }
 
-    final filasAfectadas = await AppDatabase.actualizarSaldoInicial(
-      id: id,
-      monto: monto,
-      observacion: observacion,
-    );
+      final filasAfectadas = await AppDatabase.actualizarSaldoInicial(
+        id: id,
+        monto: monto,
+        observacion: observacion,
+      );
 
-    if (filasAfectadas == 0) {
-      throw Exception('Saldo inicial no encontrado.');
+      if (filasAfectadas == 0) {
+        throw Exception('Saldo inicial no encontrado.');
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.actualizar',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id, 'monto': monto},
+      );
+      rethrow;
     }
   }
 
   /// Elimina un saldo inicial.
   /// ⚠️ Usar con precaución: puede afectar cálculos históricos.
   static Future<void> eliminar(int id) async {
-    final filasAfectadas = await AppDatabase.eliminarSaldoInicial(id);
+    try {
+      final filasAfectadas = await AppDatabase.eliminarSaldoInicial(id);
 
-    if (filasAfectadas == 0) {
-      throw Exception('Saldo inicial no encontrado.');
+      if (filasAfectadas == 0) {
+        throw Exception('Saldo inicial no encontrado.');
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.eliminar',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
+      );
+      rethrow;
     }
   }
 
@@ -104,22 +130,42 @@ class SaldoInicialService {
     required String periodoTipo,
     required String periodoValor,
   }) async {
-    final map = await AppDatabase.obtenerSaldoInicial(
-      unidadGestionId: unidadGestionId,
-      periodoTipo: periodoTipo,
-      periodoValor: periodoValor,
-    );
+    try {
+      final map = await AppDatabase.obtenerSaldoInicial(
+        unidadGestionId: unidadGestionId,
+        periodoTipo: periodoTipo,
+        periodoValor: periodoValor,
+      );
 
-    return map != null ? SaldoInicial.fromMap(map) : null;
+      return map != null ? SaldoInicial.fromMap(map) : null;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.obtener',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId, 'tipo': periodoTipo, 'valor': periodoValor},
+      );
+      rethrow;
+    }
   }
 
   /// Lista todos los saldos iniciales, opcionalmente filtrados por unidad.
   static Future<List<SaldoInicial>> listar({int? unidadGestionId}) async {
-    final mapList = await AppDatabase.listarSaldosIniciales(
-      unidadGestionId: unidadGestionId,
-    );
+    try {
+      final mapList = await AppDatabase.listarSaldosIniciales(
+        unidadGestionId: unidadGestionId,
+      );
 
-    return mapList.map((map) => SaldoInicial.fromMap(map)).toList();
+      return mapList.map((map) => SaldoInicial.fromMap(map)).toList();
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.listar',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId},
+      );
+      rethrow;
+    }
   }
 
   /// Calcula el saldo inicial efectivo para un mes específico.
@@ -128,48 +174,51 @@ class SaldoInicialService {
   /// - Si existe saldo inicial del mes → usa ese.
   /// - Si NO existe saldo del mes pero SÍ del año → usa el saldo anual.
   /// - Si NO existe ninguno → retorna 0.
-  ///
-  /// Ejemplo:
-  /// - Para Enero 2026: busca saldo MES 2026-01, si no existe busca ANIO 2026.
-  /// - Para Febrero 2026: busca saldo MES 2026-02 (no debería existir normalmente).
-  ///
-  /// Nota: El saldo inicial anual solo se usa para el primer mes del año.
-  /// Los meses siguientes heredan el saldo del mes anterior (calculado externamente).
   static Future<double> calcularSaldoInicialMes({
     required int unidadGestionId,
     required int anio,
     required int mes,
   }) async {
-    final mesStr = mes.toString().padLeft(2, '0');
-    final periodoMes = '$anio-$mesStr';
-    final periodoAnio = anio.toString();
+    try {
+      final mesStr = mes.toString().padLeft(2, '0');
+      final periodoMes = '$anio-$mesStr';
+      final periodoAnio = anio.toString();
 
-    // 1) Buscar saldo inicial del mes específico
-    final saldoMes = await obtener(
-      unidadGestionId: unidadGestionId,
-      periodoTipo: 'MES',
-      periodoValor: periodoMes,
-    );
-
-    if (saldoMes != null) {
-      return saldoMes.monto;
-    }
-
-    // 2) Si es el primer mes del año (enero), buscar saldo inicial anual
-    if (mes == 1) {
-      final saldoAnio = await obtener(
+      // 1) Buscar saldo inicial del mes específico
+      final saldoMes = await obtener(
         unidadGestionId: unidadGestionId,
-        periodoTipo: 'ANIO',
-        periodoValor: periodoAnio,
+        periodoTipo: 'MES',
+        periodoValor: periodoMes,
       );
 
-      if (saldoAnio != null) {
-        return saldoAnio.monto;
+      if (saldoMes != null) {
+        return saldoMes.monto;
       }
-    }
 
-    // 3) No hay saldo inicial configurado
-    return 0.0;
+      // 2) Si es el primer mes del año (enero), buscar saldo inicial anual
+      if (mes == 1) {
+        final saldoAnio = await obtener(
+          unidadGestionId: unidadGestionId,
+          periodoTipo: 'ANIO',
+          periodoValor: periodoAnio,
+        );
+
+        if (saldoAnio != null) {
+          return saldoAnio.monto;
+        }
+      }
+
+      // 3) No hay saldo inicial configurado
+      return 0.0;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.calcular_mes',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId, 'anio': anio, 'mes': mes},
+      );
+      rethrow;
+    }
   }
 
   /// Verifica si existe un saldo inicial para una unidad y período.
@@ -178,11 +227,21 @@ class SaldoInicialService {
     required String periodoTipo,
     required String periodoValor,
   }) async {
-    return await AppDatabase.existeSaldoInicial(
-      unidadGestionId: unidadGestionId,
-      periodoTipo: periodoTipo,
-      periodoValor: periodoValor,
-    );
+    try {
+      return await AppDatabase.existeSaldoInicial(
+        unidadGestionId: unidadGestionId,
+        periodoTipo: periodoTipo,
+        periodoValor: periodoValor,
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'saldo_inicial.existe',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId, 'tipo': periodoTipo, 'valor': periodoValor},
+      );
+      rethrow;
+    }
   }
 
   /// Genera el período valor según el tipo.

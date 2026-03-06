@@ -113,7 +113,7 @@ class _UnidadGestionSelectorPageState extends State<UnidadGestionSelectorPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar: $e')),
+          SnackBar(content: Text('Error al guardar la configuración. Por favor, intente nuevamente.')),
         );
       }
     }

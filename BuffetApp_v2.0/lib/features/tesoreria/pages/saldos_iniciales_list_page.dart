@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../domain/models.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../services/saldo_inicial_service.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
@@ -192,10 +195,11 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/saldos_iniciales',
       title: 'Saldos Iniciales',
-      currentRouteName: '/saldos_iniciales',
-      appBarColor: Colors.teal,
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
@@ -203,8 +207,21 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
           tooltip: 'Actualizar',
         ),
       ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navegarNuevo,
+        icon: const Icon(Icons.add),
+        label: const Text('Nuevo Saldo'),
+      ),
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Saldos Iniciales',
+              subtitle: '${_saldos.length} registros',
+            ),
+          Expanded(
+            child: _loading
+          ? SkeletonLoader.list(count: 5)
           : ResponsiveContainer(
               maxWidth: 1200,
               child: Column(
@@ -358,10 +375,8 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
               ],
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _navegarNuevo,
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo Saldo'),
+          ),
+        ],
       ),
     );
   }

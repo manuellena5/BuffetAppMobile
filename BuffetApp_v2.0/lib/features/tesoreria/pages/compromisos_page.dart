@@ -6,6 +6,11 @@ import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/format.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
+import '../widgets/ayuda_tesoreria_dialog.dart';
+import '../widgets/calendario_mensual_widget.dart';
+import '../widgets/flujo_caja_widget.dart';
 import 'crear_compromiso_page.dart';
 import 'detalle_compromiso_page.dart';
 
@@ -18,29 +23,43 @@ class CompromisosPage extends StatefulWidget {
   State<CompromisosPage> createState() => _CompromisosPageState();
 }
 
-class _CompromisosPageState extends State<CompromisosPage> {
+class _CompromisosPageState extends State<CompromisosPage>
+    with SingleTickerProviderStateMixin {
   final _compromisosService = CompromisosService.instance;
-  
+
   List<Map<String, dynamic>> _compromisos = [];
   bool _isLoading = true;
   List<Map<String, dynamic>> _entidades = []; // Para dropdown de entidades
-  
+
   // FASE 22.5: Filtros visibles (no modal)
   int? _unidadGestionId;
   int? _entidadPlantelId; // Filtro por jugador/DT
   String? _rolFiltro; // 'DT', 'JUGADOR', 'OTRO', null = todos
   String? _tipoFiltro; // 'INGRESO', 'EGRESO', null = todos
-  bool? _origenAcuerdoFiltro; // true = solo acuerdos, false = solo manuales, null = todos
+  bool?
+      _origenAcuerdoFiltro; // true = solo acuerdos, false = solo manuales, null = todos
   bool? _activoFiltro; // true = activos, false = pausados, null = todos
-  
+
   // Vista
   bool _vistaTabla = true; // false = tarjetas, true = tabla (por defecto)
+
+  // Tabs: lista, calendario, flujo de caja
+  late final TabController _tabController;
+  final _calendarioMensualKey = GlobalKey<State>();
+  final _flujoCajaKey = GlobalKey<State>();
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _cargarEntidades();
     _cargarCompromisos();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _cargarEntidades() async {
@@ -51,10 +70,11 @@ class _CompromisosPageState extends State<CompromisosPage> {
         where: 'eliminado = 0',
         orderBy: 'nombre ASC',
       );
-      
+
       if (mounted) {
         setState(() {
-          _entidades = entidades.map((e) => Map<String, dynamic>.from(e)).toList();
+          _entidades =
+              entidades.map((e) => Map<String, dynamic>.from(e)).toList();
         });
       }
     } catch (e) {
@@ -64,67 +84,72 @@ class _CompromisosPageState extends State<CompromisosPage> {
 
   Future<void> _cargarCompromisos() async {
     setState(() => _isLoading = true);
-    
+
     try {
       // FASE 22.5: Usar vista completa con JOINs en lugar de enriquecer manualmente
       final db = await AppDatabase.instance();
-      
+
       // Construir query dinámico con filtros
       final whereConditions = <String>[];
       final whereArgs = <dynamic>[];
-      
+
       if (_unidadGestionId != null) {
         whereConditions.add('unidad_gestion_id = ?');
         whereArgs.add(_unidadGestionId);
       }
-      
+
       if (_tipoFiltro != null) {
         whereConditions.add('tipo = ?');
         whereArgs.add(_tipoFiltro);
       }
-      
+
       if (_activoFiltro != null) {
         whereConditions.add('activo = ?');
         whereArgs.add(_activoFiltro! ? 1 : 0);
       }
-      
+
       if (_entidadPlantelId != null) {
         whereConditions.add('entidad_plantel_id = ?');
         whereArgs.add(_entidadPlantelId);
       }
-      
+
       if (_rolFiltro != null) {
         whereConditions.add('entidad_rol = ?');
         whereArgs.add(_rolFiltro);
       }
-      
-      final whereClause = whereConditions.isEmpty ? null : whereConditions.join(' AND ');
-      
+
+      final whereClause =
+          whereConditions.isEmpty ? null : whereConditions.join(' AND ');
+
       final compromisosRaw = await db.query(
         'v_compromisos_completo',
         where: whereClause,
         whereArgs: whereArgs.isEmpty ? null : whereArgs,
         orderBy: 'fecha_inicio DESC',
       );
-      
-      var compromisos = compromisosRaw.map((c) => Map<String, dynamic>.from(c)).toList();
-      
+
+      var compromisos =
+          compromisosRaw.map((c) => Map<String, dynamic>.from(c)).toList();
+
       // Enriquecer con información de origen (si viene de acuerdo)
       for (final comp in compromisos) {
         final acuerdoId = comp['acuerdo_id'];
         if (acuerdoId != null) {
-          final esDeAcuerdo = await _compromisosService.esCompromisoPorAcuerdo(comp['id'] as int);
+          final esDeAcuerdo = await _compromisosService
+              .esCompromisoPorAcuerdo(comp['id'] as int);
           comp['es_de_acuerdo'] = esDeAcuerdo;
         } else {
           comp['es_de_acuerdo'] = false;
         }
       }
-      
+
       // Filtrar por origen de acuerdo
       if (_origenAcuerdoFiltro != null) {
-        compromisos = compromisos.where((c) => c['es_de_acuerdo'] == _origenAcuerdoFiltro).toList();
+        compromisos = compromisos
+            .where((c) => c['es_de_acuerdo'] == _origenAcuerdoFiltro)
+            .toList();
       }
-      
+
       setState(() {
         _compromisos = compromisos;
         _isLoading = false;
@@ -138,7 +163,9 @@ class _CompromisosPageState extends State<CompromisosPage> {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar compromisos: $e')),
+          const SnackBar(
+              content:
+                  Text('Error al cargar compromisos. Intente nuevamente.')),
         );
       }
     }
@@ -167,20 +194,22 @@ class _CompromisosPageState extends State<CompromisosPage> {
       } else {
         await _compromisosService.reactivarCompromiso(id);
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(activo ? 'Compromiso pausado' : 'Compromiso reactivado'),
+            content:
+                Text(activo ? 'Compromiso pausado' : 'Compromiso reactivado'),
           ),
         );
       }
-      
+
       _cargarCompromisos();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Error al procesar. Intente nuevamente.')),
         );
       }
     }
@@ -192,13 +221,20 @@ class _CompromisosPageState extends State<CompromisosPage> {
       title: 'Acuerdos y Compromisos',
       currentRouteName: '/compromisos',
       actions: [
-        // Toggle vista tabla/tarjetas
+        // Toggle vista tabla/tarjetas (solo en pestaña lista)
+        if (_tabController.index == 0)
+          IconButton(
+            icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
+            onPressed: () {
+              setState(() => _vistaTabla = !_vistaTabla);
+            },
+            tooltip: _vistaTabla ? 'Vista de tarjetas' : 'Vista de tabla',
+          ),
+        // Botón de ayuda
         IconButton(
-          icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
-          onPressed: () {
-            setState(() => _vistaTabla = !_vistaTabla);
-          },
-          tooltip: _vistaTabla ? 'Vista de tarjetas' : 'Vista de tabla',
+          icon: const Icon(Icons.help_outline),
+          tooltip: '¿Qué es cada concepto?',
+          onPressed: () => AyudaTesoreriaDialog.show(context),
         ),
       ],
       floatingActionButton: FloatingActionButton.extended(
@@ -209,46 +245,72 @@ class _CompromisosPageState extends State<CompromisosPage> {
       ),
       body: Column(
         children: [
-          // FASE 22.5: Filtros visibles
-          _buildFiltrosVisibles(),
-          const Divider(height: 1),
-          
-          // Contenido principal
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _compromisos.isEmpty
-                    ? _buildEmpty()
-                    : ResponsiveContainer(
-                        maxWidth: _vistaTabla ? 1400 : 1000,
-                        child: RefreshIndicator(
-                          onRefresh: _cargarCompromisos,
-                          child: _vistaTabla
-                              ? _buildTabla()
-                              : _buildTarjetas(),
-                        ),
-                      ),
+          // Tabs: Lista, Calendario y Flujo de caja
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: TabBar(
+              controller: _tabController,
+              onTap: (_) => setState(() {}),
+              isScrollable: false,
+              tabs: const [
+                Tab(icon: Icon(Icons.list_alt), text: 'Lista'),
+                Tab(icon: Icon(Icons.calendar_month), text: 'Calendario'),
+                Tab(icon: Icon(Icons.trending_up), text: 'Flujo de caja'),
+              ],
+            ),
           ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.event_note, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'No hay compromisos registrados',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Creá un compromiso para empezar',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // --- Pestaña 1: Lista ---
+                Column(
+                  children: [
+                    // FASE 22.5: Filtros visibles
+                    _buildFiltrosVisibles(),
+                    const Divider(height: 1),
+
+                    // Contenido principal
+                    Expanded(
+                      child: _isLoading
+                          ? SkeletonLoader.table(rows: 6, columns: 5)
+                          : _compromisos.isEmpty
+                              ? const EmptyState(
+                                  icon: Icons.event_note,
+                                  title: 'No hay compromisos registrados',
+                                  subtitle: 'Creá un compromiso para empezar',
+                                )
+                              : Align(
+                                  alignment: Alignment.topCenter,
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                        maxWidth: _vistaTabla ? 1400 : 1000),
+                                    child: RefreshIndicator(
+                                      onRefresh: _cargarCompromisos,
+                                      child: _vistaTabla
+                                          ? _buildTabla()
+                                          : _buildTarjetas(),
+                                    ),
+                                  ),
+                                ),
+                    ),
+                  ],
+                ),
+
+                // --- Pestaña 2: Calendario mensual ---
+                CalendarioMensualWidget(
+                  key: _calendarioMensualKey,
+                  unidadGestionId: _unidadGestionId,
+                ),
+
+                // --- Pestaña 3: Flujo de caja ---
+                FlujoCajaWidget(
+                  key: _flujoCajaKey,
+                  unidadGestionId: _unidadGestionId,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -274,43 +336,47 @@ class _CompromisosPageState extends State<CompromisosPage> {
                 SizedBox(
                   width: 200,
                   child: DropdownButtonFormField<int?>(
-                    value: _entidadPlantelId,
+                    initialValue: _entidadPlantelId,
                     decoration: const InputDecoration(
                       labelText: 'Entidad',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('Todos')),
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('Todos')),
                       ..._entidades.map((e) => DropdownMenuItem<int?>(
-                        value: e['id'] as int,
-                        child: Text(e['nombre'] as String),
-                      )),
+                            value: e['id'] as int,
+                            child: Text(e['nombre'] as String),
+                          )),
                     ],
                     onChanged: (val) {
                       setState(() => _entidadPlantelId = val);
                     },
                   ),
                 ),
-                
+
                 // Rol
                 SizedBox(
                   width: 150,
                   child: DropdownButtonFormField<String?>(
-                    value: _rolFiltro,
+                    initialValue: _rolFiltro,
                     decoration: const InputDecoration(
                       labelText: 'Rol',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
                       DropdownMenuItem(value: 'DT', child: Text('DT')),
-                      DropdownMenuItem(value: 'JUGADOR', child: Text('Jugador')),
+                      DropdownMenuItem(
+                          value: 'JUGADOR', child: Text('Jugador')),
                       DropdownMenuItem(value: 'OTRO', child: Text('Otro')),
                     ],
                     onChanged: (val) {
@@ -318,22 +384,24 @@ class _CompromisosPageState extends State<CompromisosPage> {
                     },
                   ),
                 ),
-                
+
                 // Tipo
                 SizedBox(
                   width: 150,
                   child: DropdownButtonFormField<String?>(
-                    value: _tipoFiltro,
+                    initialValue: _tipoFiltro,
                     decoration: const InputDecoration(
                       labelText: 'Tipo',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
-                      DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
+                      DropdownMenuItem(
+                          value: 'INGRESO', child: Text('Ingreso')),
                       DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
                     ],
                     onChanged: (val) {
@@ -341,16 +409,17 @@ class _CompromisosPageState extends State<CompromisosPage> {
                     },
                   ),
                 ),
-                
+
                 // Estado (activo/pausado)
                 SizedBox(
                   width: 150,
                   child: DropdownButtonFormField<bool?>(
-                    value: _activoFiltro,
+                    initialValue: _activoFiltro,
                     decoration: const InputDecoration(
                       labelText: 'Estado',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
@@ -364,23 +433,26 @@ class _CompromisosPageState extends State<CompromisosPage> {
                     },
                   ),
                 ),
-                
+
                 // Origen acuerdo
                 SizedBox(
                   width: 180,
                   child: DropdownButtonFormField<bool?>(
-                    value: _origenAcuerdoFiltro,
+                    initialValue: _origenAcuerdoFiltro,
                     decoration: const InputDecoration(
                       labelText: 'Origen',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
-                      DropdownMenuItem(value: true, child: Text('Solo acuerdos')),
-                      DropdownMenuItem(value: false, child: Text('Solo manuales')),
+                      DropdownMenuItem(
+                          value: true, child: Text('Solo acuerdos')),
+                      DropdownMenuItem(
+                          value: false, child: Text('Solo manuales')),
                     ],
                     onChanged: (val) {
                       setState(() => _origenAcuerdoFiltro = val);
@@ -389,9 +461,9 @@ class _CompromisosPageState extends State<CompromisosPage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Botones de acción
             Row(
               children: [
@@ -432,11 +504,12 @@ class _CompromisosPageState extends State<CompromisosPage> {
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
         child: DataTable(
+          showCheckboxColumn: false,
           columns: const [
             DataColumn(label: Text('Nombre')),
             DataColumn(label: Text('Tipo')),
             DataColumn(label: Text('Entidad')), // FASE 22.5
-            DataColumn(label: Text('Rol')),      // FASE 22.5
+            DataColumn(label: Text('Rol')), // FASE 22.5
             DataColumn(label: Text('Monto')),
             DataColumn(label: Text('Frecuencia')),
             DataColumn(label: Text('Próximo Vencimiento')),
@@ -457,18 +530,18 @@ class _CompromisosPageState extends State<CompromisosPage> {
     final cuotas = c['cuotas'];
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
     final esDeAcuerdo = c['es_de_acuerdo'] == true;
-    
+
     // FASE 22.5: Obtener info de entidad desde la vista (ya viene con JOIN)
     final entidadNombre = c['entidad_nombre'] as String? ?? '—';
     final rolNombre = c['entidad_rol'] as String? ?? '—';
-    
+
     return DataRow(
       onSelectChanged: (_) => _verDetalle(c['id'] as int),
       cells: [
         DataCell(Text(c['nombre'] ?? '')),
         DataCell(_buildTipoBadge(tipo)),
-        DataCell(Text(entidadNombre)),  // FASE 22.5
-        DataCell(Text(rolNombre)),      // FASE 22.5
+        DataCell(Text(entidadNombre)), // FASE 22.5
+        DataCell(Text(rolNombre)), // FASE 22.5
         DataCell(Text(Format.money(c['monto'] ?? 0))),
         DataCell(Text(c['frecuencia'] ?? '')),
         DataCell(_buildProximoVencimiento(c['id'] as int)),
@@ -515,7 +588,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
     final cuotas = c['cuotas'];
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
     final esDeAcuerdo = c['es_de_acuerdo'] == true;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -542,13 +615,14 @@ class _CompromisosPageState extends State<CompromisosPage> {
                   _buildEstadoBadge(activo),
                 ],
               ),
-              
+
               // Indicador de origen
               if (esDeAcuerdo) ...[
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.handshake, size: 16, color: Colors.purple.shade700),
+                    Icon(Icons.handshake,
+                        size: 16, color: Colors.purple.shade700),
                     const SizedBox(width: 4),
                     Text(
                       'Generado desde Acuerdo',
@@ -561,9 +635,9 @@ class _CompromisosPageState extends State<CompromisosPage> {
                   ],
                 ),
               ],
-              
+
               const SizedBox(height: 12),
-              
+
               // Monto y frecuencia
               Row(
                 children: [
@@ -609,10 +683,10 @@ class _CompromisosPageState extends State<CompromisosPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               // Próximo vencimiento
               _buildProximoVencimiento(c['id'] as int),
-              
+
               if (cuotas != null) ...[
                 const SizedBox(height: 12),
                 // Barra de progreso de cuotas
@@ -630,9 +704,9 @@ class _CompromisosPageState extends State<CompromisosPage> {
                 // Estado financiero (pagado/remanente)
                 _buildEstadoFinanciero(c['id'] as int),
               ],
-              
+
               const SizedBox(height: 12),
-              
+
               // Acciones
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -733,15 +807,15 @@ class _CompromisosPageState extends State<CompromisosPage> {
             style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
           );
         }
-        
+
         final fecha = snapshot.data!;
         final formato = DateFormat('dd/MM/yyyy');
         final hoy = DateTime.now();
         final diferencia = fecha.difference(hoy).inDays;
-        
+
         Color color = Colors.grey[700]!;
         String prefijo = '';
-        
+
         if (diferencia < 0) {
           color = Colors.red;
           prefijo = 'Vencido: ';
@@ -751,7 +825,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
         } else {
           prefijo = 'Próximo: ';
         }
-        
+
         return Text(
           '$prefijo${formato.format(fecha)}',
           style: TextStyle(
@@ -849,9 +923,11 @@ class _CompromisosPageState extends State<CompromisosPage> {
     );
   }
 
-  Future<Map<String, double>> _calcularEstadoFinanciero(int compromisoId) async {
+  Future<Map<String, double>> _calcularEstadoFinanciero(
+      int compromisoId) async {
     final pagado = await _compromisosService.calcularMontoPagado(compromisoId);
-    final remanente = await _compromisosService.calcularMontoRemanente(compromisoId);
+    final remanente =
+        await _compromisosService.calcularMontoRemanente(compromisoId);
     return {'pagado': pagado, 'remanente': remanente};
   }
 
@@ -860,7 +936,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
       context,
       MaterialPageRoute(builder: (_) => const CrearCompromisoPage()),
     );
-    
+
     if (resultado == true) {
       _cargarCompromisos();
     }
@@ -873,7 +949,7 @@ class _CompromisosPageState extends State<CompromisosPage> {
         builder: (_) => DetalleCompromisoPage(compromisoId: compromisoId),
       ),
     );
-    
+
     if (resultado == true) {
       _cargarCompromisos();
     }

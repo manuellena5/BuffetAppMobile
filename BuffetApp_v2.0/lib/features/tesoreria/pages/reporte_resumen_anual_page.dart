@@ -6,6 +6,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:excel/excel.dart' as excel;
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/format.dart';
 import '../services/reporte_resumen_service.dart';
@@ -83,7 +84,7 @@ class _ReporteResumenAnualPageState extends State<ReporteResumenAnualPage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar datos: $e')),
+          const SnackBar(content: Text('Error al cargar datos. Intente nuevamente.')),
         );
       }
     }
@@ -208,7 +209,7 @@ class _ReporteResumenAnualPageState extends State<ReporteResumenAnualPage> {
       if (mounted) {
         setState(() => _exportando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al exportar: $e')),
+          const SnackBar(content: Text('Error al exportar. Intente nuevamente.')),
         );
       }
     }
@@ -312,7 +313,7 @@ class _ReporteResumenAnualPageState extends State<ReporteResumenAnualPage> {
           // Contenido
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? SkeletonLoader.cards(count: 3)
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(24),
                     child: Center(

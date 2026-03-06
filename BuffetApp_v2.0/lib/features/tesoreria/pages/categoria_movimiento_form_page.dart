@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/categoria_movimiento_service.dart';
 import '../services/categoria_iconos.dart';
+import '../../shared/utils/category_icon_helper.dart';
 import '../../shared/widgets/responsive_container.dart';
 
 /// Formulario de Categoría (según mockup)
@@ -36,7 +37,11 @@ class _CategoriaMovimientoFormPageState
       _codigoController.text = widget.categoria!['codigo'] as String;
       _tipo = widget.categoria!['tipo'] as String;
       _activa = (widget.categoria!['activa'] as int) == 1;
-      _iconoSeleccionado = widget.categoria!['icono'] as String?;
+      final iconoDB = widget.categoria!['icono'] as String?;
+      // Validar que el icono exista en el catálogo; si no, dejarlo null
+      _iconoSeleccionado = (iconoDB != null && CategoriaIconos.isValidIcon(iconoDB))
+          ? iconoDB
+          : null;
       _observacionController.text = widget.categoria!['observacion'] as String? ?? '';
       _codigoEditado = true;
     }
@@ -142,7 +147,7 @@ class _CategoriaMovimientoFormPageState
       if (mounted) {
         setState(() => _guardando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Error al guardar. Intente nuevamente.')),
         );
       }
     }
@@ -416,7 +421,7 @@ class _CategoriaMovimientoFormPageState
                       value: code,
                       child: Row(
                         children: [
-                          Icon(_getIconData(code), size: 20, color: const Color(0xFF2E7D32)),
+                          Icon(CategoryIconHelper.fromName(code), size: 20, color: const Color(0xFF2E7D32)),
                           const SizedBox(width: 12),
                           Text(label),
                         ],
@@ -439,7 +444,7 @@ class _CategoriaMovimientoFormPageState
                       final label = icono['label']!;
                       return Row(
                         children: [
-                          Icon(_getIconData(code), size: 20, color: const Color(0xFF2E7D32)),
+                          Icon(CategoryIconHelper.fromName(code), size: 20, color: const Color(0xFF2E7D32)),
                           const SizedBox(width: 12),
                           Text(label),
                         ],
@@ -646,58 +651,4 @@ class _CategoriaMovimientoFormPageState
     );
   }
 
-  IconData _getIconData(String iconName) {
-    final iconMap = {
-      'attach_money': Icons.attach_money,
-      'account_balance': Icons.account_balance,
-      'account_balance_wallet': Icons.account_balance_wallet,
-      'confirmation_number': Icons.confirmation_number,
-      'restaurant': Icons.restaurant,
-      'sports_soccer': Icons.sports_soccer,
-      'stadium': Icons.stadium,
-      'campaign': Icons.campaign,
-      'volunteer_activism': Icons.volunteer_activism,
-      'groups': Icons.groups,
-      'local_activity': Icons.local_activity,
-      'gavel': Icons.gavel,
-      'swap_horiz': Icons.swap_horiz,
-      'sports': Icons.sports,
-      'local_police': Icons.local_police,
-      'pest_control': Icons.pest_control,
-      'people': Icons.people,
-      'directions_bus': Icons.directions_bus,
-      'fitness_center': Icons.fitness_center,
-      'medical_services': Icons.medical_services,
-      'home': Icons.home,
-      'restaurant_menu': Icons.restaurant_menu,
-      'local_pharmacy': Icons.local_pharmacy,
-      'local_laundry_service': Icons.local_laundry_service,
-      'shield': Icons.shield,
-      'paid': Icons.paid,
-      'bolt': Icons.bolt,
-      'local_fire_department': Icons.local_fire_department,
-      'sports_basketball': Icons.sports_basketball,
-      'hardware': Icons.hardware,
-      'build': Icons.build,
-      'construction': Icons.construction,
-      'cleaning_services': Icons.cleaning_services,
-      'engineering': Icons.engineering,
-      'inventory_2': Icons.inventory_2,
-      'fence': Icons.fence,
-      'checkroom': Icons.checkroom,
-      'ambulance': Icons.medical_services,
-      'dinner_dining': Icons.dinner_dining,
-      'card_membership': Icons.card_membership,
-      'casino': Icons.casino,
-      'category': Icons.category,
-      'savings': Icons.savings,
-      'payment': Icons.payment,
-      'receipt': Icons.receipt,
-      'receipt_long': Icons.receipt_long,
-      'credit_card': Icons.credit_card,
-      'currency_exchange': Icons.currency_exchange,
-    };
-
-    return iconMap[iconName] ?? Icons.category;
-  }
 }

@@ -6,7 +6,12 @@ import '../../shared/services/movimiento_service.dart';
 import '../../shared/services/attachment_service.dart';
 import '../../shared/services/error_handler.dart';
 import '../../shared/services/plantel_service.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/utils/category_icon_helper.dart';
+import '../../shared/format.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
 import '../../../data/dao/db.dart';
 import '../../../domain/models.dart';
 import '../../shared/state/app_settings.dart';
@@ -220,6 +225,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           categoria: _codigoCategoria!,
           monto: monto,
           medioPagoId: _medioPagoId!,
+          unidadGestionId: unidadGestionId,
           observacion: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
           archivoLocalPath: archivoLocalPath,
           archivoNombre: archivoNombre,
@@ -237,6 +243,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           categoria: _codigoCategoria!,
           monto: monto,
           medioPagoId: _medioPagoId!,
+          unidadGestionId: unidadGestionId,
           observacion: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
           archivoLocalPath: archivoLocalPath,
           archivoNombre: archivoNombre,
@@ -251,13 +258,63 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       
       if (!mounted) return;
       
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✓ Movimiento guardado correctamente'),
-          backgroundColor: Colors.green,
+      // Construir datos para el modal de confirmación
+      final categoriaNombre = _categorias
+          .where((c) => c['codigo'] == _codigoCategoria)
+          .map((c) => c['nombre'] as String?)
+          .firstOrNull ?? _codigoCategoria ?? '–';
+      final medioPagoNombre = _metodosPago
+          .where((m) => m['id'] == _medioPagoId)
+          .map((m) => m['nombre'] as String?)
+          .firstOrNull ?? '–';
+      final cuentaNombre = _cuentas
+          .where((c) => c.id == _cuentaId)
+          .map((c) => c.nombre)
+          .firstOrNull ?? '–';
+      final observacion = _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim();
+      final esEdicion = widget.movimientoExistente != null;
+      
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  esEdicion ? 'Movimiento Actualizado' : 'Movimiento Creado',
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetalleFila('Tipo', _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso',
+                  color: _tipo == 'INGRESO' ? Colors.green : Colors.red),
+              _buildDetalleFila('Monto', Format.money(monto)),
+              _buildDetalleFila('Categoría', categoriaNombre),
+              _buildDetalleFila('Medio de Pago', medioPagoNombre),
+              _buildDetalleFila('Cuenta', cuentaNombre),
+              if (observacion != null)
+                _buildDetalleFila('Observación', observacion),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Aceptar'),
+            ),
+          ],
         ),
       );
+      
+      if (!mounted) return;
+      Navigator.pop(context, true);
     } catch (e, st) {
       await ErrorHandler.instance.handle(
         scope: 'tesoreria.crear_movimiento',
@@ -270,6 +327,27 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  Widget _buildDetalleFila(String label, String valor, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text('$label:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(
+              valor,
+              style: TextStyle(fontSize: 13, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _seleccionarArchivo() async {
@@ -325,7 +403,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Error al guardar movimiento. Intente nuevamente.'), backgroundColor: Colors.red),
       );
     }
   }
@@ -341,16 +419,25 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
     final unidadGestionId = settings.unidadGestionActivaId;
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+    final pageTitle = widget.movimientoExistente != null ? 'Editar Movimiento' : 'Nuevo Movimiento';
     
-    return TesoreriaScaffold(
-      title: widget.movimientoExistente != null ? 'Editar Movimiento' : 'Nuevo Movimiento',
-      currentRouteName: '/crear_movimiento',
-      appBarColor: Colors.teal,
-      body: _cargando
-          ? const Center(child: CircularProgressIndicator())
-          : unidadGestionId == null
-              ? _buildSinUnidadGestion()
-              : _buildFormulario(),
+    return ErpLayout(
+      currentRoute: '/crear_movimiento',
+      title: pageTitle,
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(title: pageTitle),
+          Expanded(
+            child: _cargando
+                ? const Center(child: CircularProgressIndicator())
+                : unidadGestionId == null
+                    ? _buildSinUnidadGestion()
+                    : _buildFormulario(),
+          ),
+        ],
+      ),
     );
   }
   
@@ -381,13 +468,17 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   }
   
   Widget _buildFormulario() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return ResponsiveContainer(
       maxWidth: 800,
-      child: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
+      child: Container(
+        color: isDark ? AppColors.formSurfaceDark : AppColors.formSurfaceLight,
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
           // Tipo de movimiento
           Card(
             child: Padding(
@@ -426,25 +517,92 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           
           const SizedBox(height: 16),
           
-          // Categoría
+          // Categoría (I.4: Autocomplete — permite tipear + buscar)
           if (_categorias.isNotEmpty)
-            DropdownButtonFormField<String>(
-              value: _codigoCategoria,
-              decoration: const InputDecoration(
-                labelText: 'Categoría *',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.category),
-              ),
-              items: _categorias.map((cat) {
-                final codigo = cat['codigo'].toString();
-                final nombre = cat['nombre'].toString();
-                return DropdownMenuItem<String>(
-                  value: codigo,
-                  child: Text(nombre),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Autocomplete<Map<String, dynamic>>(
+                  initialValue: _codigoCategoria != null
+                      ? TextEditingValue(
+                          text: _categorias
+                              .where((c) => c['codigo'] == _codigoCategoria)
+                              .map((c) => c['nombre'].toString())
+                              .firstOrNull ?? '',
+                        )
+                      : TextEditingValue.empty,
+                  displayStringForOption: (cat) => cat['nombre'].toString(),
+                  optionsBuilder: (textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return _categorias;
+                    }
+                    final query = textEditingValue.text.toLowerCase();
+                    return _categorias.where((cat) {
+                      final nombre = cat['nombre'].toString().toLowerCase();
+                      final codigo = cat['codigo'].toString().toLowerCase();
+                      return nombre.contains(query) || codigo.contains(query);
+                    });
+                  },
+                  onSelected: (cat) {
+                    setState(() => _codigoCategoria = cat['codigo'].toString());
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Categoría *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.category),
+                        hintText: 'Escribí para buscar...',
+                      ),
+                      validator: (_) => _codigoCategoria == null ? 'Requerido' : null,
+                      onChanged: (text) {
+                        // Si el texto no coincide con ninguna categoría, limpiar selección
+                        final match = _categorias.where(
+                          (c) => c['nombre'].toString().toLowerCase() == text.toLowerCase(),
+                        );
+                        if (match.isEmpty) {
+                          _codigoCategoria = null;
+                        }
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(8),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: 250,
+                            maxWidth: constraints.maxWidth,
+                          ),
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final cat = options.elementAt(index);
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(CategoryIconHelper.fromName(cat['icono'] as String?), size: 20),
+                                title: Text(cat['nombre'].toString()),
+                                subtitle: Text(
+                                  cat['codigo'].toString(),
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                ),
+                                onTap: () => onSelected(cat),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 );
-              }).toList(),
-              onChanged: (v) => setState(() => _codigoCategoria = v),
-              validator: (v) => v == null ? 'Requerido' : null,
+              },
             )
           else
             Container(
@@ -666,6 +824,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         ],
       ),
       ),
+      ),
     );
   }
 
@@ -698,6 +857,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       
       // Registrar comisión como movimiento separado con valores editados
       final svc = EventoMovimientoService();
+      final settings = context.read<AppSettings>();
       await svc.crear(
         disciplinaId: disciplinaId,
         cuentaId: cuentaId,
@@ -706,13 +866,14 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         categoria: 'COM_BANC',
         monto: montoComision,
         medioPagoId: _medioPagoId!,
+        unidadGestionId: settings.unidadGestionActivaId,
         observacion: observacionExtra ?? 'Comisión bancaria',
       );
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✓ Comisión de \$${comision.toStringAsFixed(2)} registrada'),
+            content: Text('✓ Comisión de ${Format.money(comision)} registrada'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -803,7 +964,7 @@ class _DialogComisionState extends State<_DialogComision> {
                     children: [
                       const Text('Monto transferido:'),
                       Text(
-                        '\$ ${widget.montoTransferido.toStringAsFixed(2)}',
+                        Format.money(widget.montoTransferido),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -825,7 +986,7 @@ class _DialogComisionState extends State<_DialogComision> {
                     children: [
                       const Text('Comisión calculada:'),
                       Text(
-                        '\$ ${widget.comision.toStringAsFixed(2)}',
+                        Format.money(widget.comision),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.orange,

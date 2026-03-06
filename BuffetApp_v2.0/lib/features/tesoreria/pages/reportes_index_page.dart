@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
 import 'reporte_categorias_page.dart';
 import 'reporte_resumen_anual_page.dart';
 import 'reporte_resumen_mensual_page.dart';
 import 'reporte_plantel_mensual_page.dart';
+import 'dashboard_page.dart';
+import 'presupuesto_page.dart';
+import 'comparativa_presupuesto_page.dart';
+import 'proyeccion_flujo_page.dart';
 
 /// Pantalla índice de reportes de Tesorería
 class ReportesIndexPage extends StatelessWidget {
@@ -11,16 +18,22 @@ class ReportesIndexPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/reportes',
       title: 'Reportes',
-      currentRouteName: '/reportes',
-      appBarColor: Colors.blue,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+      body: Column(
+        children: [
+          if (isDesktop)
+            const AppHeader(title: 'Reportes', subtitle: 'Análisis e informes de Tesorería'),
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
               // Título
               const Text(
                 '📊 Reportes de Tesorería',
@@ -47,6 +60,22 @@ class ReportesIndexPage extends StatelessWidget {
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Column(
                   children: [
+                    _buildReporteCard(
+                      context: context,
+                      titulo: 'Dashboard',
+                      descripcion: 'Vista general con gráficos: barras, línea de saldo y torta de egresos',
+                      icono: Icons.dashboard,
+                      color: Colors.indigo,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const DashboardPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
                     _buildReporteCard(
                       context: context,
                       titulo: 'Reporte por Categorías',
@@ -110,12 +139,70 @@ class ReportesIndexPage extends StatelessWidget {
                         );
                       },
                     ),
+                    const SizedBox(height: 24),
+                    // ─── Fase E: Presupuesto y Proyección ───
+                    const Divider(),
+                    const Text(
+                      'Presupuesto y Proyección',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildReporteCard(
+                      context: context,
+                      titulo: 'Presupuesto Anual',
+                      descripcion: 'Definir partidas presupuestarias mensuales por categoría',
+                      icono: Icons.account_balance_wallet,
+                      color: Colors.teal,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PresupuestoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildReporteCard(
+                      context: context,
+                      titulo: 'Presupuesto vs Ejecución',
+                      descripcion: 'Comparativa mes a mes entre lo presupuestado y lo ejecutado',
+                      icono: Icons.compare_arrows,
+                      color: Colors.deepPurple,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ComparativaPresupuestoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildReporteCard(
+                      context: context,
+                      titulo: 'Proyección Flujo de Caja',
+                      descripcion: 'Saldo proyectado a 3, 6 y 12 meses con compromisos y presupuesto',
+                      icono: Icons.show_chart,
+                      color: Colors.deepOrange,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ProyeccionFlujoPage(),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+          ),
+        ],
       ),
     );
   }
@@ -144,7 +231,7 @@ class ReportesIndexPage extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

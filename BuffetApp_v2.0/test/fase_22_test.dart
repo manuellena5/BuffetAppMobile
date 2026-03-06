@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:buffet_app/data/dao/db.dart';
 import 'package:buffet_app/features/shared/services/compromisos_service.dart';
 import 'package:buffet_app/features/tesoreria/services/transferencia_service.dart';
 import 'package:buffet_app/features/tesoreria/services/cuenta_service.dart';
+
+late String _tempDir;
 
 /// Test de la Fase 22: Correcciones Críticas de UX y Lógica
 /// 
@@ -18,24 +21,24 @@ import 'package:buffet_app/features/tesoreria/services/cuenta_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(() {
+  setUpAll(() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    // Directorio temporal propio para este test suite
+    _tempDir = await Directory.systemTemp.createTemp('buffet_test_f22').then((d) => d.path);
     // Mock path_provider
     const MethodChannel('plugins.flutter.io/path_provider')
         .setMockMethodCallHandler((MethodCall methodCall) async {
-      return '.';
+      return _tempDir;
     });
-
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
   });
 
   setUp(() async {
-    await AppDatabase.resetForTests();
-    
-    // Eliminar archivo de DB para forzar onCreate
-    final dbFile = File('.dart_tool/sqflite_common_ffi/databases/barcancha.db');
+    await AppDatabase.close();
+    // Eliminar DB para empezar limpio en cada test
+    final dbFile = File(p.join(_tempDir, 'barcancha.db'));
     if (await dbFile.exists()) {
-      await dbFile.delete();
+      try { await dbFile.delete(); } catch (_) {}
     }
     
     // Asegurar que existe unidad de gestión de prueba
@@ -47,6 +50,10 @@ void main() {
       'disciplina_ref': 'FUTBOL',
       'activo': 1,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  });
+
+  tearDown(() async {
+    await AppDatabase.close();
   });
 
   group('FASE 22.1 - Recalcular Estado de Compromisos', () {
@@ -329,6 +336,7 @@ void main() {
         'eliminado': 0,
         'estado': 'CONFIRMADO',
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 1000,
       });
 
@@ -343,6 +351,7 @@ void main() {
         'eliminado': 0,
         'estado': 'CONFIRMADO',
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 2000,
       });
 
@@ -357,6 +366,7 @@ void main() {
         'eliminado': 0,
         'estado': 'CONFIRMADO',
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 3000,
       });
 
@@ -371,6 +381,7 @@ void main() {
         'eliminado': 0,
         'estado': 'CONFIRMADO',
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 4000,
       });
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/breadcrumb.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 
 import '../../../features/shared/format.dart';
 import '../../../features/shared/services/compromisos_service.dart';
@@ -131,7 +133,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
       );
       
       setState(() {
-        _error = 'Error al cargar datos: $e';
+        _error = 'Error al cargar los datos del compromiso. Por favor, intente nuevamente.';
         _isLoading = false;
       });
     }
@@ -161,7 +163,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Error al procesar. Intente nuevamente.')),
         );
       }
     }
@@ -203,7 +205,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Error al procesar. Intente nuevamente.')),
         );
       }
     }
@@ -282,7 +284,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return SkeletonLoader.list(count: 5);
     }
     
     if (_error != null) {

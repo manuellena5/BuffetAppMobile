@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
@@ -272,25 +274,15 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
             // Lista
             Expanded(
               child: _cargando
-                  ? const Center(child: CircularProgressIndicator())
+                  ? SkeletonLoader.cards(count: 4)
                   : _entidades.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No hay entidades registradas',
-                                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                              ),
-                              const SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: _irACrear,
-                                icon: const Icon(Icons.add),
-                                label: const Text('Agregar primera entidad'),
-                              ),
-                            ],
+                      ? EmptyState(
+                          icon: Icons.people_outline,
+                          title: 'No hay entidades registradas',
+                          action: ElevatedButton.icon(
+                            onPressed: _irACrear,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Agregar primera entidad'),
                           ),
                         )
                       : _vistaTabla

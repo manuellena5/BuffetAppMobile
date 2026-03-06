@@ -3,19 +3,23 @@ import 'package:intl/intl.dart';
 
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
-import '../../shared/widgets/responsive_container.dart';
+import '../../shared/utils/category_icon_helper.dart';
+import '../../shared/widgets/selectable_card.dart';
+import '../../shared/widgets/transaction_result_dialog.dart';
+import '../../shared/widgets/wizard_scaffold.dart';
 import '../services/acuerdos_grupales_service.dart';
 
-/// Wizard de 6 pasos para crear acuerdos grupales
-/// Paso 1: Selección de tipo (INGRESO/EGRESO)
-/// Paso 2: Datos generales (nombre, unidad, categoría)
-/// Paso 3: Cláusulas económicas (modalidad, monto, frecuencia, fechas, cuotas)
-/// Paso 4: Selección de jugadores + ajustes de monto individuales
-/// Paso 5: Preview detallado (tabla de acuerdos + compromisos)
-/// Paso 6: Confirmación final con advertencias
+/// Wizard profesional de 6 pasos para crear acuerdos grupales.
+///
+/// Diseño tipo Dynamics 365 / SAP:
+/// - Barra horizontal de progreso
+/// - Un paso visible a la vez en tarjeta central
+/// - Botones siempre en la misma posición
+/// - Tarjetas seleccionables para opciones
+/// - Preview claro antes de confirmar
 class NuevoAcuerdoGrupalPage extends StatefulWidget {
   final int unidadGestionId;
-  
+
   const NuevoAcuerdoGrupalPage({
     super.key,
     required this.unidadGestionId,
@@ -28,22 +32,24 @@ class NuevoAcuerdoGrupalPage extends StatefulWidget {
 class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
   final _formKey = GlobalKey<FormState>();
   final _grupalSvc = AcuerdosGrupalesService.instance;
-  
+
+  // ---------------------------------------------------------------------------
   // Estado del wizard
+  // ---------------------------------------------------------------------------
   int _currentStep = 0;
   bool _isLoading = false;
   String? _errorMessage;
 
   // Paso 1: Tipo
-  String _tipo = 'EGRESO'; // EGRESO más común para sueldos
+  String _tipo = 'EGRESO';
 
   // Paso 2: Datos generales
   final _nombreCtrl = TextEditingController();
   late int _unidadGestionId;
-  String _categoria = 'PAGO JUGADORES'; // Categoría por defecto de categoria_movimiento
+  String _categoria = 'PAGO JUGADORES';
   final _observacionesCtrl = TextEditingController();
 
-  // Paso 3: Cláusulas económicas
+  // Paso 3: Condiciones económicas
   String _modalidad = 'RECURRENTE';
   final _montoCtrl = TextEditingController();
   String _frecuencia = 'MENSUAL';
@@ -55,10 +61,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
   List<Map<String, dynamic>> _todosJugadores = [];
   List<Map<String, dynamic>> _jugadoresFiltrados = [];
   final Map<int, JugadorConMonto> _jugadoresSeleccionados = {};
-  
-  // Filtros de jugadores
   String _filtroRol = 'TODOS';
-  String _filtroEstado = 'TODOS';
   String _filtroTipoContratacion = 'TODOS';
   final _filtroNombreCtrl = TextEditingController();
 
@@ -68,6 +71,15 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
 
   // Paso 6: Confirmación
   bool _generaCompromisos = true;
+
+  // Catálogos cacheados
+  List<Map<String, dynamic>>? _categoriasCache;
+  String? _categoriasCacheTipo;
+  List<Map<String, dynamic>>? _frecuenciasCache;
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle
+  // ---------------------------------------------------------------------------
 
   @override
   void initState() {
@@ -86,19 +98,29 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // Carga de datos
+  // ---------------------------------------------------------------------------
+
   Future<void> _cargarJugadores() async {
     try {
       setState(() => _isLoading = true);
-      
       final rawDb = await AppDatabase.instance();
       final result = await rawDb.query(
         'entidades_plantel',
-        columns: ['id', 'nombre', 'rol', 'alias', 'tipo_contratacion', 'posicion', 'estado_activo'],
+        columns: [
+          'id',
+          'nombre',
+          'rol',
+          'alias',
+          'tipo_contratacion',
+          'posicion',
+          'estado_activo',
+        ],
         where: 'estado_activo = ?',
         whereArgs: [1],
         orderBy: 'nombre ASC',
       );
-
       setState(() {
         _todosJugadores = result;
         _jugadoresFiltrados = result;
@@ -117,33 +139,83 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> _cargarCategorias() async {
+    // Usar caché si el tipo no cambió
+    if (_categoriasCache != null && _categoriasCacheTipo == _tipo) {
+      return _categoriasCache!;
+    }
+    try {
+      final rawDb = await AppDatabase.instance();
+      final result = await rawDb.query(
+        'categoria_movimiento',
+        columns: ['codigo', 'nombre', 'icono'],
+        where: 'activa = ? AND (tipo = ? OR tipo = ?)',
+        whereArgs: [1, _tipo, 'AMBOS'],
+        orderBy: 'nombre ASC',
+      );
+      if (result.isEmpty) {
+        final fallback = _tipo == 'EGRESO'
+            ? [
+                {'codigo': 'PAGO JUGADORES', 'nombre': 'PAGO JUGADORES', 'icono': 'people'},
+                {'codigo': 'SERVICIOS GENERALES / M.de Obra', 'nombre': 'SERVICIOS GENERALES / M.de Obra', 'icono': 'build'},
+              ]
+            : [
+                {'codigo': 'ENTRADAS', 'nombre': 'ENTRADAS', 'icono': 'confirmation_number'},
+                {'codigo': 'PEÑAS E INGRESOS VARIOS', 'nombre': 'PEÑAS E INGRESOS VARIOS', 'icono': 'groups'},
+              ];
+        _categoriasCache = fallback;
+        _categoriasCacheTipo = _tipo;
+        return fallback;
+      }
+      _categoriasCache = result;
+      _categoriasCacheTipo = _tipo;
+      return result;
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'nuevo_acuerdo_grupal.cargar_categorias',
+        error: e.toString(),
+        stackTrace: stack,
+      );
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _cargarFrecuencias() async {
+    if (_frecuenciasCache != null) return _frecuenciasCache!;
+    try {
+      final rawDb = await AppDatabase.instance();
+      final result = await rawDb.query(
+        'frecuencias',
+        columns: ['codigo', 'descripcion'],
+        orderBy: 'codigo ASC',
+      );
+      _frecuenciasCache = result;
+      return result;
+    } catch (e, stack) {
+      await AppDatabase.logLocalError(
+        scope: 'nuevo_acuerdo_grupal.cargar_frecuencias',
+        error: e.toString(),
+        stackTrace: stack,
+      );
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filtros de jugadores
+  // ---------------------------------------------------------------------------
+
   void _aplicarFiltros() {
     setState(() {
       _jugadoresFiltrados = _todosJugadores.where((j) {
-        // Filtro por nombre
         final nombre = (j['nombre'] as String? ?? '').toLowerCase();
-        final filtroNombre = _filtroNombreCtrl.text.toLowerCase();
-        if (filtroNombre.isNotEmpty && !nombre.contains(filtroNombre)) {
+        final texto = _filtroNombreCtrl.text.toLowerCase();
+        if (texto.isNotEmpty && !nombre.contains(texto)) return false;
+        if (_filtroRol != 'TODOS' && (j['rol'] as String? ?? '') != _filtroRol)
           return false;
-        }
-
-        // Filtro por rol
-        if (_filtroRol != 'TODOS') {
-          if ((j['rol'] as String? ?? '') != _filtroRol) return false;
-        }
-
-        // Filtro por estado
-        if (_filtroEstado == 'ACTIVO' && (j['estado_activo'] as int? ?? 0) != 1) {
-          return false;
-        }
-
-        // Filtro por tipo de contratación
-        if (_filtroTipoContratacion != 'TODOS') {
-          if ((j['tipo_contratacion'] as String? ?? '') != _filtroTipoContratacion) {
-            return false;
-          }
-        }
-
+        if (_filtroTipoContratacion != 'TODOS' &&
+            (j['tipo_contratacion'] as String? ?? '') !=
+                _filtroTipoContratacion) return false;
         return true;
       }).toList();
     });
@@ -153,12 +225,10 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
     setState(() {
       final id = jugador['id'] as int;
       if (selected) {
-        // Agregar con monto por defecto (del campo general)
         final montoBase = double.tryParse(_montoCtrl.text) ?? 0;
         _jugadoresSeleccionados[id] = JugadorConMonto(
           id: id,
           nombre: jugador['nombre'] as String? ?? '',
-          numeroAsociado: null, // Columna no existe aún
           rol: jugador['rol'] as String?,
           alias: jugador['alias'] as String?,
           tipoContratacion: jugador['tipo_contratacion'] as String?,
@@ -171,73 +241,83 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
     });
   }
 
+  void _seleccionarTodos() {
+    setState(() {
+      final montoBase = double.tryParse(_montoCtrl.text) ?? 0;
+      for (final jugador in _jugadoresFiltrados) {
+        final id = jugador['id'] as int;
+        if (!_jugadoresSeleccionados.containsKey(id)) {
+          _jugadoresSeleccionados[id] = JugadorConMonto(
+            id: id,
+            nombre: jugador['nombre'] as String? ?? '',
+            rol: jugador['rol'] as String?,
+            alias: jugador['alias'] as String?,
+            tipoContratacion: jugador['tipo_contratacion'] as String?,
+            posicion: jugador['posicion'] as String?,
+            monto: montoBase,
+          );
+        }
+      }
+    });
+  }
+
+  void _deseleccionarTodos() {
+    setState(() => _jugadoresSeleccionados.clear());
+  }
+
   void _ajustarMontoIndividual(int jugadorId, double nuevoMonto) {
     setState(() {
-      final jugador = _jugadoresSeleccionados[jugadorId];
-      if (jugador != null) {
+      final j = _jugadoresSeleccionados[jugadorId];
+      if (j != null) {
         _jugadoresSeleccionados[jugadorId] = JugadorConMonto(
-          id: jugador.id,
-          nombre: jugador.nombre,
-          numeroAsociado: jugador.numeroAsociado,
-          rol: jugador.rol,
-          alias: jugador.alias,
-          tipoContratacion: jugador.tipoContratacion,
-          posicion: jugador.posicion,
+          id: j.id,
+          nombre: j.nombre,
+          rol: j.rol,
+          alias: j.alias,
+          tipoContratacion: j.tipoContratacion,
+          posicion: j.posicion,
           monto: nuevoMonto,
         );
       }
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Preview & Creación
+  // ---------------------------------------------------------------------------
+
   Future<void> _generarPreview() async {
     try {
-      print('DEBUG: Iniciando generación de preview');
       setState(() {
         _isLoading = true;
         _errorMessage = null;
       });
 
-      print('DEBUG: Validando ${_jugadoresSeleccionados.length} jugadores');
-      // Validar jugadores
       final validacionRes = await _grupalSvc.validarJugadores(
         jugadores: _jugadoresSeleccionados.values.toList(),
         unidadGestionId: _unidadGestionId,
         categoria: _categoria,
       );
-      print('DEBUG: Validación completada - ${validacionRes.length} advertencias');
 
-      print('DEBUG: Generando preview con:');
-      print('  - Nombre: ${_nombreCtrl.text.trim()}');
-      print('  - Tipo: $_tipo');
-      print('  - Modalidad: $_modalidad');
-      print('  - Frecuencia: $_frecuencia');
-      print('  - Jugadores: ${_jugadoresSeleccionados.length}');
-      
-      // Generar preview
       final preview = await _grupalSvc.generarPreview(
         nombre: _nombreCtrl.text.trim(),
         tipo: _tipo,
         modalidad: _modalidad,
-        montoBase: _modalidad == 'RECURRENTE' 
-          ? (double.tryParse(_montoCtrl.text) ?? 0) 
-          : 0,
-        montoTotal: _modalidad == 'MONTO_TOTAL_CUOTAS' 
-          ? (double.tryParse(_montoCtrl.text) ?? 0) 
-          : null,
+        montoBase: _modalidad == 'RECURRENTE'
+            ? (double.tryParse(_montoCtrl.text) ?? 0)
+            : 0,
+        montoTotal: _modalidad == 'MONTO_TOTAL_CUOTAS'
+            ? (double.tryParse(_montoCtrl.text) ?? 0)
+            : null,
         frecuencia: _frecuencia,
         cuotas: _cuotas,
         fechaInicio: DateFormat('yyyy-MM-dd').format(_fechaInicio),
-        fechaFin: _fechaFin != null 
-          ? DateFormat('yyyy-MM-dd').format(_fechaFin!) 
-          : null,
+        fechaFin: _fechaFin != null
+            ? DateFormat('yyyy-MM-dd').format(_fechaFin!)
+            : null,
         jugadores: _jugadoresSeleccionados.values.toList(),
         generaCompromisos: _generaCompromisos,
       );
-
-      print('DEBUG: Preview generado exitosamente');
-      print('  - Acuerdos: ${preview.cantidadAcuerdos}');
-      print('  - Compromisos: ${preview.totalCompromisos}');
-      print('  - Total: ${preview.totalComprometido}');
 
       setState(() {
         _preview = preview;
@@ -245,8 +325,6 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         _isLoading = false;
       });
     } catch (e, stack) {
-      print('ERROR en _generarPreview: $e');
-      print('StackTrace: $stack');
       await AppDatabase.logLocalError(
         scope: 'nuevo_acuerdo_grupal.generar_preview',
         error: e.toString(),
@@ -261,8 +339,6 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
   }
 
   Future<void> _confirmarCreacion() async {
-    if (!_formKey.currentState!.validate()) return;
-
     try {
       setState(() {
         _isLoading = true;
@@ -274,18 +350,18 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         unidadGestionId: _unidadGestionId,
         tipo: _tipo,
         modalidad: _modalidad,
-        montoBase: _modalidad == 'RECURRENTE' 
-          ? (double.tryParse(_montoCtrl.text) ?? 0) 
-          : 0,
-        montoTotal: _modalidad == 'MONTO_TOTAL_CUOTAS' 
-          ? (double.tryParse(_montoCtrl.text) ?? 0) 
-          : null,
+        montoBase: _modalidad == 'RECURRENTE'
+            ? (double.tryParse(_montoCtrl.text) ?? 0)
+            : 0,
+        montoTotal: _modalidad == 'MONTO_TOTAL_CUOTAS'
+            ? (double.tryParse(_montoCtrl.text) ?? 0)
+            : null,
         frecuencia: _frecuencia,
         cuotas: _cuotas,
         fechaInicio: DateFormat('yyyy-MM-dd').format(_fechaInicio),
-        fechaFin: _fechaFin != null 
-          ? DateFormat('yyyy-MM-dd').format(_fechaFin!) 
-          : null,
+        fechaFin: _fechaFin != null
+            ? DateFormat('yyyy-MM-dd').format(_fechaFin!)
+            : null,
         categoria: _categoria,
         observacionesComunes: _observacionesCtrl.text.trim(),
         jugadores: _jugadoresSeleccionados.values.toList(),
@@ -294,91 +370,67 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
 
       setState(() => _isLoading = false);
 
-      // MODAL DE CONFIRMACIÓN (según reglas del proyecto)
-      if (mounted) {
-        await showDialog(
+      if (!mounted) return;
+
+      if (resultado.todoExitoso) {
+        await TransactionResultDialog.showSuccess(
           context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  resultado.todoExitoso ? Icons.check_circle : Icons.warning,
-                  color: resultado.todoExitoso ? Colors.green : Colors.orange,
-                  size: 32,
-                ),
-                const SizedBox(width: 12),
-                Text(resultado.todoExitoso ? 'Acuerdo Grupal Creado' : 'Creado con Advertencias'),
-              ],
+          title: 'Acuerdo Grupal Creado',
+          message:
+              'Se crearon ${resultado.cantidadCreados} acuerdos individuales correctamente.',
+          details: [
+            TransactionDetail(label: 'Nombre', value: _nombreCtrl.text.trim()),
+            TransactionDetail(
+              label: 'Tipo',
+              value: _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso',
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Nombre: ${_nombreCtrl.text.trim()}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Tipo: $_tipo'),
-                  Text('Categoría: $_categoria'),
-                  Text('Modalidad: $_modalidad'),
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Acuerdos creados: ${resultado.cantidadCreados}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.green,
-                    ),
-                  ),
-                  if (resultado.tieneErrores) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Errores: ${resultado.errores.length}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    ...resultado.errores.map((err) => Padding(
-                      padding: const EdgeInsets.only(left: 8, top: 4),
-                      child: Text(
-                        '• $err',
-                        style: const TextStyle(fontSize: 12, color: Colors.red),
-                      ),
-                    )),
-                  ],
-                  if (_generaCompromisos) ...[
-                    const SizedBox(height: 8),
-                    const Text(
-                      '✓ Compromisos generados automáticamente',
-                      style: TextStyle(color: Colors.green, fontSize: 12),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    'UUID: ${resultado.grupalUuid}',
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
-                  ),
-                ],
-              ),
+            TransactionDetail(label: 'Categoría', value: _categoria),
+            TransactionDetail(label: 'Modalidad', value: _modalidadLabel),
+            TransactionDetail(
+              label: 'Acuerdos creados',
+              value: '${resultado.cantidadCreados}',
+              style: TransactionDetailStyle.success,
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // Cerrar modal
-                  Navigator.pop(context, resultado); // Volver a la pantalla anterior
-                },
-                child: const Text('Aceptar'),
+            if (_generaCompromisos)
+              TransactionDetail(
+                label: 'Compromisos generados',
+                value: '${_preview?.totalCompromisos ?? '-'}',
+                style: TransactionDetailStyle.success,
               ),
-            ],
-          ),
+            if (_preview != null)
+              TransactionDetail(
+                label: 'Total comprometido',
+                value: Format.money(_preview!.totalComprometido),
+                style: TransactionDetailStyle.highlight,
+              ),
+          ],
+          onDismiss: () {
+            if (mounted) Navigator.pop(context, resultado);
+          },
+        );
+      } else {
+        await TransactionResultDialog.showWarning(
+          context: context,
+          title: 'Creado con Advertencias',
+          message:
+              'Se crearon ${resultado.cantidadCreados} acuerdos pero hubo errores.',
+          details: [
+            TransactionDetail(
+              label: 'Creados',
+              value: '${resultado.cantidadCreados}',
+              style: TransactionDetailStyle.success,
+            ),
+            TransactionDetail(
+              label: 'Errores',
+              value: '${resultado.errores.length}',
+              style: TransactionDetailStyle.error,
+            ),
+          ],
+          warnings:
+              resultado.errores.map((e) => TransactionWarning(e)).toList(),
+          onDismiss: () {
+            if (mounted) Navigator.pop(context, resultado);
+          },
         );
       }
     } catch (e, stack) {
@@ -387,398 +439,382 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         error: e.toString(),
         stackTrace: stack,
       );
-      
+
       setState(() {
         _isLoading = false;
         _errorMessage = 'Error al crear acuerdos: ${e.toString()}';
       });
 
-      // MODAL DE ERROR
-      if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: const [
-                Icon(Icons.error, color: Colors.red, size: 32),
-                SizedBox(width: 12),
-                Text('Error al Crear Acuerdos'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'No se pudo crear el acuerdo grupal.',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Error: ${e.toString()}',
-                  style: const TextStyle(fontSize: 12, color: Colors.red),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Por favor, revise los datos e intente nuevamente.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          ),
-        );
-      }
+      if (!mounted) return;
+
+      await TransactionResultDialog.showError(
+        context: context,
+        title: 'Error al Crear Acuerdos',
+        message:
+            'No se pudo completar la operación. Por favor, revise los datos e intente nuevamente.',
+        technicalDetail: e.toString(),
+      );
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nuevo Acuerdo Grupal'),
-        actions: [
-          if (_currentStep > 0)
-            TextButton.icon(
-              onPressed: () => setState(() => _currentStep--),
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              label: const Text('Anterior', style: TextStyle(color: Colors.white)),
-            ),
-        ],
-      ),
-      body: ResponsiveContainer(
-        maxWidth: 900,
-        child: Form(
-          key: _formKey,
-          child: Stepper(
-            currentStep: _currentStep,
-            onStepContinue: _onStepContinue,
-            onStepCancel: () => setState(() {
-              if (_currentStep > 0) _currentStep--;
-            }),
-          controlsBuilder: (context, details) {
-            return Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Row(
-                children: [
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : details.onStepContinue,
-                    child: Text(_currentStep == 5 ? 'Crear Acuerdos' : 'Siguiente'),
-                  ),
-                  const SizedBox(width: 8),
-                  if (_currentStep > 0)
-                    TextButton(
-                      onPressed: _isLoading ? null : details.onStepCancel,
-                      child: const Text('Anterior'),
-                    ),
-                ],
-              ),
-            );
-          },
-          steps: [
-            Step(
-              title: const Text('Tipo'),
-              content: _buildStepTipo(),
-              isActive: _currentStep >= 0,
-            ),
-            Step(
-              title: const Text('Datos Generales'),
-              content: _buildStepDatosGenerales(),
-              isActive: _currentStep >= 1,
-            ),
-            Step(
-              title: const Text('Cláusulas Económicas'),
-              content: _buildStepClausulas(),
-              isActive: _currentStep >= 2,
-            ),
-            Step(
-              title: const Text('Jugadores'),
-              content: _buildStepJugadores(),
-              isActive: _currentStep >= 3,
-            ),
-            Step(
-              title: const Text('Preview'),
-              content: _buildStepPreview(),
-              isActive: _currentStep >= 4,
-            ),
-            Step(
-              title: const Text('Confirmación'),
-              content: _buildStepConfirmacion(),
-              isActive: _currentStep >= 5,
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
+  // ---------------------------------------------------------------------------
+  // Navegación del wizard
+  // ---------------------------------------------------------------------------
 
-  void _onStepContinue() async {
+  void _onNext() async {
     if (_isLoading) return;
 
-    print('DEBUG: Intentando avanzar desde paso $_currentStep');
-
-    // Validaciones por paso
-    // Paso 0: Tipo - sin validación de formulario
-    
-    if (_currentStep == 1) {
-      // Paso 1: Datos Generales - validar manualmente
-      print('DEBUG: Validando Datos Generales');
-      print('DEBUG: Nombre: ${_nombreCtrl.text}');
-      print('DEBUG: Categoría: $_categoria');
-      
-      if (_nombreCtrl.text.trim().isEmpty) {
-        setState(() => _errorMessage = 'Debe ingresar un nombre para el acuerdo');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Debe ingresar un nombre para el acuerdo'),
-            backgroundColor: Colors.red,
-          ),
-        );
+    switch (_currentStep) {
+      case 0:
+        break;
+      case 1:
+        if (_nombreCtrl.text.trim().isEmpty) {
+          _mostrarError('Debe ingresar un nombre para el acuerdo');
+          return;
+        }
+        if (_categoria.isEmpty) {
+          _mostrarError('Debe seleccionar una categoría');
+          return;
+        }
+        break;
+      case 2:
+        if (_montoCtrl.text.trim().isEmpty) {
+          _mostrarError('Debe ingresar un monto');
+          return;
+        }
+        final monto = double.tryParse(_montoCtrl.text);
+        if (monto == null || monto <= 0) {
+          _mostrarError('El monto debe ser un número válido mayor a 0');
+          return;
+        }
+        if (_modalidad == 'MONTO_TOTAL_CUOTAS' && _cuotas <= 0) {
+          _mostrarError('La cantidad de cuotas debe ser mayor a 0');
+          return;
+        }
+        break;
+      case 3:
+        if (_jugadoresSeleccionados.isEmpty) {
+          _mostrarError('Debe seleccionar al menos un jugador');
+          return;
+        }
+        // Generar preview ANTES de entrar al paso de revisión
+        await _generarPreview();
+        if (_preview == null) return;
+        break;
+      case 4:
+        // Ya se revisó el preview, pasar a confirmación
+        break;
+      case 5:
+        await _confirmarCreacion();
         return;
-      }
-      
-      if (_categoria.isEmpty) {
-        setState(() => _errorMessage = 'Debe seleccionar una categoría');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Debe seleccionar una categoría'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      
-      print('DEBUG: Datos Generales válidos ✓');
     }
 
-    if (_currentStep == 2) {
-      // Paso 2: Cláusulas Económicas - validar manualmente
-      print('DEBUG: Validando Cláusulas Económicas');
-      print('DEBUG: Modalidad: $_modalidad');
-      print('DEBUG: Monto: ${_montoCtrl.text}');
-      print('DEBUG: Frecuencia: $_frecuencia');
-      
-      if (_montoCtrl.text.trim().isEmpty) {
-        setState(() => _errorMessage = 'Debe ingresar un monto');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Debe ingresar un monto'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      
-      final monto = double.tryParse(_montoCtrl.text);
-      if (monto == null || monto <= 0) {
-        setState(() => _errorMessage = 'El monto debe ser un número válido mayor a 0');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('El monto debe ser un número válido mayor a 0'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      
-      if (_modalidad == 'MONTO_TOTAL_CUOTAS' && _cuotas <= 0) {
-        setState(() => _errorMessage = 'La cantidad de cuotas debe ser mayor a 0');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('La cantidad de cuotas debe ser mayor a 0'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      
-      print('DEBUG: Cláusulas Económicas válidas ✓');
-    }
-
-    if (_currentStep == 3) {
-      print('DEBUG: Validando jugadores seleccionados');
-      print('DEBUG: Jugadores: ${_jugadoresSeleccionados.length}');
-      
-      if (_jugadoresSeleccionados.isEmpty) {
-        setState(() => _errorMessage = 'Debe seleccionar al menos un jugador');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Debe seleccionar al menos un jugador'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-    }
-
-    if (_currentStep == 4) {
-      // Generar preview antes de pasar al paso 5
-      print('DEBUG: Generando preview');
-      await _generarPreview();
-      if (_preview == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_errorMessage ?? 'Error al generar preview'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-    }
-
-    if (_currentStep == 5) {
-      // Confirmar creación
-      print('DEBUG: Confirmando creación');
-      await _confirmarCreacion();
-      return;
-    }
-
-    print('DEBUG: Avanzando al paso ${_currentStep + 1}');
     setState(() {
       _errorMessage = null;
       _currentStep++;
     });
   }
 
+  void _onBack() {
+    if (_currentStep > 0) {
+      setState(() {
+        _errorMessage = null;
+        _currentStep--;
+      });
+    }
+  }
+
+  void _mostrarError(String msg) {
+    setState(() => _errorMessage = msg);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
+  }
+
+  String get _modalidadLabel => _modalidad == 'MONTO_TOTAL_CUOTAS'
+      ? 'Monto total en cuotas'
+      : 'Recurrente';
+
+  /// Verifica si el formulario tiene datos ingresados.
+  bool get _tieneProgreso =>
+      _currentStep > 0 ||
+      _nombreCtrl.text.trim().isNotEmpty ||
+      _montoCtrl.text.trim().isNotEmpty ||
+      _jugadoresSeleccionados.isNotEmpty;
+
+  /// Maneja el intento de cancelar/salir del wizard.
+  Future<void> _onCancel() async {
+    if (_isLoading) return;
+
+    if (_tieneProgreso) {
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(Icons.warning_amber_rounded,
+              color: Colors.orange.shade700, size: 36),
+          title: const Text('¿Desea salir?'),
+          content: const Text(
+            'Tiene datos ingresados en el formulario. '
+            'Si sale ahora, perderá todo el progreso.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Seguir editando'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Salir y descartar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmar != true) return;
+    }
+
+    if (mounted) Navigator.pop(context);
+  }
+
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: WizardScaffold(
+        title: 'Nuevo Acuerdo Grupal',
+        currentStep: _currentStep,
+        isLoading: _isLoading,
+        onNext: _onNext,
+        onBack: _onBack,
+        onCancel: _onCancel,
+        finalButtonText: 'Crear Acuerdos',
+        finalButtonIcon: Icons.check_circle,
+        maxWidth: 700,
+        steps: [
+          WizardStepDef(
+            label: 'Tipo',
+            title: 'Tipo de Acuerdo',
+            subtitle: '¿Qué tipo de acuerdo desea crear?',
+            content: _buildStepTipo(),
+          ),
+          WizardStepDef(
+            label: 'Datos',
+            title: 'Datos Generales',
+            subtitle: 'Información básica del acuerdo grupal',
+            content: _buildStepDatos(),
+          ),
+          WizardStepDef(
+            label: 'Condiciones',
+            title: 'Condiciones Económicas',
+            subtitle: 'Modalidad de pago, monto y frecuencia',
+            content: _buildStepCondiciones(),
+          ),
+          WizardStepDef(
+            label: 'Jugadores',
+            title: 'Selección de Jugadores',
+            subtitle: 'Elija los jugadores que participarán en este acuerdo',
+            content: _buildStepJugadores(),
+          ),
+          WizardStepDef(
+            label: 'Revisar',
+            title: 'Revisión del Acuerdo',
+            subtitle: 'Verifique los datos antes de confirmar',
+            content: _buildStepPreview(),
+          ),
+          WizardStepDef(
+            label: 'Confirmar',
+            title: 'Confirmación',
+            subtitle: 'Revise las opciones finales y confirme la creación',
+            content: _buildStepConfirmacion(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // PASO 1: TIPO
+  // ===========================================================================
+
   Widget _buildStepTipo() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Seleccione el tipo de acuerdo que desea crear',
-          style: TextStyle(fontSize: 16),
+        SelectableCard<String>(
+          value: 'EGRESO',
+          groupValue: _tipo,
+          onChanged: (v) => setState(() {
+            _tipo = v;
+            _categoria = 'PAGO JUGADORES';
+            _categoriasCache = null;
+          }),
+          icon: Icons.trending_down,
+          iconColor: Colors.red,
+          title: 'Egreso',
+          subtitle: 'Sueldos, premios, viáticos, servicios',
         ),
-        const SizedBox(height: 16),
-        ListTile(
-          title: const Text('Ingreso'),
-          subtitle: const Text('Ejemplo: Becas, subsidios'),
-          leading: Radio<String>(
-            value: 'INGRESO',
-            groupValue: _tipo,
-            onChanged: (value) {
-              setState(() {
-                _tipo = value!;
-                _categoria = 'ENTRADAS'; // Resetear categoría al cambiar tipo
-              });
-            },
-          ),
-        ),
-        ListTile(
-          title: const Text('Egreso'),
-          subtitle: const Text('Ejemplo: Sueldos, viáticos'),
-          leading: Radio<String>(
-            value: 'EGRESO',
-            groupValue: _tipo,
-            onChanged: (value) {
-              setState(() {
-                _tipo = value!;
-                _categoria = 'PAGO JUGADORES'; // Resetear categoría al cambiar tipo
-              });
-            },
-          ),
+        const SizedBox(height: 12),
+        SelectableCard<String>(
+          value: 'INGRESO',
+          groupValue: _tipo,
+          onChanged: (v) => setState(() {
+            _tipo = v;
+            _categoria = 'ENTRADAS';
+            _categoriasCache = null;
+          }),
+          icon: Icons.trending_up,
+          iconColor: Colors.green,
+          title: 'Ingreso',
+          subtitle: 'Adhesiones, Sponsor, Colaboraciones',
         ),
       ],
     );
   }
 
-  Widget _buildStepDatosGenerales() {
+  // ===========================================================================
+  // PASO 2: DATOS GENERALES
+  // ===========================================================================
+
+  Widget _buildStepDatos() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_errorMessage != null)
-          Card(
-            color: Colors.red.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-          ),
-        const SizedBox(height: 8),
+        if (_errorMessage != null) _buildErrorBanner(),
         TextFormField(
           controller: _nombreCtrl,
           decoration: const InputDecoration(
-            labelText: 'Nombre del acuerdo grupal',
-            hintText: 'Ej: Sueldos Plantel 2024',
+            labelText: 'Nombre del acuerdo *',
+            hintText: 'Ej: Sueldos Plantel Mayo 2026',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.description_outlined),
           ),
-          validator: (v) => v == null || v.trim().isEmpty 
-            ? 'Requerido' 
-            : null,
+          textInputAction: TextInputAction.next,
         ),
-        const SizedBox(height: 16),
-        FutureBuilder<List<String>>(
-          key: ValueKey('categorias_$_tipo'), // Forzar recarga cuando cambie el tipo
+        const SizedBox(height: 20),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          key: ValueKey('cat_$_tipo'),
           future: _cargarCategorias(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: CircularProgressIndicator(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const LinearProgressIndicator();
+            }
+            final categorias = snap.data ?? [];
+            if (categorias.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: const Text(
+                  '⚠ No hay categorías configuradas para este tipo',
+                  style: TextStyle(color: Colors.orange),
                 ),
               );
             }
-            
-            if (snapshot.hasError) {
-              return Text(
-                'Error al cargar categorías: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
-              );
-            }
-            
-            final categorias = snapshot.data ?? [];
-            
-            if (categorias.isEmpty) {
-              return const Text(
-                'No hay categorías disponibles para este tipo',
-                style: TextStyle(color: Colors.orange),
-              );
-            }
-            
-            // Asegurar que la categoría seleccionada esté en la lista
-            if (!categorias.contains(_categoria)) {
+            // Autoseleccionar si la categoría actual no es válida
+            final esValida =
+                categorias.any((c) => c['nombre'] == _categoria);
+            if (!esValida) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                setState(() => _categoria = categorias.first);
+                setState(() =>
+                    _categoria = categorias.first['nombre'] as String);
               });
             }
-            
-            return DropdownButtonFormField<String>(
-              value: categorias.contains(_categoria) ? _categoria : categorias.first,
-              decoration: const InputDecoration(
-                labelText: 'Categoría',
-                helperText: 'Seleccione la categoría del movimiento',
-              ),
-              items: categorias.map((c) {
-                return DropdownMenuItem(value: c, child: Text(c));
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _categoria = value);
-                }
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Debe seleccionar una categoría';
-                }
-                return null;
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                return Autocomplete<Map<String, dynamic>>(
+                  initialValue: TextEditingValue(text: _categoria),
+                  displayStringForOption: (cat) =>
+                      cat['nombre']?.toString() ?? '',
+                  optionsBuilder: (textEditingValue) {
+                    if (textEditingValue.text.isEmpty) return categorias;
+                    final query = textEditingValue.text.toLowerCase();
+                    return categorias.where((cat) {
+                      final nombre =
+                          (cat['nombre']?.toString() ?? '').toLowerCase();
+                      final codigo =
+                          (cat['codigo']?.toString() ?? '').toLowerCase();
+                      return nombre.contains(query) || codigo.contains(query);
+                    });
+                  },
+                  onSelected: (cat) {
+                    setState(
+                        () => _categoria = cat['nombre']?.toString() ?? '');
+                  },
+                  fieldViewBuilder:
+                      (context, controller, focusNode, onFieldSubmitted) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Categoría *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.category_outlined),
+                        hintText: 'Escribí para buscar...',
+                      ),
+                      onChanged: (text) {
+                        final match = categorias.where((c) =>
+                            (c['nombre']?.toString() ?? '').toLowerCase() ==
+                            text.toLowerCase());
+                        if (match.isEmpty) {
+                          _categoria = '';
+                        }
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(8),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: 250,
+                            maxWidth: constraints.maxWidth,
+                          ),
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final cat = options.elementAt(index);
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(
+                                  CategoryIconHelper.fromName(
+                                      cat['icono'] as String?),
+                                  size: 20,
+                                ),
+                                title: Text(cat['nombre']?.toString() ?? ''),
+                                onTap: () => onSelected(cat),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
               },
             );
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         TextFormField(
           controller: _observacionesCtrl,
           decoration: const InputDecoration(
-            labelText: 'Observaciones comunes (opcional)',
-            hintText: 'Aplica a todos los acuerdos',
+            labelText: 'Observaciones (opcional)',
+            hintText: 'Aplica a todos los acuerdos generados',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.notes_outlined),
           ),
           maxLines: 2,
         ),
@@ -786,229 +822,210 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
     );
   }
 
-  Widget _buildStepClausulas() {
+  // ===========================================================================
+  // PASO 3: CONDICIONES ECONÓMICAS
+  // ===========================================================================
+
+  Widget _buildStepCondiciones() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Modalidad', style: TextStyle(fontWeight: FontWeight.bold)),
-        ListTile(
-          title: const Text('Recurrente'),
-          subtitle: const Text('Mismo monto cada período'),
-          leading: Radio<String>(
-            value: 'RECURRENTE',
-            groupValue: _modalidad,
-            onChanged: (value) => setState(() => _modalidad = value!),
-          ),
+        if (_errorMessage != null) _buildErrorBanner(),
+        const _SectionLabel('Modalidad de pago'),
+        const SizedBox(height: 8),
+        SelectableCard<String>(
+          value: 'RECURRENTE',
+          groupValue: _modalidad,
+          onChanged: (v) => setState(() => _modalidad = v),
+          icon: Icons.repeat,
+          title: 'Recurrente',
+          subtitle: 'Mismo monto cada período (ej: sueldo mensual)',
         ),
-        ListTile(
-          title: const Text('Monto Total en Cuotas'),
-          subtitle: const Text('Dividir monto total en X cuotas'),
-          leading: Radio<String>(
-            value: 'MONTO_TOTAL_CUOTAS',
-            groupValue: _modalidad,
-            onChanged: (value) => setState(() => _modalidad = value!),
-          ),
+        const SizedBox(height: 8),
+        SelectableCard<String>(
+          value: 'MONTO_TOTAL_CUOTAS',
+          groupValue: _modalidad,
+          onChanged: (v) => setState(() => _modalidad = v),
+          icon: Icons.pie_chart_outline,
+          title: 'Monto total en cuotas',
+          subtitle: 'Dividir un monto total en X cuotas iguales',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+        const _SectionLabel('Monto'),
+        const SizedBox(height: 8),
         TextFormField(
           controller: _montoCtrl,
           decoration: InputDecoration(
-            labelText: _modalidad == 'RECURRENTE' 
-              ? 'Monto Periódico' 
-              : 'Monto Total',
-            prefixText: '\$',
+            labelText: _modalidad == 'RECURRENTE'
+                ? 'Monto periódico *'
+                : 'Monto total *',
+            prefixText: '\$ ',
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.attach_money),
           ),
           keyboardType: TextInputType.number,
-          validator: (v) {
-            if (v == null || v.isEmpty) return 'Requerido';
-            if (double.tryParse(v) == null) return 'Monto inválido';
-            return null;
-          },
         ),
-        const SizedBox(height: 16),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: _cargarFrecuencias(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const CircularProgressIndicator();
-            }
-            
-            if (snapshot.hasError) {
-              return Card(
-                color: Colors.red.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    'Error al cargar frecuencias: ${snapshot.error}',
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-              );
-            }
-            
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Text(
-                'No hay frecuencias disponibles',
-                style: TextStyle(color: Colors.orange),
-              );
-            }
-            
-            final frecuencias = snapshot.data!;
-            
-            // Asegurar que la frecuencia seleccionada esté en la lista
-            if (!frecuencias.any((f) => f['codigo'] == _frecuencia)) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                setState(() => _frecuencia = frecuencias.first['codigo'] as String);
-              });
-            }
-            
-            return DropdownButtonFormField<String>(
-              value: frecuencias.any((f) => f['codigo'] == _frecuencia) 
-                  ? _frecuencia 
-                  : frecuencias.first['codigo'] as String,
-              decoration: const InputDecoration(labelText: 'Frecuencia'),
-              items: frecuencias.map((f) {
-                return DropdownMenuItem(
-                  value: f['codigo'] as String,
-                  child: Text(f['descripcion'] as String),
-                );
-              }).toList(),
-              onChanged: (value) => setState(() => _frecuencia = value!),
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-        if (_modalidad == 'MONTO_TOTAL_CUOTAS')
+        if (_modalidad == 'MONTO_TOTAL_CUOTAS') ...[
+          const SizedBox(height: 16),
           TextFormField(
             initialValue: _cuotas.toString(),
-            decoration: const InputDecoration(labelText: 'Cantidad de Cuotas'),
+            decoration: const InputDecoration(
+              labelText: 'Cantidad de cuotas *',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.format_list_numbered),
+            ),
             keyboardType: TextInputType.number,
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Requerido';
-              final n = int.tryParse(v);
-              if (n == null || n <= 0) return 'Debe ser mayor a 0';
-              return null;
-            },
             onChanged: (v) => _cuotas = int.tryParse(v) ?? 12,
           ),
-        const SizedBox(height: 16),
-        ListTile(
-          title: const Text('Fecha de Inicio'),
-          subtitle: Text(DateFormat('dd/MM/yyyy').format(_fechaInicio)),
-          trailing: const Icon(Icons.calendar_today),
-          onTap: () async {
-            final fecha = await showDatePicker(
-              context: context,
-              initialDate: _fechaInicio,
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2030),
-            );
-            if (fecha != null) {
-              setState(() => _fechaInicio = fecha);
+        ],
+        const SizedBox(height: 24),
+        const _SectionLabel('Frecuencia'),
+        const SizedBox(height: 8),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: _cargarFrecuencias(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const LinearProgressIndicator();
             }
+            final frecuencias = snap.data ?? [];
+            if (frecuencias.isEmpty) {
+              return const Text('No hay frecuencias disponibles',
+                  style: TextStyle(color: Colors.orange));
+            }
+            if (!frecuencias.any((f) => f['codigo'] == _frecuencia)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) => setState(
+                  () => _frecuencia = frecuencias.first['codigo'] as String));
+            }
+            return DropdownButtonFormField<String>(
+              value: frecuencias.any((f) => f['codigo'] == _frecuencia)
+                  ? _frecuencia
+                  : frecuencias.first['codigo'] as String,
+              decoration: const InputDecoration(
+                labelText: 'Frecuencia *',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.schedule),
+              ),
+              items: frecuencias
+                  .map((f) => DropdownMenuItem(
+                        value: f['codigo'] as String,
+                        child: Text(f['descripcion'] as String),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _frecuencia = v!),
+            );
           },
         ),
+        const SizedBox(height: 24),
+        const _SectionLabel('Período'),
+        const SizedBox(height: 8),
+        _DateField(
+          label: 'Fecha de inicio *',
+          value: _fechaInicio,
+          onChanged: (d) => setState(() => _fechaInicio = d),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2030),
+        ),
+        const SizedBox(height: 12),
         if (_modalidad == 'RECURRENTE')
-          ListTile(
-            title: const Text('Fecha de Fin (opcional)'),
-            subtitle: Text(_fechaFin != null 
-              ? DateFormat('dd/MM/yyyy').format(_fechaFin!) 
-              : 'Sin fecha de fin'),
-            trailing: const Icon(Icons.calendar_today),
-            onTap: () async {
-              final fecha = await showDatePicker(
-                context: context,
-                initialDate: _fechaFin ?? DateTime.now().add(const Duration(days: 365)),
-                firstDate: _fechaInicio,
-                lastDate: DateTime(2030),
-              );
-              setState(() => _fechaFin = fecha);
-            },
+          _DateField(
+            label: 'Fecha de fin (opcional)',
+            value: _fechaFin ?? _fechaInicio,
+            onChanged: (d) => setState(() => _fechaFin = d),
+            firstDate: _fechaInicio,
+            lastDate: DateTime(2030),
+            allowClear: true,
+            onClear: () => setState(() => _fechaFin = null),
           ),
       ],
     );
   }
 
+  // ===========================================================================
+  // PASO 4: JUGADORES
+  // ===========================================================================
+
   Widget _buildStepJugadores() {
+    final total = _jugadoresFiltrados.length;
+    final seleccionados = _jugadoresSeleccionados.length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_errorMessage != null)
-          Card(
-            color: Colors.red.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
+        if (_errorMessage != null) _buildErrorBanner(),
+
+        // Resumen + acciones
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: seleccionados > 0
+                    ? Colors.green.shade50
+                    : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color:
+                      seleccionados > 0 ? Colors.green : Colors.grey.shade300,
+                ),
+              ),
               child: Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-          ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Seleccionados: ${_jugadoresSeleccionados.length} / ${_jugadoresFiltrados.length}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            ElevatedButton.icon(
-              onPressed: _jugadoresFiltrados.isEmpty ? null : () {
-                setState(() {
-                  final montoBase = double.tryParse(_montoCtrl.text) ?? 0;
-                  for (final jugador in _jugadoresFiltrados) {
-                    final id = jugador['id'] as int;
-                    if (!_jugadoresSeleccionados.containsKey(id)) {
-                      _jugadoresSeleccionados[id] = JugadorConMonto(
-                        id: id,
-                        nombre: jugador['nombre'] as String? ?? '',
-                        numeroAsociado: null,
-                        rol: jugador['rol'] as String?,
-                        alias: jugador['alias'] as String?,
-                        tipoContratacion: jugador['tipo_contratacion'] as String?,
-                        posicion: jugador['posicion'] as String?,
-                        monto: montoBase,
-                      );
-                    }
-                  }
-                });
-              },
-              icon: const Icon(Icons.done_all, size: 18),
-              label: const Text('Seleccionar Todos'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // Filtros
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _filtroNombreCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Buscar por nombre',
-                  prefixIcon: Icon(Icons.search),
+                '$seleccionados seleccionado${seleccionados != 1 ? 's' : ''}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: seleccionados > 0
+                      ? Colors.green.shade800
+                      : Colors.grey.shade600,
+                  fontSize: 13,
                 ),
               ),
             ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: seleccionados > 0 ? _deseleccionarTodos : null,
+              icon: const Icon(Icons.deselect, size: 18),
+              label: const Text('Limpiar'),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.tonalIcon(
+              onPressed: total > 0 ? _seleccionarTodos : null,
+              icon: const Icon(Icons.done_all, size: 18),
+              label: const Text('Todos'),
+            ),
           ],
         ),
+        const SizedBox(height: 12),
+
+        // Búsqueda
+        TextField(
+          controller: _filtroNombreCtrl,
+          decoration: const InputDecoration(
+            hintText: 'Buscar por nombre...',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
         const SizedBox(height: 8),
+
+        // Filtros rápidos
         Row(
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: _filtroRol,
-                decoration: const InputDecoration(labelText: 'Rol'),
+                decoration: const InputDecoration(
+                  labelText: 'Rol',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'TODOS', child: Text('Todos')),
                   DropdownMenuItem(value: 'JUGADOR', child: Text('Jugador')),
                   DropdownMenuItem(value: 'DT', child: Text('DT')),
-                  DropdownMenuItem(value: 'CUERPO_TECNICO', child: Text('Cuerpo Técnico')),
+                  DropdownMenuItem(
+                      value: 'CUERPO_TECNICO', child: Text('Cuerpo Técnico')),
                 ],
                 onChanged: (v) {
                   setState(() => _filtroRol = v!);
@@ -1020,7 +1037,13 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: _filtroTipoContratacion,
-                decoration: const InputDecoration(labelText: 'Tipo'),
+                decoration: const InputDecoration(
+                  labelText: 'Contratación',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'TODOS', child: Text('Todos')),
                   DropdownMenuItem(value: 'LOCAL', child: Text('Local')),
@@ -1035,89 +1058,149 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+
+        // Lista de jugadores
         if (_isLoading)
           const Center(child: CircularProgressIndicator())
+        else if (_jugadoresFiltrados.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  Icon(Icons.person_off, size: 48, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  const Text('No se encontraron jugadores',
+                      style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+          )
         else
-          SizedBox(
-            height: 400,
-            child: ListView.builder(
-              itemCount: _jugadoresFiltrados.length,
-              itemBuilder: (context, index) {
-                final jugador = _jugadoresFiltrados[index];
-                final id = jugador['id'] as int;
-                final isSelected = _jugadoresSeleccionados.containsKey(id);
-                
-                return Card(
-                  elevation: isSelected ? 4 : 1,
-                  color: isSelected ? Colors.blue.shade50 : null,
-                  child: CheckboxListTile(
-                    value: isSelected,
-                    onChanged: (selected) => _toggleJugador(jugador, selected ?? false),
-                    title: Text(
-                      jugador['nombre'] as String? ?? '',
-                      style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ..._jugadoresFiltrados.map((jugador) {
+            final id = jugador['id'] as int;
+            final isSelected = _jugadoresSeleccionados.containsKey(id);
+            final nombre = jugador['nombre'] as String? ?? '';
+            final rol = jugador['rol'] as String? ?? '';
+            final tipo = jugador['tipo_contratacion'] as String? ?? '';
+            final posicion = jugador['posicion'] as String? ?? '';
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _toggleJugador(jugador, !isSelected),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue.shade50 : null,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.blue.shade300
+                            : Colors.grey.shade200,
+                        width: isSelected ? 1.5 : 1,
                       ),
                     ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Rol: ${jugador['rol'] ?? '-'}'),
-                                  if (jugador['posicion'] != null && (jugador['posicion'] as String).isNotEmpty)
-                                    Text('Posición: ${jugador['posicion']}'),
-                                  if (jugador['tipo_contratacion'] != null)
-                                    Text('Tipo: ${jugador['tipo_contratacion']}'),
-                                  if (jugador['alias'] != null && (jugador['alias'] as String).isNotEmpty)
-                                    Text('Alias: ${jugador['alias']}', 
-                                      style: const TextStyle(fontStyle: FontStyle.italic)),
-                                ],
-                              ),
+                        // Checkbox
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color:
+                                isSelected ? Colors.blue : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.blue
+                                  : Colors.grey.shade400,
+                              width: isSelected ? 0 : 2,
                             ),
-                          ],
+                          ),
+                          child: isSelected
+                              ? const Icon(Icons.check,
+                                  size: 16, color: Colors.white)
+                              : null,
                         ),
-                        if (isSelected) ...[
-                          const Divider(),
-                          Row(
+                        const SizedBox(width: 12),
+
+                        // Info
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Monto: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 120,
-                                child: TextFormField(
-                                  initialValue: _jugadoresSeleccionados[id]!.monto.toStringAsFixed(2),
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  decoration: const InputDecoration(
-                                    isDense: true,
-                                    prefixText: '\$ ',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  onChanged: (v) {
-                                    final monto = double.tryParse(v) ?? 0;
-                                    _ajustarMontoIndividual(id, monto);
-                                  },
+                              Text(
+                                nombre,
+                                style: TextStyle(
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  fontSize: 14,
                                 ),
                               ),
+                              if (rol.isNotEmpty ||
+                                  posicion.isNotEmpty ||
+                                  tipo.isNotEmpty)
+                                Text(
+                                  [
+                                    if (rol.isNotEmpty) rol,
+                                    if (posicion.isNotEmpty) posicion,
+                                    if (tipo.isNotEmpty) tipo,
+                                  ].join(' · '),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
                             ],
                           ),
-                        ],
+                        ),
+
+                        // Monto individual (solo si seleccionado)
+                        if (isSelected)
+                          SizedBox(
+                            width: 110,
+                            child: TextFormField(
+                              initialValue: _jugadoresSeleccionados[id]!
+                                  .monto
+                                  .toStringAsFixed(0),
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                prefixText: '\$ ',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 8),
+                              ),
+                              style: const TextStyle(fontSize: 13),
+                              onChanged: (v) {
+                                final monto = double.tryParse(v) ?? 0;
+                                _ajustarMontoIndividual(id, monto);
+                              },
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-          ),
+                ),
+              ),
+            );
+          }),
       ],
     );
   }
+
+  // ===========================================================================
+  // PASO 5: PREVIEW
+  // ===========================================================================
 
   Widget _buildStepPreview() {
     if (_isLoading) {
@@ -1127,276 +1210,525 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Generando preview...'),
+            Text('Generando resumen...'),
           ],
         ),
       );
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Card(
-          color: Colors.red.shade50,
-          margin: const EdgeInsets.all(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error, color: Colors.red, size: 48),
-                const SizedBox(height: 16),
-                Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Colors.red),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _generarPreview,
-                  child: const Text('Reintentar'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      return _buildErrorState(onRetry: _generarPreview);
     }
 
     if (_preview == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.warning, color: Colors.orange, size: 48),
-            const SizedBox(height: 16),
-            const Text(
-              'No se pudo generar el preview',
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _generarPreview,
-              child: const Text('Generar Preview'),
-            ),
-          ],
-        ),
+      return _buildErrorState(
+        message: 'No se pudo generar el resumen',
+        onRetry: _generarPreview,
       );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            color: Colors.blue.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Resumen Total',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Acuerdos a crear: ${_preview!.cantidadAcuerdos}'),
-                  Text('Compromisos estimados: ${_preview!.totalCompromisos}'),
-                  Text('Monto total: ${Format.money(_preview!.totalComprometido)}'),
-                ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Resumen general
+        _SummaryCard(
+          items: [
+            _SummaryItem(
+              icon: Icons.description,
+              label: 'Nombre',
+              value: _nombreCtrl.text.trim(),
+            ),
+            _SummaryItem(
+              icon: _tipo == 'EGRESO' ? Icons.trending_down : Icons.trending_up,
+              label: 'Tipo',
+              value: _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso',
+            ),
+            _SummaryItem(
+              icon: Icons.category,
+              label: 'Categoría',
+              value: _categoria,
+            ),
+            _SummaryItem(
+              icon: Icons.repeat,
+              label: 'Modalidad',
+              value: _modalidadLabel,
+            ),
+            _SummaryItem(
+              icon: Icons.schedule,
+              label: 'Frecuencia',
+              value: _frecuencia,
+            ),
+            _SummaryItem(
+              icon: Icons.calendar_today,
+              label: 'Desde',
+              value: DateFormat('dd/MM/yyyy').format(_fechaInicio),
+            ),
+            if (_fechaFin != null)
+              _SummaryItem(
+                icon: Icons.event,
+                label: 'Hasta',
+                value: DateFormat('dd/MM/yyyy').format(_fechaFin!),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // KPIs
+        Row(
+          children: [
+            Expanded(
+              child: _KpiCard(
+                label: 'Acuerdos',
+                value: '${_preview!.cantidadAcuerdos}',
+                icon: Icons.handshake_outlined,
+                color: Colors.blue,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          if (_validaciones.isNotEmpty)
-            Card(
+            const SizedBox(width: 8),
+            Expanded(
+              child: _KpiCard(
+                label: 'Compromisos',
+                value: _preview!.totalCompromisos >= 0
+                    ? '${_preview!.totalCompromisos}'
+                    : 'Indef.',
+                icon: Icons.receipt_long,
+                color: Colors.purple,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _KpiCard(
+                label: 'Total',
+                value: Format.money(_preview!.totalComprometido),
+                icon: Icons.attach_money,
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Advertencias
+        if (_validaciones.isNotEmpty) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
               color: Colors.orange.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    const Text(
+                    Icon(Icons.warning_amber,
+                        size: 18, color: Colors.orange.shade700),
+                    const SizedBox(width: 6),
+                    Text(
                       'Advertencias',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    ..._validaciones.entries.map((entry) {
-                      final jugadorId = entry.key;
-                      final warnings = entry.value;
-                      final jugador = _jugadoresSeleccionados[jugadorId];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              jugador?.nombre ?? 'Jugador #$jugadorId',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            ...warnings.map((w) => Text('• $w')),
-                          ],
-                        ),
-                      );
-                    }),
                   ],
                 ),
-              ),
-            ),
-          const SizedBox(height: 16),
-          const Text(
-            'Detalle de Acuerdos',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          ...(_preview!.previewsIndividuales.map((preview) {
-            return Card(
-              child: ExpansionTile(
-                title: Text(preview.jugadorNombre),
-                subtitle: Text('Monto: ${Format.money(preview.montoAjustado)}'),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Compromisos estimados: ${preview.compromisosEstimados >= 0 ? preview.compromisosEstimados : "Indefinido"}'),
-                        if (preview.compromisosEstimados > 0)
-                          Text('Total estimado: ${Format.money(preview.montoAjustado * preview.compromisosEstimados)}'),
-                      ],
+                const SizedBox(height: 8),
+                ..._validaciones.entries.map((entry) {
+                  final jugador = _jugadoresSeleccionados[entry.key];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '${jugador?.nombre ?? '#${entry.key}'}: ${entry.value.join(', ')}',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.orange.shade900),
                     ),
-                  ),
-                ],
-              ),
-            );
-          })),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
-      ),
+
+        // Detalle individual
+        const _SectionLabel('Detalle por jugador'),
+        const SizedBox(height: 8),
+        ...(_preview!.previewsIndividuales.map((p) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 4),
+            child: ListTile(
+              dense: true,
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.blue.shade100,
+                child: Text(
+                  p.jugadorNombre.isNotEmpty
+                      ? p.jugadorNombre[0].toUpperCase()
+                      : '?',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ),
+              title: Text(p.jugadorNombre,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w500, fontSize: 14)),
+              subtitle: Text(
+                '${p.compromisosEstimados >= 0 ? '${p.compromisosEstimados} cuotas' : 'Indefinido'} · ${Format.money(p.montoAjustado)}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: p.compromisosEstimados > 0
+                  ? Text(
+                      Format.money(p.montoAjustado * p.compromisosEstimados),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700,
+                        fontSize: 13,
+                      ),
+                    )
+                  : null,
+            ),
+          );
+        })),
+      ],
     );
   }
+
+  // ===========================================================================
+  // PASO 6: CONFIRMACIÓN
+  // ===========================================================================
 
   Widget _buildStepConfirmacion() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_errorMessage != null)
-          Card(
-            color: Colors.red.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
+        if (_errorMessage != null) _buildErrorBanner(),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.shade200),
           ),
-        const SizedBox(height: 8),
-        Card(
-          color: Colors.green.shade50,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Todo listo para crear los acuerdos',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          child: Column(
+            children: [
+              Icon(Icons.check_circle_outline,
+                  size: 48, color: Colors.green.shade600),
+              const SizedBox(height: 12),
+              const Text(
+                'Todo listo para crear los acuerdos',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 8),
-                Text('Se crearán ${_preview?.cantidadAcuerdos ?? 0} acuerdos individuales'),
-                if (_generaCompromisos)
-                  Text('Se generarán ${_preview?.totalCompromisos ?? 0} compromisos automáticamente'),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Se crearán ${_preview?.cantidadAcuerdos ?? _jugadoresSeleccionados.length} acuerdos individuales',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                textAlign: TextAlign.center,
+              ),
+              if (_generaCompromisos && _preview != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Se generarán ${_preview!.totalCompromisos} compromisos automáticamente',
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Total comprometido: ${Format.money(_preview!.totalComprometido)}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade800,
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
-        SwitchListTile(
-          title: const Text('Generar compromisos automáticamente'),
-          subtitle: const Text('Si se desactiva, deberás crearlos manualmente'),
-          value: _generaCompromisos,
-          onChanged: (value) => setState(() => _generaCompromisos = value),
+        const SizedBox(height: 20),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade200),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: SwitchListTile(
+            title: const Text('Generar compromisos automáticamente'),
+            subtitle: const Text(
+                'Si se desactiva, deberá crearlos manualmente después'),
+            value: _generaCompromisos,
+            onChanged: (v) => setState(() => _generaCompromisos = v),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         ),
-        const SizedBox(height: 16),
-        const Text(
-          'Al confirmar, se creará un registro histórico que agrupa todos los acuerdos.',
-          style: TextStyle(fontStyle: FontStyle.italic),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Al confirmar se creará un registro histórico que agrupa todos los acuerdos. '
+                  'Cada acuerdo individual se podrá gestionar de forma independiente.',
+                  style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  Future<List<String>> _cargarCategorias() async {
-    try {
-      print('DEBUG: Cargando categorías para tipo: $_tipo');
-      final rawDb = await AppDatabase.instance();
-      
-      // Consultar categorías de categoria_movimiento según el tipo
-      final result = await rawDb.query(
-        'categoria_movimiento',
-        columns: ['nombre'],
-        where: 'activa = ? AND (tipo = ? OR tipo = ?)',
-        whereArgs: [1, _tipo, 'AMBOS'],
-        orderBy: 'nombre ASC',
-      );
-      
-      print('DEBUG: Categorías encontradas: ${result.length}');
-      
-      final categorias = result
-          .map((r) => r['nombre'] as String?)
-          .where((c) => c != null && c.isNotEmpty)
-          .cast<String>()
-          .toList();
-      
-      // Si no hay categorías, retornar lista predefinida básica
-      if (categorias.isEmpty) {
-        print('DEBUG: No hay categorías en DB, usando fallback');
-        if (_tipo == 'EGRESO') {
-          return ['PAGO JUGADORES', 'SERVICIOS GENERALES / M.de Obra', 'GASTOS ATENCIÓN JUGADORES'];
-        } else {
-          return ['ENTRADAS', 'PEÑAS E INGRESOS VARIOS', 'COLABORADORES PAGO DT Y JUG'];
-        }
-      }
-      
-      print('DEBUG: Categorías cargadas: ${categorias.take(3).toList()}...');
-      return categorias;
-    } catch (e, stack) {
-      print('ERROR: Al cargar categorías: $e');
-      await AppDatabase.logLocalError(
-        scope: 'nuevo_acuerdo_grupal.cargar_categorias',
-        error: e.toString(),
-        stackTrace: stack,
-      );
-      // Fallback según tipo
-      if (_tipo == 'EGRESO') {
-        return ['PAGO JUGADORES', 'SERVICIOS GENERALES / M.de Obra'];
-      } else {
-        return ['ENTRADAS', 'PEÑAS E INGRESOS VARIOS'];
-      }
-    }
+  // ===========================================================================
+  // WIDGETS AUXILIARES
+  // ===========================================================================
+
+  Widget _buildErrorBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<List<Map<String, dynamic>>> _cargarFrecuencias() async {
-    try {
-      print('DEBUG: Cargando frecuencias');
-      final rawDb = await AppDatabase.instance();
-      final result = await rawDb.query(
-        'frecuencias',
-        columns: ['codigo', 'descripcion'],
-        orderBy: 'codigo ASC',
-      );
-      print('DEBUG: Frecuencias encontradas: ${result.length}');
-      if (result.isNotEmpty) {
-        print('DEBUG: Primera frecuencia: ${result.first}');
-      }
-      return result;
-    } catch (e, stack) {
-      print('ERROR: Al cargar frecuencias: $e');
-      await AppDatabase.logLocalError(
-        scope: 'nuevo_acuerdo_grupal.cargar_frecuencias',
-        error: e.toString(),
-        stackTrace: stack,
-      );
-      return [];
-    }
+  Widget _buildErrorState({String? message, VoidCallback? onRetry}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(
+              message ?? _errorMessage ?? 'Ocurrió un error',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red.shade700),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Reintentar'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// WIDGETS PRIVADOS AUXILIARES
+// =============================================================================
+
+/// Etiqueta de sección usada dentro de los pasos del wizard.
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF6B7280),
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+}
+
+/// Campo de fecha con botón de calendario y opción de limpieza.
+class _DateField extends StatelessWidget {
+  final String label;
+  final DateTime value;
+  final ValueChanged<DateTime> onChanged;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final bool allowClear;
+  final VoidCallback? onClear;
+
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    required this.firstDate,
+    required this.lastDate,
+    this.allowClear = false,
+    this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value,
+          firstDate: firstDate,
+          lastDate: lastDate,
+        );
+        if (picked != null) onChanged(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          prefixIcon: const Icon(Icons.calendar_today_outlined),
+          suffixIcon: allowClear && onClear != null
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: onClear,
+                )
+              : null,
+        ),
+        child: Text(DateFormat('dd/MM/yyyy').format(value)),
+      ),
+    );
+  }
+}
+
+/// Card con ítems de resumen (icono + label + valor).
+class _SummaryCard extends StatelessWidget {
+  final List<_SummaryItem> items;
+  const _SummaryCard({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: items
+            .map((item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(item.icon, size: 18, color: Colors.grey.shade600),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          item.label,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        item.value,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _SummaryItem {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _SummaryItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+}
+
+/// Tarjeta de KPI para métricas clave.
+class _KpiCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  const _KpiCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
   }
 }

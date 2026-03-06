@@ -87,7 +87,7 @@ class AppDatabase {
     _db = await factory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 20, // Agregar medio_pago_id a caja_movimiento
+        version: 22, // Fase E: tabla presupuesto_anual
         onConfigure: _onConfigure,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
@@ -110,19 +110,32 @@ class AppDatabase {
   }
 
   /// Se ejecuta SIEMPRE al abrir la DB, sin importar la versión.
-  /// Repara columnas que pudieron fallar en migraciones anteriores.
+  /// H.7: medio_pago_id ya está garantizado por onUpgrade (v20+).
   static Future<void> _onOpen(Database db) async {
     try {
-      await _ensureMedioPagoIdColumn(db);
-      // Verificar que realmente existe después del repair
+      // La columna medio_pago_id existe desde la migración v20.
+      // Solo verificamos como aserción defensiva, sin reparar.
       final cols = await db.rawQuery("PRAGMA table_info(caja_movimiento)");
       medioPagoColumnReady = cols.any((c) => c['name'] == 'medio_pago_id');
       if (!medioPagoColumnReady) {
-        print('⚠ CRÍTICO: medio_pago_id NO existe después de _ensureMedioPagoIdColumn');
+        print('⚠ CRÍTICO: medio_pago_id NO existe en caja_movimiento. Ejecutar onUpgrade primero.');
+      }
+      
+      // Backfill idempotente: asegurar unidad_gestion_id para movimientos que se
+      // insertaron sin ella (bug corregido — ahora crear() siempre la incluye).
+      final emCols = await db.rawQuery("PRAGMA table_info(evento_movimiento)");
+      final hasUgCol = emCols.any((c) => c['name'] == 'unidad_gestion_id');
+      if (hasUgCol) {
+        final updated = await db.rawUpdate(
+          'UPDATE evento_movimiento SET unidad_gestion_id = disciplina_id WHERE unidad_gestion_id IS NULL AND disciplina_id IS NOT NULL',
+        );
+        if (updated > 0) {
+          print('✓ Backfill onOpen: $updated movimientos con unidad_gestion_id corregidos');
+        }
       }
     } catch (e, stack) {
       medioPagoColumnReady = false;
-      print('⚠ Error en _onOpen repair: $e');
+      print('⚠ Error en _onOpen: $e');
       await logLocalError(
         scope: 'db._onOpen',
         error: e.toString(),
@@ -273,6 +286,16 @@ class AppDatabase {
     // Reasegurar columna medio_pago_id (por si la migración original falló en v20)
     await _ensureMedioPagoIdColumn(db);
     
+    // Migración a versión 21: Fase A hotfixes
+    if (oldVersion < 21) {
+      await _migrateV21FaseAHotfixes(db);
+    }
+
+    // Migración a versión 22: Fase E — tabla presupuesto_anual
+    if (oldVersion < 22) {
+      await _migrateV22PresupuestoAnual(db);
+    }
+    
     // Futuras migraciones irán aquí...
   }
 
@@ -326,6 +349,97 @@ class AppDatabase {
           payload: {'table': 'caja_movimiento', 'column': 'medio_pago_id'},
         );
       }
+    }
+  }
+
+  /// Migración v21 — Fase A hotfixes:
+  /// 1. Agregar unidad_gestion_id a evento_movimiento (faltaba en CREATE TABLE original)
+  /// 2. Agregar eliminado a caja_movimiento (para soft delete)
+  static Future<void> _migrateV21FaseAHotfixes(Database db) async {
+    try {
+      print('🚀 Migración v21: Fase A hotfixes...');
+
+      // 1) unidad_gestion_id en evento_movimiento
+      final emCols = await db.rawQuery("PRAGMA table_info(evento_movimiento)");
+      final hasUnidadCol = emCols.any((c) => c['name'] == 'unidad_gestion_id');
+      if (!hasUnidadCol) {
+        await db.execute('PRAGMA foreign_keys=OFF');
+        await db.execute(
+          'ALTER TABLE evento_movimiento ADD COLUMN unidad_gestion_id INTEGER REFERENCES unidades_gestion(id)',
+        );
+        // Backfill: copiar disciplina_id como unidad_gestion_id para registros existentes
+        await db.execute(
+          'UPDATE evento_movimiento SET unidad_gestion_id = disciplina_id WHERE unidad_gestion_id IS NULL',
+        );
+        await db.execute('PRAGMA foreign_keys=ON');
+        print('   ✓ unidad_gestion_id agregada a evento_movimiento + backfill');
+      }
+
+      // 2) eliminado en caja_movimiento
+      final cmCols = await db.rawQuery("PRAGMA table_info(caja_movimiento)");
+      final hasEliminadoCol = cmCols.any((c) => c['name'] == 'eliminado');
+      if (!hasEliminadoCol) {
+        await db.execute('PRAGMA foreign_keys=OFF');
+        await db.execute(
+          'ALTER TABLE caja_movimiento ADD COLUMN eliminado INTEGER NOT NULL DEFAULT 0',
+        );
+        await db.execute('PRAGMA foreign_keys=ON');
+        print('   ✓ eliminado agregada a caja_movimiento');
+      }
+
+      print('✓ Migración v21 completada');
+    } catch (e, stack) {
+      try { await db.execute('PRAGMA foreign_keys=ON'); } catch (_) {}
+      print('⚠ Error en migración v21: $e');
+      await logLocalError(
+        scope: 'db.migration.v21',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'description': 'Fase A hotfixes'},
+      );
+    }
+  }
+
+  /// Migración v22 — Fase E: tabla presupuesto_anual
+  static Future<void> _migrateV22PresupuestoAnual(Database db) async {
+    try {
+      print('🚀 Migración v22: Creando tabla presupuesto_anual...');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS presupuesto_anual (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          unidad_gestion_id INTEGER NOT NULL,
+          categoria_codigo TEXT NOT NULL,
+          tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')),
+          anio INTEGER NOT NULL,
+          monto_mensual REAL NOT NULL CHECK (monto_mensual >= 0),
+          observacion TEXT,
+          eliminado INTEGER NOT NULL DEFAULT 0,
+          created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
+          updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
+          FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id),
+          UNIQUE (unidad_gestion_id, categoria_codigo, tipo, anio)
+        )
+      ''');
+
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_presupuesto_unidad_anio '
+        'ON presupuesto_anual(unidad_gestion_id, anio, eliminado)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_presupuesto_tipo_cat '
+        'ON presupuesto_anual(tipo, categoria_codigo, anio)',
+      );
+
+      print('✓ Migración v22 completada');
+    } catch (e, stack) {
+      print('⚠ Error en migración v22: $e');
+      await logLocalError(
+        scope: 'db.migration.v22',
+        error: e.toString(),
+        stackTrace: stack,
+        payload: {'description': 'Tabla presupuesto_anual'},
+      );
     }
   }
 
@@ -830,6 +944,7 @@ class AppDatabase {
         medio_pago_id INTEGER NOT NULL DEFAULT 1,
         created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
         updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
+        eliminado INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (caja_id) REFERENCES caja_diaria(id),
         FOREIGN KEY (medio_pago_id) REFERENCES metodos_pago(id)
       )
@@ -1032,6 +1147,7 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         evento_id TEXT,
         disciplina_id INTEGER NOT NULL,
+        unidad_gestion_id INTEGER,
         cuenta_id INTEGER NOT NULL,
         tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')),
         categoria TEXT,
@@ -1054,10 +1170,29 @@ class AppDatabase {
         sync_estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (sync_estado IN ('PENDIENTE','SINCRONIZADA','ERROR')),
         created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
         updated_ts INTEGER,
+        FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id),
         FOREIGN KEY (cuenta_id) REFERENCES cuentas_fondos(id),
         FOREIGN KEY (medio_pago_id) REFERENCES metodos_pago(id),
         FOREIGN KEY (compromiso_id) REFERENCES compromisos(id),
         FOREIGN KEY (entidad_plantel_id) REFERENCES entidades_plantel(id)
+      )
+    ''');
+
+    // presupuesto_anual (Fase E)
+    batch.execute('''
+      CREATE TABLE presupuesto_anual (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        unidad_gestion_id INTEGER NOT NULL,
+        categoria_codigo TEXT NOT NULL,
+        tipo TEXT NOT NULL CHECK (tipo IN ('INGRESO','EGRESO')),
+        anio INTEGER NOT NULL,
+        monto_mensual REAL NOT NULL CHECK (monto_mensual >= 0),
+        observacion TEXT,
+        eliminado INTEGER NOT NULL DEFAULT 0,
+        created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
+        updated_ts INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
+        FOREIGN KEY (unidad_gestion_id) REFERENCES unidades_gestion(id),
+        UNIQUE (unidad_gestion_id, categoria_codigo, tipo, anio)
       )
     ''');
 
@@ -1136,6 +1271,10 @@ class AppDatabase {
   static Future<void> _createAllIndexes(Database db) async {
     // Catálogos
     await db.execute('CREATE INDEX idx_unidades_gestion_tipo ON unidades_gestion(tipo, activo)');
+
+    // Presupuesto anual
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_presupuesto_unidad_anio ON presupuesto_anual(unidad_gestion_id, anio, eliminado)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_presupuesto_tipo_cat ON presupuesto_anual(tipo, categoria_codigo, anio)');
 
     // Cuentas fondos
     await db.execute('CREATE INDEX idx_cuentas_activa ON cuentas_fondos(activa, eliminado)');

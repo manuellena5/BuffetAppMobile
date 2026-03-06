@@ -140,14 +140,14 @@ class CustomDrawer extends StatelessWidget {
                 Icon(
                   modeIcon,
                   size: 16,
-                  color: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                  color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                 ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     'Modo $modeLabel',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -206,7 +206,7 @@ class CustomDrawer extends StatelessWidget {
         ),
       ),
       selected: item.isActive,
-      selectedTileColor: activeColor.withOpacity(0.1),
+      selectedTileColor: activeColor.withValues(alpha: 0.1),
       onTap: item.onTap,
     );
   }

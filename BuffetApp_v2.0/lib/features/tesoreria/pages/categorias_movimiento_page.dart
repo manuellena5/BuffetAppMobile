@@ -7,7 +7,12 @@ import '../services/categoria_import_export_service.dart';
 import 'categoria_movimiento_form_page.dart';
 import 'importar_categorias_page.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
+import '../../shared/utils/category_icon_helper.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../../data/dao/db.dart';
 
 /// Pantalla de Gestión de Categorías de Movimientos (según mockup)
@@ -49,7 +54,7 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar categorías: $e')),
+          const SnackBar(content: Text('Error al cargar categorías. Intente nuevamente.')),
         );
       }
     }
@@ -113,12 +118,11 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
     
-    return TesoreriaScaffold(
+    return ErpLayout(
+      currentRoute: '/categorias',
       title: 'Categorías',
-      currentRouteName: '/categorias',
-      appBarColor: Colors.orange,
-      backgroundColor: isDark ? const Color(0xFF111813) : const Color(0xFFF8FAF9),
       actions: [
         IconButton(
           icon: const Icon(Icons.upload),
@@ -133,10 +137,17 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
       ],
       floatingActionButton: FloatingActionButton(
         onPressed: () => _abrirFormulario(),
-        backgroundColor: Colors.green,
         child: const Icon(Icons.add),
       ),
-      body: ResponsiveContainer(
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Categorías',
+              subtitle: '${_categoriasFiltradas.length} categorías',
+            ),
+          Expanded(
+            child: ResponsiveContainer(
         maxWidth: 1000,
         child: Column(
           children: [
@@ -201,13 +212,16 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
           // Lista de categorías
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
+                ? SkeletonLoader.table(rows: 5, columns: 4)
                 : _categoriasFiltradas.isEmpty
                     ? _buildEmpty()
                     : _buildVistaTabla(),
           ),
         ],
       ),
+      ),
+          ),
+        ],
       ),
     );
   }
@@ -255,87 +269,13 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
   }
 
   Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.category_outlined,
-            size: 80,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No hay categorías',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _busqueda.isNotEmpty
-                ? 'No se encontraron resultados'
-                : 'Tocá + para crear una categoría',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.category_outlined,
+      title: 'No hay categorías',
+      subtitle: _busqueda.isNotEmpty
+          ? 'No se encontraron resultados'
+          : 'Tocá + para crear una categoría',
     );
-  }
-
-  IconData _getIconData(String iconName) {
-    // Mapeo de nombres de iconos Material Symbols a IconData
-    final iconMap = {
-      'attach_money': Icons.attach_money,
-      'account_balance': Icons.account_balance,
-      'account_balance_wallet': Icons.account_balance_wallet,
-      'confirmation_number': Icons.confirmation_number,
-      'restaurant': Icons.restaurant,
-      'sports_soccer': Icons.sports_soccer,
-      'stadium': Icons.stadium,
-      'campaign': Icons.campaign,
-      'volunteer_activism': Icons.volunteer_activism,
-      'groups': Icons.groups,
-      'local_activity': Icons.local_activity,
-      'gavel': Icons.gavel,
-      'swap_horiz': Icons.swap_horiz,
-      'sports': Icons.sports,
-      'local_police': Icons.local_police,
-      'pest_control': Icons.pest_control,
-      'people': Icons.people,
-      'directions_bus': Icons.directions_bus,
-      'fitness_center': Icons.fitness_center,
-      'medical_services': Icons.medical_services,
-      'home': Icons.home,
-      'restaurant_menu': Icons.restaurant_menu,
-      'local_pharmacy': Icons.local_pharmacy,
-      'local_laundry_service': Icons.local_laundry_service,
-      'shield': Icons.shield,
-      'paid': Icons.paid,
-      'bolt': Icons.bolt,
-      'local_fire_department': Icons.local_fire_department,
-      'sports_basketball': Icons.sports_basketball,
-      'hardware': Icons.hardware,
-      'build': Icons.build,
-      'construction': Icons.construction,
-      'cleaning_services': Icons.cleaning_services,
-      'engineering': Icons.engineering,
-      'inventory_2': Icons.inventory_2,
-      'fence': Icons.fence,
-      'checkroom': Icons.checkroom,
-      'ambulance': Icons.medical_services,
-      'dinner_dining': Icons.dinner_dining,
-      'card_membership': Icons.card_membership,
-      'casino': Icons.casino,
-      'category': Icons.category,
-    };
-    
-    return iconMap[iconName] ?? Icons.category;
   }
 
   Widget _buildVistaTabla() {
@@ -381,7 +321,7 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                   Row(
                     children: [
                       if (icono != null)
-                        Icon(_getIconData(icono), size: 20, color: tipoColor),
+                        Icon(CategoryIconHelper.fromName(icono), size: 20, color: tipoColor),
                       const SizedBox(width: 8),
                       Text(nombre),
                     ],
@@ -519,7 +459,7 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al eliminar: $e'),
+            content: const Text('Error al eliminar. Intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );

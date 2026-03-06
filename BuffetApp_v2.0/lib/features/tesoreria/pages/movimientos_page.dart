@@ -77,7 +77,7 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(const SnackBar(content: Text('Error al cargar movimientos. Intente nuevamente.')));
       }
     }
   }
@@ -153,6 +153,7 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
         categoria: _codigoCategoria,
         monto: monto,
         medioPagoId: _medioPagoId!,
+        unidadGestionId: settings.unidadGestionActivaId ?? disciplinaId,
         observacion: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
       );
       if (!mounted) return;
@@ -164,7 +165,7 @@ class _MovimientoCreatePageState extends State<MovimientoCreatePage> {
           scope: 'mov_ext.save', error: e, stackTrace: st);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+          .showSnackBar(const SnackBar(content: Text('Error al procesar. Intente nuevamente.')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -656,7 +657,7 @@ class _MovimientoDialogState extends State<_MovimientoDialog> {
           payload: {'cajaId': widget.cajaId});
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showSnackBar(const SnackBar(content: Text('Error al eliminar. Intente nuevamente.')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -147,11 +147,16 @@ class AppBarBreadcrumb extends StatelessWidget {
           ]
         : items;
 
+    // Usar color del foreground del AppBar según el theme
+    final appBarTheme = Theme.of(context).appBarTheme;
+    final fgColor = appBarTheme.foregroundColor
+        ?? Theme.of(context).colorScheme.onSurface;
+
     return Breadcrumb(
       items: visibleItems,
       fontSize: 16,
-      activeColor: Colors.white,
-      inactiveColor: Colors.white.withOpacity(0.85), // Más contraste
+      activeColor: fgColor,
+      inactiveColor: fgColor.withOpacity(0.55),
     );
   }
 }

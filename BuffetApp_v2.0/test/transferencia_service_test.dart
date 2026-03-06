@@ -147,7 +147,7 @@ void main() {
         ),
         throwsA(predicate((e) => e
             .toString()
-            .contains('No se pueden transferir fondos entre unidades diferentes'))),
+            .contains('No se pueden realizar transferencias entre cuentas de diferentes unidades'))),
       );
     });
 
@@ -178,7 +178,7 @@ void main() {
           monto: 0.0,
           medioPagoId: 1,
         ),
-        throwsA(predicate((e) => e.toString().contains('mayor a 0'))),
+        throwsA(predicate((e) => e.toString().contains('mayor a cero'))),
       );
 
       expect(
@@ -188,7 +188,7 @@ void main() {
           monto: -500.0,
           medioPagoId: 1,
         ),
-        throwsA(predicate((e) => e.toString().contains('mayor a 0'))),
+        throwsA(predicate((e) => e.toString().contains('mayor a cero'))),
       );
     });
   });
@@ -251,6 +251,7 @@ void main() {
         'transferencia_id': 'test-id-incompleto',
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });

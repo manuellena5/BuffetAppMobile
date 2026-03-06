@@ -2,8 +2,11 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart' as p;
 import '../lib/data/dao/db.dart';
 import '../lib/features/tesoreria/services/cuenta_service.dart';
+
+late String _tempDir;
 
 // Configura entorno de pruebas: DB FFI, rutas de path_provider y canales nativos necesarios
 Future<void> _setupTestEnv() async {
@@ -13,10 +16,10 @@ Future<void> _setupTestEnv() async {
   databaseFactory = databaseFactoryFfi;
   // Mock de path_provider: devolver directorio temporal para cualquier consulta
   const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
-  final temp = await Directory.systemTemp.createTemp('buffet_test').then((d) => d.path);
+  _tempDir = await Directory.systemTemp.createTemp('buffet_test').then((d) => d.path);
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
     pathChannel,
-    (MethodCall call) async => temp,
+    (MethodCall call) async => _tempDir,
   );
 }
 
@@ -26,8 +29,12 @@ void main() {
   });
 
   setUp(() async {
-    // Reiniciar DB antes de cada test
     await AppDatabase.close();
+    // Eliminar DB para empezar limpio en cada test
+    final dbFile = File(p.join(_tempDir, 'barcancha.db'));
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+    }
   });
 
   tearDown() async {
@@ -64,7 +71,7 @@ void main() {
       expect(result.first['saldo_inicial'], 50000.0);
       expect(result.first['tiene_comision'], 1);
       expect(result.first['comision_porcentaje'], 1.5);
-      expect(result.first['activo'], 1);
+      expect(result.first['activa'], 1);
       expect(result.first['eliminado'], 0);
     });
 
@@ -271,6 +278,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });
@@ -286,6 +294,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 1000,
         'updated_ts': now + 1000,
       });
@@ -320,6 +329,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 1, // Eliminado
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });
@@ -411,7 +421,7 @@ void main() {
         whereArgs: [cuentaId],
       );
 
-      expect(result.first['activo'], 0);
+      expect(result.first['activa'], 0);
     });
   });
 
@@ -463,6 +473,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });

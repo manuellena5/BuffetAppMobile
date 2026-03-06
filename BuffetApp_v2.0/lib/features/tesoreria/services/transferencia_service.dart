@@ -71,6 +71,7 @@ class TransferenciaService {
       final db = await AppDatabase.instance();
       final now = DateTime.now().millisecondsSinceEpoch;
       final transferenciaId = const Uuid().v4();
+      final fechaHoy = DateTime.now().toIso8601String().substring(0, 10);
       
       // FASE 22.3: Calcular comisiones para ambas cuentas si aplica
       // Comisión en cuenta ORIGEN (egreso de dinero)
@@ -99,6 +100,7 @@ class TransferenciaService {
           'eliminado': 0,
           'estado': 'CONFIRMADO',
           'sync_estado': 'PENDIENTE',
+          'fecha': fechaHoy,
           'created_ts': now,
         });
 
@@ -117,6 +119,7 @@ class TransferenciaService {
           'eliminado': 0,
           'estado': 'CONFIRMADO',
           'sync_estado': 'PENDIENTE',
+          'fecha': fechaHoy,
           'created_ts': now,
         });
 
@@ -139,6 +142,7 @@ class TransferenciaService {
             'eliminado': 0,
             'estado': 'CONFIRMADO',
             'sync_estado': 'PENDIENTE',
+            'fecha': fechaHoy,
             'created_ts': now,
           });
         }
@@ -162,6 +166,7 @@ class TransferenciaService {
             'eliminado': 0,
             'estado': 'CONFIRMADO',
             'sync_estado': 'PENDIENTE',
+            'fecha': fechaHoy,
             'created_ts': now,
           });
         }
@@ -299,34 +304,52 @@ class TransferenciaService {
 
   /// Verificar integridad de una transferencia
   /// 
-  /// Una transferencia válida debe tener exactamente 2 movimientos:
-  /// - 1 EGRESO
-  /// - 1 INGRESO
-  /// - Mismo monto
-  /// - Mismo transferencia_id
+  /// Una transferencia válida tiene 2-4 movimientos:
+  /// - Par base: 1 EGRESO (TRANSFERENCIA) + 1 INGRESO (TRANSFERENCIA) con mismo monto
+  /// - Opcionales: hasta 2 EGRESO (COM_BANC) por comisiones de cuentas
   Future<bool> verificarIntegridad(String transferenciaId) async {
     try {
       final movimientos = await obtenerMovimientos(transferenciaId);
       
-      if (movimientos.length != 2) return false;
+      // Una transferencia genera entre 2 y 4 movimientos
+      if (movimientos.length < 2 || movimientos.length > 4) return false;
       
-      final egreso = movimientos.firstWhere(
+      // Separar par base (TRANSFERENCIA) de comisiones (COM_BANC)
+      final baseMovimientos = movimientos
+          .where((m) => m['categoria'] != 'COM_BANC')
+          .toList();
+      final comisiones = movimientos
+          .where((m) => m['categoria'] == 'COM_BANC')
+          .toList();
+      
+      // El par base debe ser exactamente 2 movimientos
+      if (baseMovimientos.length != 2) return false;
+      
+      final egreso = baseMovimientos.firstWhere(
         (m) => m['tipo'] == 'EGRESO',
         orElse: () => {},
       );
       
-      final ingreso = movimientos.firstWhere(
+      final ingreso = baseMovimientos.firstWhere(
         (m) => m['tipo'] == 'INGRESO',
         orElse: () => {},
       );
       
       if (egreso.isEmpty || ingreso.isEmpty) return false;
       
-      // Verificar que tengan el mismo monto
+      // Verificar que el par base tenga el mismo monto
       final montoEgreso = (egreso['monto'] as num?)?.toDouble() ?? 0;
       final montoIngreso = (ingreso['monto'] as num?)?.toDouble() ?? 0;
       
-      return (montoEgreso - montoIngreso).abs() < 0.01; // Tolerancia para decimales
+      if ((montoEgreso - montoIngreso).abs() >= 0.01) return false;
+      
+      // Comisiones deben ser EGRESO con monto > 0
+      for (final com in comisiones) {
+        if (com['tipo'] != 'EGRESO') return false;
+        if (((com['monto'] as num?)?.toDouble() ?? 0) <= 0) return false;
+      }
+      
+      return true;
     } catch (e, st) {
       await AppDatabase.logLocalError(
         scope: 'transferencia_service.verificar_integridad',

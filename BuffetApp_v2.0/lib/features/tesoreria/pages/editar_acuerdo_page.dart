@@ -3,9 +3,10 @@ import 'package:intl/intl.dart';
 
 import '../../../features/shared/services/acuerdos_service.dart';
 import '../../../data/dao/db.dart';
+import '../widgets/ayuda_tesoreria_dialog.dart';
 
 /// FASE 18.8: Página para editar un acuerdo existente
-/// 
+///
 /// Restricciones:
 /// - Solo permite editar acuerdos sin compromisos confirmados
 /// - Campos editables: nombre, fecha_fin, observaciones, adjuntos
@@ -21,15 +22,15 @@ class EditarAcuerdoPage extends StatefulWidget {
 
 class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
   final _formKey = GlobalKey<FormState>();
-  
+
   // Controllers
   final _nombreController = TextEditingController();
   final _observacionesController = TextEditingController();
-  
+
   // Form values
   DateTime? _fechaFin;
   DateTime? _fechaInicio;
-  
+
   bool _isLoading = true;
   bool _isSubmitting = false;
   Map<String, dynamic>? _acuerdo;
@@ -49,10 +50,10 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
 
   Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final acuerdo = await AcuerdosService.obtenerAcuerdo(widget.acuerdoId);
-      
+
       if (acuerdo == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -62,11 +63,12 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
         }
         return;
       }
-      
+
       // Verificar que no tenga compromisos confirmados
-      final stats = await AcuerdosService.obtenerEstadisticasAcuerdo(widget.acuerdoId);
+      final stats =
+          await AcuerdosService.obtenerEstadisticasAcuerdo(widget.acuerdoId);
       final cuotasConfirmadas = stats['cuotas_confirmadas'] as int? ?? 0;
-      
+
       if (cuotasConfirmadas > 0) {
         if (mounted) {
           await showDialog(
@@ -88,17 +90,19 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
         }
         return;
       }
-      
+
       // Cargar datos al formulario
       _nombreController.text = acuerdo['nombre']?.toString() ?? '';
-      _observacionesController.text = acuerdo['observaciones']?.toString() ?? '';
-      
+      _observacionesController.text =
+          acuerdo['observaciones']?.toString() ?? '';
+
       final fechaInicioStr = acuerdo['fecha_inicio']?.toString();
       final fechaFinStr = acuerdo['fecha_fin']?.toString();
-      
+
       setState(() {
         _acuerdo = acuerdo;
-        _fechaInicio = fechaInicioStr != null ? DateTime.parse(fechaInicioStr) : null;
+        _fechaInicio =
+            fechaInicioStr != null ? DateTime.parse(fechaInicioStr) : null;
         _fechaFin = fechaFinStr != null ? DateTime.parse(fechaFinStr) : null;
         _isLoading = false;
       });
@@ -109,9 +113,9 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
         stackTrace: stack,
         payload: {'acuerdo_id': widget.acuerdoId},
       );
-      
+
       setState(() => _isLoading = false);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -125,9 +129,9 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
 
   Future<void> _guardarCambios() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     setState(() => _isSubmitting = true);
-    
+
     try {
       await AcuerdosService.actualizarAcuerdo(
         id: widget.acuerdoId,
@@ -137,7 +141,7 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
             ? null
             : _observacionesController.text.trim(),
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -154,9 +158,9 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
         stackTrace: stack,
         payload: {'acuerdo_id': widget.acuerdoId},
       );
-      
+
       setState(() => _isSubmitting = false);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -173,6 +177,13 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Editar Acuerdo'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Ayuda',
+            onPressed: () => AyudaTesoreriaDialog.show(context),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -203,27 +214,25 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
                   Text(
                     'Información Editable',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 16),
-                  
                   TextFormField(
                     controller: _nombreController,
                     decoration: const InputDecoration(
                       labelText: 'Nombre del Acuerdo *',
                       border: OutlineInputBorder(),
                     ),
-                    validator: (val) => val?.trim().isEmpty ?? true ? 'Requerido' : null,
+                    validator: (val) =>
+                        val?.trim().isEmpty ?? true ? 'Requerido' : null,
                   ),
                   const SizedBox(height: 16),
-                  
                   ListTile(
                     title: const Text('Fecha de Fin (opcional)'),
-                    subtitle: Text(_fechaFin != null 
-                        ? DateFormat('dd/MM/yyyy').format(_fechaFin!) 
+                    subtitle: Text(_fechaFin != null
+                        ? DateFormat('dd/MM/yyyy').format(_fechaFin!)
                         : 'Sin fecha de fin'),
                     leading: const Icon(Icons.event),
                     trailing: _fechaFin != null
@@ -235,7 +244,8 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
                     onTap: () async {
                       final fecha = await showDatePicker(
                         context: context,
-                        initialDate: _fechaFin ?? _fechaInicio ?? DateTime.now(),
+                        initialDate:
+                            _fechaFin ?? _fechaInicio ?? DateTime.now(),
                         firstDate: _fechaInicio ?? DateTime(2020),
                         lastDate: DateTime(2030),
                       );
@@ -245,7 +255,6 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
                   TextFormField(
                     controller: _observacionesController,
                     decoration: const InputDecoration(
@@ -256,10 +265,8 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
                     maxLines: 3,
                   ),
                   const SizedBox(height: 24),
-                  
                   const Divider(),
                   const SizedBox(height: 16),
-                  
                   Text(
                     'Información No Editable',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -274,30 +281,36 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
                         ),
                   ),
                   const SizedBox(height: 16),
-                  
                   if (_acuerdo != null) ...[
-                    _buildInfoReadOnly('Tipo', _acuerdo!['tipo']?.toString() ?? '-'),
-                    _buildInfoReadOnly('Modalidad', _modalidadLabel(_acuerdo!['modalidad']?.toString() ?? '-')),
+                    _buildInfoReadOnly(
+                        'Tipo', _acuerdo!['tipo']?.toString() ?? '-'),
+                    _buildInfoReadOnly(
+                        'Modalidad',
+                        _modalidadLabel(
+                            _acuerdo!['modalidad']?.toString() ?? '-')),
                     _buildInfoReadOnly(
                       'Monto',
                       _acuerdo!['modalidad'] == 'MONTO_TOTAL_CUOTAS'
                           ? '\$ ${_acuerdo!['monto_total']}'
                           : '\$ ${_acuerdo!['monto_periodico']}',
                     ),
-                    _buildInfoReadOnly('Frecuencia', _acuerdo!['frecuencia']?.toString() ?? '-'),
+                    _buildInfoReadOnly('Frecuencia',
+                        _acuerdo!['frecuencia']?.toString() ?? '-'),
                     _buildInfoReadOnly(
                       'Fecha Inicio',
-                      _fechaInicio != null ? DateFormat('dd/MM/yyyy').format(_fechaInicio!) : '-',
+                      _fechaInicio != null
+                          ? DateFormat('dd/MM/yyyy').format(_fechaInicio!)
+                          : '-',
                     ),
                   ],
-                  
                   const SizedBox(height: 32),
-                  
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => Navigator.pop(context),
                           child: const Text('Cancelar'),
                         ),
                       ),
@@ -309,7 +322,8 @@ class _EditarAcuerdoPageState extends State<EditarAcuerdoPage> {
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Text('Guardar Cambios'),
                         ),

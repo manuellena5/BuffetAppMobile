@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/breadcrumb.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 
 import '../../../features/shared/services/acuerdos_service.dart';
 import '../../../features/shared/services/compromisos_service.dart';
@@ -592,7 +593,7 @@ class _DetalleAcuerdoPageState extends State<DetalleAcuerdoPage> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? SkeletonLoader.list(count: 5)
           : ResponsiveContainer(
               maxWidth: 800,
               child: RefreshIndicator(

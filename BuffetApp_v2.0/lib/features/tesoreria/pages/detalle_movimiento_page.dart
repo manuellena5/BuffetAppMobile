@@ -80,7 +80,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar: $e')),
+          const SnackBar(content: Text('Error al cargar. Intente nuevamente.')),
         );
       }
     }
@@ -204,7 +204,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
                 Text('Error al sincronizar'),
               ],
             ),
-            content: Text('$e'),
+            content: const Text('Error al procesar. Intente nuevamente.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -318,7 +318,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
         setState(() => _deleting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al eliminar: $e'),
+            content: const Text('Error al eliminar. Intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -644,7 +644,7 @@ class _DetalleMovimientoPageState extends State<DetalleMovimientoPage> {
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Error al abrir archivo: $e'),
+                                  content: const Text('Error al abrir archivo. Intente nuevamente.'),
                                   backgroundColor: Colors.red,
                                 ),
                               );

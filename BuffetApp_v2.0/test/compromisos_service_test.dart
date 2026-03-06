@@ -40,6 +40,15 @@ void main() {
       'disciplina_ref': 'FUTBOL',
       'activo': 1,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+    // Cuenta de prueba para movimientos
+    await db.insert('cuentas_fondos', {
+      'id': 1,
+      'nombre': 'Caja Test',
+      'tipo': 'CAJA',
+      'unidad_gestion_id': 1,
+      'saldo_inicial': 0,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   });
 
   tearDown(() async {
@@ -305,11 +314,13 @@ void main() {
       await db.insert('evento_movimiento', {
         'compromiso_id': id,
         'disciplina_id': 1,
+        'cuenta_id': 1,
         'tipo': 'INGRESO',
         'categoria': 'Test',
         'monto': 1000,
         'medio_pago_id': 1,
         'estado': 'CONFIRMADO',
+        'fecha': '2026-01-01',
         'created_ts': DateTime.now().millisecondsSinceEpoch,
       });
 
@@ -340,11 +351,13 @@ void main() {
         await db.insert('evento_movimiento', {
           'compromiso_id': id,
           'disciplina_id': 1,
+          'cuenta_id': 1,
           'tipo': 'INGRESO',
           'categoria': 'Test',
           'monto': 1000,
           'medio_pago_id': 1,
           'estado': 'CONFIRMADO',
+          'fecha': '2026-01-01',
           'created_ts': DateTime.now().millisecondsSinceEpoch + i * 1000,
         });
       }
@@ -391,11 +404,13 @@ void main() {
       await db.insert('evento_movimiento', {
         'compromiso_id': id,
         'disciplina_id': 1,
+        'cuenta_id': 1,
         'tipo': 'INGRESO',
         'categoria': 'Test',
         'monto': 1000,
         'medio_pago_id': 1,
         'estado': 'CONFIRMADO',
+        'fecha': '2026-01-15',
         'created_ts': fechaPrevio.millisecondsSinceEpoch,
       });
 
@@ -443,11 +458,13 @@ void main() {
         await db.insert('evento_movimiento', {
           'compromiso_id': id,
           'disciplina_id': 1,
+          'cuenta_id': 1,
           'tipo': 'INGRESO',
           'categoria': 'Test',
           'monto': 1000,
           'medio_pago_id': 1,
           'estado': 'CONFIRMADO',
+          'fecha': '2026-01-01',
           'created_ts': DateTime.now().millisecondsSinceEpoch + i * 1000,
         });
       }
@@ -645,7 +662,7 @@ void main() {
         tipo: 'EGRESO',
         modalidad: 'PAGO_UNICO',
         monto: 50000,
-        frecuencia: 'UNICA',
+        frecuencia: 'UNICA_VEZ',
         fechaInicio: '2026-02-15',
         categoria: 'Test',
       );

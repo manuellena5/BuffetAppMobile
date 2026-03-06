@@ -48,58 +48,64 @@ class MovimientosProyectadosService {
     required DateTime fechaDesde,
     required DateTime fechaHasta,
   }) async {
-    final compromiso = await _compromisosService.obtenerCompromiso(compromisoId);
-    if (compromiso == null || compromiso['activo'] != 1) {
-      return [];
-    }
-
-    final db = await AppDatabase.instance();
-
-    // Obtener datos del compromiso
-    final tipo = compromiso['tipo'] as String;
-    final categoria = compromiso['categoria'] as String;
-    final nombre = compromiso['nombre'] as String;
-    final observaciones = compromiso['observaciones'] as String?;
-    final unidadGestionId = compromiso['unidad_gestion_id'] as int;
-    final totalCuotas = compromiso['cuotas'] as int?;
-    final entidadNombre = compromiso['entidad_nombre'] as String?;
-
-    // Leer cuotas desde la tabla compromiso_cuotas
-    final cuotas = await db.query(
-      'compromiso_cuotas',
-      where: 'compromiso_id = ? AND estado = ?',
-      whereArgs: [compromisoId, 'ESPERADO'],
-      orderBy: 'numero_cuota',
-    );
-
-    // Filtrar por rango de fechas y convertir a MovimientoProyectado
-    final vencimientos = <MovimientoProyectado>[];
-    
-    for (final cuota in cuotas) {
-      final fechaStr = cuota['fecha_programada'] as String;
-      final fechaVencimiento = DateTime.parse(fechaStr);
-      
-      // Filtrar por rango
-      if (fechaVencimiento.isBefore(fechaDesde) || fechaVencimiento.isAfter(fechaHasta)) {
-        continue;
+    try {
+      final compromiso = await _compromisosService.obtenerCompromiso(compromisoId);
+      if (compromiso == null || compromiso['activo'] != 1) {
+        return [];
       }
-      
-      vencimientos.add(MovimientoProyectado(
-        compromisoId: compromisoId,
-        fechaVencimiento: fechaVencimiento,
-        monto: (cuota['monto_esperado'] as num).toDouble(),
-        numeroCuota: cuota['numero_cuota'] as int,
-        totalCuotas: totalCuotas,
-        tipo: tipo,
-        categoria: categoria,
-        nombre: nombre,
-        observaciones: observaciones,
-        unidadGestionId: unidadGestionId,
-        entidadNombre: entidadNombre,
-      ));
-    }
 
-    return vencimientos;
+      final db = await AppDatabase.instance();
+
+      final tipo = compromiso['tipo'] as String;
+      final categoria = compromiso['categoria'] as String;
+      final nombre = compromiso['nombre'] as String;
+      final observaciones = compromiso['observaciones'] as String?;
+      final unidadGestionId = compromiso['unidad_gestion_id'] as int;
+      final totalCuotas = compromiso['cuotas'] as int?;
+      final entidadNombre = compromiso['entidad_nombre'] as String?;
+
+      final cuotas = await db.query(
+        'compromiso_cuotas',
+        where: 'compromiso_id = ? AND estado = ?',
+        whereArgs: [compromisoId, 'ESPERADO'],
+        orderBy: 'numero_cuota',
+      );
+
+      final vencimientos = <MovimientoProyectado>[];
+      
+      for (final cuota in cuotas) {
+        final fechaStr = cuota['fecha_programada'] as String;
+        final fechaVencimiento = DateTime.parse(fechaStr);
+        
+        if (fechaVencimiento.isBefore(fechaDesde) || fechaVencimiento.isAfter(fechaHasta)) {
+          continue;
+        }
+        
+        vencimientos.add(MovimientoProyectado(
+          compromisoId: compromisoId,
+          fechaVencimiento: fechaVencimiento,
+          monto: (cuota['monto_esperado'] as num).toDouble(),
+          numeroCuota: cuota['numero_cuota'] as int,
+          totalCuotas: totalCuotas,
+          tipo: tipo,
+          categoria: categoria,
+          nombre: nombre,
+          observaciones: observaciones,
+          unidadGestionId: unidadGestionId,
+          entidadNombre: entidadNombre,
+        ));
+      }
+
+      return vencimientos;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.calcular_esperados',
+        error: e,
+        stackTrace: st,
+        payload: {'compromiso': compromisoId},
+      );
+      rethrow;
+    }
   }
 
   /// Calcula movimientos esperados de todos los compromisos activos en un rango.
@@ -117,29 +123,37 @@ class MovimientosProyectadosService {
     int? unidadGestionId,
     String? tipo,
   }) async {
-    // Obtener compromisos activos
-    final compromisos = await _compromisosService.listarCompromisos(
-      unidadGestionId: unidadGestionId,
-      tipo: tipo,
-      activo: true,
-    );
-
-    final todosMovimientos = <MovimientoProyectado>[];
-
-    for (final compromiso in compromisos) {
-      final id = compromiso['id'] as int;
-      final movimientos = await calcularMovimientosEsperados(
-        compromisoId: id,
-        fechaDesde: fechaDesde,
-        fechaHasta: fechaHasta,
+    try {
+      final compromisos = await _compromisosService.listarCompromisos(
+        unidadGestionId: unidadGestionId,
+        tipo: tipo,
+        activo: true,
       );
-      todosMovimientos.addAll(movimientos);
+
+      final todosMovimientos = <MovimientoProyectado>[];
+
+      for (final compromiso in compromisos) {
+        final id = compromiso['id'] as int;
+        final movimientos = await calcularMovimientosEsperados(
+          compromisoId: id,
+          fechaDesde: fechaDesde,
+          fechaHasta: fechaHasta,
+        );
+        todosMovimientos.addAll(movimientos);
+      }
+
+      todosMovimientos.sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
+
+      return todosMovimientos;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.calcular_global',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId, 'tipo': tipo},
+      );
+      rethrow;
     }
-
-    // Ordenar por fecha
-    todosMovimientos.sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
-
-    return todosMovimientos;
   }
 
   /// Calcula movimientos esperados para un mes específico.
@@ -157,15 +171,25 @@ class MovimientosProyectadosService {
     int? unidadGestionId,
     String? tipo,
   }) async {
-    final fechaDesde = DateTime(year, month, 1);
-    final fechaHasta = DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
+    try {
+      final fechaDesde = DateTime(year, month, 1);
+      final fechaHasta = DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
 
-    return await calcularMovimientosEsperadosGlobal(
-      fechaDesde: fechaDesde,
-      fechaHasta: fechaHasta,
-      unidadGestionId: unidadGestionId,
-      tipo: tipo,
-    );
+      return await calcularMovimientosEsperadosGlobal(
+        fechaDesde: fechaDesde,
+        fechaHasta: fechaHasta,
+        unidadGestionId: unidadGestionId,
+        tipo: tipo,
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.calcular_mes',
+        error: e,
+        stackTrace: st,
+        payload: {'year': year, 'month': month, 'unidad': unidadGestionId},
+      );
+      rethrow;
+    }
   }
 
   /// Calcula movimientos cancelados para un mes específico.
@@ -183,67 +207,73 @@ class MovimientosProyectadosService {
     int? unidadGestionId,
     String? tipo,
   }) async {
-    final fechaDesde = DateTime(year, month, 1);
-    final fechaHasta = DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
+    try {
+      final fechaDesde = DateTime(year, month, 1);
+      final fechaHasta = DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
 
-    // Obtener compromisos activos
-    final compromisos = await _compromisosService.listarCompromisos(
-      unidadGestionId: unidadGestionId,
-      tipo: tipo,
-      activo: true,
-    );
-
-    final db = await AppDatabase.instance();
-    final todosCancelados = <MovimientoProyectado>[];
-
-    for (final compromiso in compromisos) {
-      final compromisoId = compromiso['id'] as int;
-      final tipoComp = compromiso['tipo'] as String;
-      final categoria = compromiso['categoria'] as String;
-      final nombre = compromiso['nombre'] as String;
-      final observaciones = compromiso['observaciones'] as String?;
-      final unidadGestionIdComp = compromiso['unidad_gestion_id'] as int;
-      final totalCuotas = compromiso['cuotas'] as int?;
-      final entidadNombre = compromiso['entidad_nombre'] as String?;
-
-      // Leer cuotas CANCELADAS del compromiso
-      final cuotas = await db.query(
-        'compromiso_cuotas',
-        where: 'compromiso_id = ? AND estado = ?',
-        whereArgs: [compromisoId, 'CANCELADO'],
-        orderBy: 'numero_cuota',
+      final compromisos = await _compromisosService.listarCompromisos(
+        unidadGestionId: unidadGestionId,
+        tipo: tipo,
+        activo: true,
       );
 
-      for (final cuota in cuotas) {
-        final fechaStr = cuota['fecha_programada'] as String;
-        final fechaVencimiento = DateTime.parse(fechaStr);
-        
-        // Filtrar por rango (según fecha programada original, no fecha de cancelación)
-        if (fechaVencimiento.isBefore(fechaDesde) || fechaVencimiento.isAfter(fechaHasta)) {
-          continue;
+      final db = await AppDatabase.instance();
+      final todosCancelados = <MovimientoProyectado>[];
+
+      for (final compromiso in compromisos) {
+        final compromisoId = compromiso['id'] as int;
+        final tipoComp = compromiso['tipo'] as String;
+        final categoria = compromiso['categoria'] as String;
+        final nombre = compromiso['nombre'] as String;
+        final observaciones = compromiso['observaciones'] as String?;
+        final unidadGestionIdComp = compromiso['unidad_gestion_id'] as int;
+        final totalCuotas = compromiso['cuotas'] as int?;
+        final entidadNombre = compromiso['entidad_nombre'] as String?;
+
+        final cuotas = await db.query(
+          'compromiso_cuotas',
+          where: 'compromiso_id = ? AND estado = ?',
+          whereArgs: [compromisoId, 'CANCELADO'],
+          orderBy: 'numero_cuota',
+        );
+
+        for (final cuota in cuotas) {
+          final fechaStr = cuota['fecha_programada'] as String;
+          final fechaVencimiento = DateTime.parse(fechaStr);
+          
+          if (fechaVencimiento.isBefore(fechaDesde) || fechaVencimiento.isAfter(fechaHasta)) {
+            continue;
+          }
+          
+          todosCancelados.add(MovimientoProyectado(
+            compromisoId: compromisoId,
+            fechaVencimiento: fechaVencimiento,
+            monto: (cuota['monto_esperado'] as num).toDouble(),
+            numeroCuota: cuota['numero_cuota'] as int,
+            totalCuotas: totalCuotas,
+            tipo: tipoComp,
+            categoria: categoria,
+            nombre: nombre,
+            observaciones: observaciones,
+            unidadGestionId: unidadGestionIdComp,
+            estado: 'CANCELADO',
+            entidadNombre: entidadNombre,
+          ));
         }
-        
-        todosCancelados.add(MovimientoProyectado(
-          compromisoId: compromisoId,
-          fechaVencimiento: fechaVencimiento,
-          monto: (cuota['monto_esperado'] as num).toDouble(),
-          numeroCuota: cuota['numero_cuota'] as int,
-          totalCuotas: totalCuotas,
-          tipo: tipoComp,
-          categoria: categoria,
-          nombre: nombre,
-          observaciones: observaciones,
-          unidadGestionId: unidadGestionIdComp,
-          estado: 'CANCELADO',
-          entidadNombre: entidadNombre,
-        ));
       }
+
+      todosCancelados.sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
+
+      return todosCancelados;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.calcular_cancelados_mes',
+        error: e,
+        stackTrace: st,
+        payload: {'year': year, 'month': month, 'unidad': unidadGestionId},
+      );
+      rethrow;
     }
-
-    // Ordenar por fecha
-    todosCancelados.sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
-
-    return todosCancelados;
   }
 
   /// Calcula el total esperado (suma de montos) en un rango de fechas.
@@ -254,47 +284,65 @@ class MovimientosProyectadosService {
     required DateTime fechaHasta,
     int? unidadGestionId,
   }) async {
-    final movimientos = await calcularMovimientosEsperadosGlobal(
-      fechaDesde: fechaDesde,
-      fechaHasta: fechaHasta,
-      unidadGestionId: unidadGestionId,
-    );
+    try {
+      final movimientos = await calcularMovimientosEsperadosGlobal(
+        fechaDesde: fechaDesde,
+        fechaHasta: fechaHasta,
+        unidadGestionId: unidadGestionId,
+      );
 
-    double totalIngresos = 0;
-    double totalEgresos = 0;
+      double totalIngresos = 0;
+      double totalEgresos = 0;
 
-    for (final mov in movimientos) {
-      if (mov.tipo == 'INGRESO') {
-        totalIngresos += mov.monto;
-      } else {
-        totalEgresos += mov.monto;
+      for (final mov in movimientos) {
+        if (mov.tipo == 'INGRESO') {
+          totalIngresos += mov.monto;
+        } else {
+          totalEgresos += mov.monto;
+        }
       }
-    }
 
-    return {
-      'ingresos': totalIngresos,
-      'egresos': totalEgresos,
-      'saldo': totalIngresos - totalEgresos,
-    };
+      return {
+        'ingresos': totalIngresos,
+        'egresos': totalEgresos,
+        'saldo': totalIngresos - totalEgresos,
+      };
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.calcular_total_esperado',
+        error: e,
+        stackTrace: st,
+        payload: {'unidad': unidadGestionId},
+      );
+      rethrow;
+    }
   }
 
   /// Verifica si un compromiso tiene movimientos esperados pendientes.
-  ///
-  /// Útil para validaciones antes de desactivar un compromiso.
   Future<bool> tieneMovimientosEsperados({
     required int compromisoId,
     DateTime? fechaDesde,
   }) async {
-    final desde = fechaDesde ?? DateTime.now();
-    final hasta = DateTime(2099, 12, 31); // Fecha muy futura
+    try {
+      final desde = fechaDesde ?? DateTime.now();
+      final hasta = DateTime(2099, 12, 31);
 
-    final movimientos = await calcularMovimientosEsperados(
-      compromisoId: compromisoId,
-      fechaDesde: desde,
-      fechaHasta: hasta,
-    );
+      final movimientos = await calcularMovimientosEsperados(
+        compromisoId: compromisoId,
+        fechaDesde: desde,
+        fechaHasta: hasta,
+      );
 
-    return movimientos.isNotEmpty;
+      return movimientos.isNotEmpty;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.tiene_esperados',
+        error: e,
+        stackTrace: st,
+        payload: {'compromiso': compromisoId},
+      );
+      rethrow;
+    }
   }
 }
 

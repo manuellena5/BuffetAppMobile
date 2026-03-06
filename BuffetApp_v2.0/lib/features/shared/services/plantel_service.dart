@@ -30,6 +30,7 @@ class PlantelService {
     String? tipoContratacion,
     String? posicion,
   }) async {
+    try {
     if (nombre.trim().isEmpty) {
       throw Exception('El nombre es requerido');
     }
@@ -70,10 +71,20 @@ class PlantelService {
     });
 
     return id;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.crear_entidad',
+        error: e,
+        stackTrace: st,
+        payload: {'nombre': nombre, 'rol': rol},
+      );
+      rethrow;
+    }
   }
 
   /// Obtiene una entidad por su ID.
   Future<Map<String, dynamic>?> obtenerEntidad(int id) async {
+    try {
     final db = await AppDatabase.instance();
     final result = await db.query(
       'entidades_plantel',
@@ -81,6 +92,15 @@ class PlantelService {
       whereArgs: [id],
     );
     return result.isEmpty ? null : result.first;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.obtener_entidad',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
+      );
+      rethrow;
+    }
   }
 
   /// Lista todas las entidades del plantel con filtros opcionales.
@@ -91,6 +111,7 @@ class PlantelService {
     String? rol,
     bool soloActivos = true,
   }) async {
+    try {
     final db = await AppDatabase.instance();
     final where = <String>[];
     final whereArgs = <dynamic>[];
@@ -110,6 +131,15 @@ class PlantelService {
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'nombre ASC',
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.listar_entidades',
+        error: e,
+        stackTrace: st,
+        payload: {'rol': rol, 'soloActivos': soloActivos},
+      );
+      rethrow;
+    }
   }
 
   /// FASE 31: Obtener entidades de plantel con paginación
@@ -206,6 +236,7 @@ class PlantelService {
     int id,
     Map<String, dynamic> cambios,
   ) async {
+    try {
     if (cambios.isEmpty) return;
 
     final db = await AppDatabase.instance();
@@ -250,11 +281,21 @@ class PlantelService {
       where: 'id = ?',
       whereArgs: [id],
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.actualizar_entidad',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
+      );
+      rethrow;
+    }
   }
 
   /// Da de baja una entidad (soft delete).
   /// Validación: no se puede dar de baja si tiene compromisos activos con movimientos esperados.
   Future<void> darDeBajaEntidad(int id) async {
+    try {
     final db = await AppDatabase.instance();
 
     // Validar que no tenga compromisos activos con movimientos esperados
@@ -281,10 +322,20 @@ class PlantelService {
       where: 'id = ?',
       whereArgs: [id],
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.dar_de_baja',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
+      );
+      rethrow;
+    }
   }
 
   /// Reactiva una entidad dada de baja.
   Future<void> reactivarEntidad(int id) async {
+    try {
     final db = await AppDatabase.instance();
     await db.update(
       'entidades_plantel',
@@ -295,6 +346,15 @@ class PlantelService {
       where: 'id = ?',
       whereArgs: [id],
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.reactivar',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
+      );
+      rethrow;
+    }
   }
 
   // =====================
@@ -305,6 +365,7 @@ class PlantelService {
   /// Suma todos los compromisos activos (recurrentes mensuales) asociados a la entidad.
   /// Solo cuenta compromisos con estado activo=1 y eliminado=0.
   Future<double> calcularTotalMensualPorEntidad(int entidadId) async {
+    try {
     final db = await AppDatabase.instance();
 
     final result = await db.rawQuery(
@@ -323,6 +384,15 @@ class PlantelService {
     }
 
     return (result.first['total'] as num).toDouble();
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.total_mensual',
+        error: e,
+        stackTrace: st,
+        payload: {'entidadId': entidadId},
+      );
+      rethrow;
+    }
   }
 
   /// Calcula el estado mensual de una entidad para un mes específico.
@@ -335,6 +405,7 @@ class PlantelService {
     int year,
     int month,
   ) async {
+    try {
     final db = await AppDatabase.instance();
 
     // Primer y último día del mes
@@ -400,6 +471,15 @@ class PlantelService {
       'esperado': esperado,
       'atrasado': atrasado,
     };
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.estado_mensual',
+        error: e,
+        stackTrace: st,
+        payload: {'entidadId': entidadId, 'year': year, 'month': month},
+      );
+      rethrow;
+    }
   }
 
   /// Lista todos los compromisos asociados a una entidad.
@@ -407,6 +487,7 @@ class PlantelService {
   Future<List<Map<String, dynamic>>> listarCompromisosDeEntidad(
     int entidadId,
   ) async {
+    try {
     final db = await AppDatabase.instance();
     return await db.query(
       'compromisos',
@@ -414,6 +495,15 @@ class PlantelService {
       whereArgs: [entidadId],
       orderBy: 'activo DESC, created_ts DESC',
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.listar_compromisos',
+        error: e,
+        stackTrace: st,
+        payload: {'entidadId': entidadId},
+      );
+      rethrow;
+    }
   }
 
   /// Obtiene el historial de pagos confirmados de una entidad en un rango de fechas.
@@ -423,6 +513,7 @@ class PlantelService {
     DateTime? desde,
     DateTime? hasta,
   }) async {
+    try {
     final db = await AppDatabase.instance();
 
     final where = <String>['c.entidad_plantel_id = ?', 'em.estado = ?'];
@@ -454,6 +545,15 @@ class PlantelService {
       ''',
       whereArgs,
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.historial_pagos',
+        error: e,
+        stackTrace: st,
+        payload: {'entidadId': entidadId, 'desde': desde?.toIso8601String(), 'hasta': hasta?.toIso8601String()},
+      );
+      rethrow;
+    }
   }
 
   /// Obtiene todos los movimientos asociados a una entidad del plantel.
@@ -466,6 +566,7 @@ class PlantelService {
     DateTime? hasta,
     int limit = 100,
   }) async {
+    try {
     final db = await AppDatabase.instance();
 
     final where = <String>[];
@@ -512,6 +613,15 @@ class PlantelService {
       ''',
       [...whereArgs, limit],
     );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.movimientos',
+        error: e,
+        stackTrace: st,
+        payload: {'entidadId': entidadId, 'desde': desde?.toIso8601String(), 'hasta': hasta?.toIso8601String()},
+      );
+      rethrow;
+    }
   }
 
   /// Calcula los montos de movimientos directamente asociados a una entidad en un mes específico.
@@ -521,6 +631,7 @@ class PlantelService {
     int year,
     int month,
   ) async {
+    try {
     final db = await AppDatabase.instance();
 
     final primerDia = DateTime(year, month, 1);
@@ -562,6 +673,15 @@ class PlantelService {
       'egresos': egresos,
       'neto': ingresos - egresos,
     };
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.movimientos_asociados',
+        error: e,
+        stackTrace: st,
+        payload: {'entidadId': entidadId, 'year': year, 'month': month},
+      );
+      rethrow;
+    }
   }
 
   /// Calcula un resumen general del plantel completo para un mes específico.
@@ -572,39 +692,109 @@ class PlantelService {
   /// - cantidadJugadores: total de jugadores activos
   /// - jugadoresAlDia: cantidad de jugadores que tienen todos sus pagos al día
   /// - cantidadTecnicos: total de DT + AYUDANTE + PF activos
+  /// Calcula resumen general del plantel para un mes dado.
+  /// Optimizado: usa queries batch en vez de N+1 por entidad.
   Future<Map<String, dynamic>> calcularResumenGeneral(
     int year,
     int month,
   ) async {
-    // Entidades activas del plantel
+    try {
+    final db = await AppDatabase.instance();
+
+    // Entidades activas del plantel (para conteo por rol)
     final entidades = await listarEntidades(soloActivos: true);
 
+    int cantidadJugadores = 0;
+    int cantidadTecnicos = 0;
+    final jugadorIds = <int>{};
+
+    for (final entidad in entidades) {
+      final rol = entidad['rol'] as String;
+      final id = entidad['id'] as int;
+      if (rol == 'JUGADOR') {
+        cantidadJugadores++;
+        jugadorIds.add(id);
+      } else if (rol == 'DT' || rol == 'AYUDANTE' || rol == 'PF') {
+        cantidadTecnicos++;
+      }
+    }
+
+    // Fechas del mes
+    final primerDia = DateTime(year, month, 1);
+    final ultimoDia = DateTime(year, month + 1, 0);
+    final fechaDesde = '${primerDia.year}-${primerDia.month.toString().padLeft(2, '0')}-${primerDia.day.toString().padLeft(2, '0')}';
+    final fechaHasta = '${ultimoDia.year}-${ultimoDia.month.toString().padLeft(2, '0')}-${ultimoDia.day.toString().padLeft(2, '0')}';
+    final hoy = DateTime.now();
+    final fechaHoy = '${hoy.year}-${hoy.month.toString().padLeft(2, '0')}-${hoy.day.toString().padLeft(2, '0')}';
+
+    // Query batch: ESPERADO por entidad en el mes
+    final esperadoRows = await db.rawQuery('''
+      SELECT c.entidad_plantel_id, COALESCE(SUM(cc.monto_esperado), 0) as total
+      FROM compromiso_cuotas cc
+      INNER JOIN compromisos c ON cc.compromiso_id = c.id
+      WHERE c.entidad_plantel_id IS NOT NULL
+        AND cc.estado = 'ESPERADO'
+        AND cc.fecha_programada BETWEEN ? AND ?
+      GROUP BY c.entidad_plantel_id
+    ''', [fechaDesde, fechaHasta]);
+
+    // Query batch: PAGADO (CONFIRMADO) por entidad en el mes
+    final pagadoRows = await db.rawQuery('''
+      SELECT c.entidad_plantel_id, COALESCE(SUM(cc.monto_real), 0) as total
+      FROM compromiso_cuotas cc
+      INNER JOIN compromisos c ON cc.compromiso_id = c.id
+      WHERE c.entidad_plantel_id IS NOT NULL
+        AND cc.estado = 'CONFIRMADO'
+        AND cc.fecha_programada BETWEEN ? AND ?
+      GROUP BY c.entidad_plantel_id
+    ''', [fechaDesde, fechaHasta]);
+
+    // Query batch: ATRASADO por entidad (cuotas ESPERADO con fecha < hoy)
+    final atrasadoRows = await db.rawQuery('''
+      SELECT c.entidad_plantel_id, COALESCE(SUM(cc.monto_esperado), 0) as total
+      FROM compromiso_cuotas cc
+      INNER JOIN compromisos c ON cc.compromiso_id = c.id
+      WHERE c.entidad_plantel_id IS NOT NULL
+        AND cc.estado = 'ESPERADO'
+        AND cc.fecha_programada < ?
+      GROUP BY c.entidad_plantel_id
+    ''', [fechaHoy]);
+
+    // Indexar resultados
+    final esperadoPorEntidad = <int, double>{};
+    for (final row in esperadoRows) {
+      esperadoPorEntidad[row['entidad_plantel_id'] as int] = (row['total'] as num).toDouble();
+    }
+
+    final pagadoPorEntidad = <int, double>{};
+    for (final row in pagadoRows) {
+      pagadoPorEntidad[row['entidad_plantel_id'] as int] = (row['total'] as num).toDouble();
+    }
+
+    final atrasadoPorEntidad = <int, double>{};
+    for (final row in atrasadoRows) {
+      atrasadoPorEntidad[row['entidad_plantel_id'] as int] = (row['total'] as num).toDouble();
+    }
+
+    // Acumular totales
     double totalComprometido = 0.0;
     double totalPagado = 0.0;
     int jugadoresAlDia = 0;
-    int cantidadJugadores = 0;
-    int cantidadTecnicos = 0;
 
     for (final entidad in entidades) {
       final entidadId = entidad['id'] as int;
       final rol = entidad['rol'] as String;
 
-      // Contar por rol
-      if (rol == 'JUGADOR') {
-        cantidadJugadores++;
-      } else if (rol == 'DT' || rol == 'AYUDANTE' || rol == 'PF') {
-        cantidadTecnicos++;
-      }
+      final esperado = esperadoPorEntidad[entidadId] ?? 0.0;
+      final pagado = pagadoPorEntidad[entidadId] ?? 0.0;
+      final atrasado = atrasadoPorEntidad[entidadId] ?? 0.0;
 
-      final estado = await calcularEstadoMensualPorEntidad(entidadId, year, month);
-      totalComprometido += estado['totalComprometido'] as double;
-      totalPagado += estado['pagado'] as double;
+      totalComprometido += esperado + pagado;
+      totalPagado += pagado;
 
-      // Considerar "al día" si no tiene pendiente ni atrasado
-      if ((estado['esperado'] as double) == 0.0 && (estado['atrasado'] as double) == 0.0) {
-        if (rol == 'JUGADOR') {
-          jugadoresAlDia++;
-        }
+      // "Al día" = sin esperado ni atrasado
+      if (esperado == 0.0 && atrasado == 0.0 && rol == 'JUGADOR') {
+        jugadoresAlDia++;
       }
     }
 
@@ -617,5 +807,14 @@ class PlantelService {
       'cantidadTecnicos': cantidadTecnicos,
       'totalEntidades': entidades.length,
     };
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.resumen_general',
+        error: e,
+        stackTrace: st,
+        payload: {'year': year, 'month': month},
+      );
+      rethrow;
+    }
   }
 }

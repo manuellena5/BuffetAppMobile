@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 
-import '../../../features/shared/services/movimiento_service.dart';
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/state/app_settings.dart';
 import '../../../data/dao/db.dart';
@@ -41,7 +40,6 @@ class ConfirmarMovimientoPage extends StatefulWidget {
 
 class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
   final _formKey = GlobalKey<FormState>();
-  final _svc = EventoMovimientoService();
   final _compromisosService = CompromisosService.instance;
   final _cuentaService = CuentaService();
   
@@ -169,7 +167,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al seleccionar archivo: $e')),
+          const SnackBar(content: Text('Error al seleccionar archivo. Intente nuevamente.')),
         );
       }
     }
@@ -214,7 +212,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al seleccionar PDF: $e')),
+          const SnackBar(content: Text('Error al seleccionar PDF. Intente nuevamente.')),
         );
       }
     }
@@ -251,67 +249,26 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
 
       final monto = double.parse(_montoController.text);
 
-      // Crear movimiento con fecha real seleccionada
-      await _svc.crear(
+      // H.6: Operación transaccional — crea movimiento + actualiza cuota + incrementa contador
+      await _compromisosService.confirmarCuota(
+        compromisoId: widget.compromisoId,
         disciplinaId: unidadGestionId,
-        cuentaId: _cuentaId!, // Usar cuenta seleccionada
+        cuentaId: _cuentaId!,
         tipo: widget.tipo,
         categoria: widget.categoria,
         monto: monto,
         medioPagoId: _medioPagoId!,
-        fecha: _fechaReal, // CLAVE: Usar fecha seleccionada, no DateTime.now()
+        fechaReal: _fechaReal,
+        fechaVencimiento: widget.fechaVencimiento,
+        numeroCuota: widget.numeroCuota ?? 0,
+        unidadGestionId: unidadGestionId,
         observacion: _observacionesController.text.trim().isNotEmpty
             ? _observacionesController.text.trim()
             : null,
-        compromisoId: widget.compromisoId,
-        estado: 'CONFIRMADO',
         archivoLocalPath: _archivoLocal?.path,
         archivoNombre: _archivoNombre,
         archivoTipo: _archivoTipo,
       );
-
-      // Actualizar estado de la cuota en compromiso_cuotas
-      if (widget.numeroCuota != null) {
-        // Buscar la cuota por número
-        final cuotas = await _compromisosService.obtenerCuotas(widget.compromisoId);
-        final cuota = cuotas.firstWhere(
-          (c) => c['numero_cuota'] == widget.numeroCuota,
-          orElse: () => <String, dynamic>{},
-        );
-        
-        if (cuota.isNotEmpty && cuota['id'] != null) {
-          await _compromisosService.actualizarEstadoCuota(
-            cuota['id'] as int,
-            'CONFIRMADO',
-            montoReal: monto,
-          );
-        }
-      } else {
-        // Buscar la cuota por fecha
-        final db = await AppDatabase.instance();
-        final cuotas = await db.query(
-          'compromiso_cuotas',
-          where: 'compromiso_id = ? AND fecha_programada = ? AND estado = ?',
-          whereArgs: [
-            widget.compromisoId,
-            DateFormat('yyyy-MM-dd').format(widget.fechaVencimiento),
-            'ESPERADO',
-          ],
-          limit: 1,
-        );
-        
-        if (cuotas.isNotEmpty) {
-          final cuotaId = cuotas.first['id'] as int;
-          await _compromisosService.actualizarEstadoCuota(
-            cuotaId,
-            'CONFIRMADO',
-            montoReal: monto,
-          );
-        }
-      }
-
-      // Incrementar cuotas confirmadas del compromiso
-      await _compromisosService.incrementarCuotasConfirmadas(widget.compromisoId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -334,7 +291,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al confirmar: $e'),
+            content: const Text('Error al confirmar. Intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );

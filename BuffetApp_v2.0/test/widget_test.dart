@@ -13,6 +13,7 @@ import 'package:buffet_app/features/eventos/pages/eventos_page.dart';
 import 'package:buffet_app/features/home/home_page.dart';
 import 'package:buffet_app/features/shared/state/app_settings.dart';
 import 'package:buffet_app/features/buffet/state/cart_model.dart';
+import 'package:buffet_app/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +71,9 @@ Future<void> _pumpUntilHomeLoaded(WidgetTester tester,
 
 Future<void> _setupEnv() async {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // Evitar que google_fonts intente descargar fuentes por HTTP en tests
+  AppTheme.useSystemFonts = true;
 
   await AppDatabase.resetForTests();
 

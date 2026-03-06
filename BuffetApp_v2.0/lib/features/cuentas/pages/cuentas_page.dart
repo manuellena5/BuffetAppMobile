@@ -4,10 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/dao/db.dart';
 import '../../../domain/models.dart';
 import '../../shared/state/app_settings.dart';
-import '../../shared/state/drawer_state.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
 import '../../shared/format.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_drawer_helper.dart';
 import '../../tesoreria/services/cuenta_service.dart';
 import 'crear_cuenta_page.dart';
 import 'detalle_cuenta_page.dart';
@@ -203,88 +204,70 @@ class _CuentasPageState extends State<CuentasPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DrawerState>(
-      builder: (context, drawerState, _) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Cuentas / Fondos'),
-            backgroundColor: Colors.teal,
-            foregroundColor: Colors.white,
-            // No mostrar leading si el drawer está fijo
-            automaticallyImplyLeading: !drawerState.isFixed,
-            actions: [
-              // Filtro por tipo
-              PopupMenuButton<String?>(
-                icon: const Icon(Icons.filter_list),
-                tooltip: 'Filtrar por tipo',
-                onSelected: (tipo) {
-                  setState(() => _filtroTipo = tipo);
-                  _cargarCuentas();
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: null, child: Text('Todas')),
-                  const PopupMenuItem(value: 'BANCO', child: Text('🏦 Banco')),
-                  const PopupMenuItem(value: 'BILLETERA', child: Text('📱 Billetera')),
-                  const PopupMenuItem(value: 'CAJA', child: Text('💵 Caja')),
-                  const PopupMenuItem(value: 'INVERSION', child: Text('📈 Inversión')),
-                ],
-              ),
-              
-              // Mostrar/ocultar inactivas
-              IconButton(
-                icon: Icon(_mostrarInactivas ? Icons.visibility : Icons.visibility_off),
-                tooltip: _mostrarInactivas ? 'Ocultar inactivas' : 'Mostrar inactivas',
-                onPressed: () {
-                  setState(() => _mostrarInactivas = !_mostrarInactivas);
-                  _cargarCuentas();
-                },
-              ),
-              
-              // Refrescar
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _cargarCuentas,
-              ),
-            ],
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/cuentas',
+      title: 'Cuentas / Fondos',
+      showAdvanced: _showAdvanced,
+      actions: [
+        // Filtro por tipo
+        PopupMenuButton<String?>(
+          icon: const Icon(Icons.filter_list),
+          tooltip: 'Filtrar por tipo',
+          onSelected: (tipo) {
+            setState(() => _filtroTipo = tipo);
+            _cargarCuentas();
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: null, child: Text('Todas')),
+            const PopupMenuItem(value: 'BANCO', child: Text('🏦 Banco')),
+            const PopupMenuItem(value: 'BILLETERA', child: Text('📱 Billetera')),
+            const PopupMenuItem(value: 'CAJA', child: Text('💵 Caja')),
+            const PopupMenuItem(value: 'INVERSION', child: Text('📈 Inversión')),
+          ],
+        ),
+        
+        // Mostrar/ocultar inactivas
+        IconButton(
+          icon: Icon(_mostrarInactivas ? Icons.visibility : Icons.visibility_off),
+          tooltip: _mostrarInactivas ? 'Ocultar inactivas' : 'Mostrar inactivas',
+          onPressed: () {
+            setState(() => _mostrarInactivas = !_mostrarInactivas);
+            _cargarCuentas();
+          },
+        ),
+        
+        // Refrescar
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _cargarCuentas,
+        ),
+      ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navegarACrear,
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva Cuenta'),
+      ),
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Cuentas / Fondos',
+              subtitle: '${_cuentas.length} cuentas',
+            ),
+          Expanded(
+            child: _cargando
+                ? const Center(child: CircularProgressIndicator())
+                : ResponsiveContainer(
+                    maxWidth: 1200,
+                    child: _cuentas.isEmpty
+                        ? _buildVacio()
+                        : _buildListado(),
+                  ),
           ),
-          drawer: drawerState.isFixed ? null : TesoreriaDrawerHelper.build(
-            context: context,
-            currentRouteName: '/cuentas',
-            unidadGestionNombre: null,
-            showAdvanced: _showAdvanced, // Leer desde SharedPreferences en initState
-          ),
-          body: Row(
-            children: [
-              // Drawer fijo (si está configurado)
-              if (drawerState.isFixed) 
-                TesoreriaDrawerHelper.build(
-                  context: context,
-                  currentRouteName: '/cuentas',
-                  unidadGestionNombre: null,
-                  showAdvanced: _showAdvanced, // Leer desde SharedPreferences en initState
-                ),
-              
-              // Contenido principal
-              Expanded(
-                child: _cargando
-                    ? const Center(child: CircularProgressIndicator())
-                    : ResponsiveContainer(
-                        maxWidth: 1200,
-                        child: _cuentas.isEmpty
-                            ? _buildVacio()
-                            : _buildListado(),
-                      ),
-              ),
-            ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: _navegarACrear,
-            backgroundColor: Colors.teal,
-            icon: const Icon(Icons.add),
-            label: const Text('Nueva Cuenta'),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 

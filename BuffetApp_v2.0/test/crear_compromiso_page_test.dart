@@ -1,311 +1,271 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:buffet_app/features/tesoreria/pages/crear_compromiso_page.dart';
 import 'package:buffet_app/features/shared/state/app_settings.dart';
 import 'package:buffet_app/data/dao/db.dart';
 
-// Configura entorno de pruebas
-Future<void> _setupTestEnv() async {
-  TestWidgetsFlutterBinding.ensureInitialized();
-  SharedPreferences.setMockInitialValues({});
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
-  
-  const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
-  final temp = await Directory.systemTemp.createTemp('buffet_test').then((d) => d.path);
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-    pathChannel,
-    (MethodCall call) async => temp,
+// Mock para PathProvider
+class MockPathProviderPlatform extends Fake
+    with MockPlatformInterfaceMixin
+    implements PathProviderPlatform {
+  @override
+  Future<String?> getApplicationDocumentsPath() async => 'test_data';
+
+  @override
+  Future<String?> getTemporaryPath() async => 'test_temp';
+}
+
+/// Construye el widget de test con providers necesarios.
+Widget _buildTestWidget(AppSettings settings) {
+  return ChangeNotifierProvider<AppSettings>.value(
+    value: settings,
+    child: const MaterialApp(
+      home: CrearCompromisoPage(),
+    ),
   );
 }
 
+/// Espera a que el widget cargue sus datos async (sin pumpAndSettle).
+/// pumpAndSettle() causa timeout por el widget Autocomplete que nunca
+/// deja de programar frames. Usamos pump() explícito como workaround.
+Future<void> _waitForLoad(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump();
+}
+
 void main() {
+  late Database db;
+
   setUpAll(() async {
-    await _setupTestEnv();
+    TestWidgetsFlutterBinding.ensureInitialized();
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+
+    // Mock de PathProvider
+    PathProviderPlatform.instance = MockPathProviderPlatform();
+
+    // Mock de SharedPreferences channel
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/shared_preferences'),
+      (MethodCall methodCall) async {
+        if (methodCall.method == 'getAll') {
+          return <String, Object>{};
+        }
+        return null;
+      },
+    );
+
+    // Inicializar DB
+    db = await AppDatabase.instance();
+  });
+
+  setUp(() async {
+    // Limpiar datos entre tests para aislamiento
+    db = await AppDatabase.instance();
+    await db.delete('compromiso_cuotas');
+    await db.delete('compromisos');
+    await db.delete('unidades_gestion');
+
+    // Insertar unidad de gestion de prueba (id=1)
+    await db.insert('unidades_gestion', {
+      'nombre': 'Futbol Mayor',
+      'tipo': 'DISCIPLINA',
+      'activo': 1,
+      'created_ts': DateTime.now().millisecondsSinceEpoch,
+      'updated_ts': DateTime.now().millisecondsSinceEpoch,
+    });
   });
 
   testWidgets('CrearCompromisoPage - Carga inicial sin errores',
       (WidgetTester tester) async {
-    // Inicializar base de datos
-    final db = await AppDatabase.instance();
-    
     // Verificar que existan las tablas necesarias
-    final tablas = await db.query('sqlite_master', 
+    final tablas = await db.query('sqlite_master',
       where: 'type = ? AND name IN (?, ?, ?, ?)',
-      whereArgs: ['table', 'frecuencias', 'unidades_gestion', 'categoria_movimiento', 'compromisos'],
+      whereArgs: [
+        'table',
+        'frecuencias',
+        'unidades_gestion',
+        'categoria_movimiento',
+        'compromisos',
+      ],
     );
-    
-    expect(tablas.length, greaterThanOrEqualTo(3), 
-      reason: 'Deben existir las tablas frecuencias, unidades_gestion y categoria_movimiento');
 
-    // Crear unidad de gestión de prueba
-    await db.insert('unidades_gestion', {
-      'nombre': 'Fútbol Mayor',
-      'activo': 1,
-      'created_ts': DateTime.now().millisecondsSinceEpoch,
-      'updated_ts': DateTime.now().millisecondsSinceEpoch,
-    });
+    expect(tablas.length, greaterThanOrEqualTo(3),
+        reason:
+            'Deben existir las tablas frecuencias, unidades_gestion y compromisos');
 
-    // Crear AppSettings
     final settings = AppSettings();
     await settings.ensureLoaded();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings,
-        child: MaterialApp(
-          home: const CrearCompromisoPage(),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_buildTestWidget(settings));
+    await _waitForLoad(tester);
 
-    // Esperar a que se carguen los datos
-    await tester.pumpAndSettle();
-
-    // Verificar que la página se carga sin errores
+    // Verificar que la pagina se carga sin errores
     expect(find.text('Nuevo Compromiso'), findsOneWidget);
     expect(find.text('Nombre del compromiso *'), findsOneWidget);
     expect(find.text('Tipo *'), findsOneWidget);
-    expect(find.text('🔑 Modalidad del compromiso *'), findsOneWidget);
+    // La pagina simplificada ya no muestra selector de modalidad
+    expect(find.text('Monto *'), findsOneWidget);
+    expect(find.text('Fecha programada *'), findsOneWidget);
   });
 
-  testWidgets('CrearCompromisoPage - Campos visibles según modalidad PAGO_UNICO',
+  testWidgets(
+      'CrearCompromisoPage - Formulario es pago unico (sin selector de modalidad)',
       (WidgetTester tester) async {
-    await AppDatabase.instance();
-    
-    final db = await AppDatabase.instance();
-    await db.insert('unidades_gestion', {
-      'nombre': 'Fútbol Mayor',
-      'activo': 1,
-      'created_ts': DateTime.now().millisecondsSinceEpoch,
-      'updated_ts': DateTime.now().millisecondsSinceEpoch,
-    });
-
     final settings = AppSettings();
     await settings.ensureLoaded();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings,
-        child: MaterialApp(
-          home: const CrearCompromisoPage(),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_buildTestWidget(settings));
+    await _waitForLoad(tester);
 
-    await tester.pumpAndSettle();
-
-    // Por defecto debería estar PAGO_UNICO seleccionado
-    expect(find.text('Pago único'), findsOneWidget);
-    expect(find.text('Fecha de pago/cobro *'), findsOneWidget);
-    
-    // No deberían estar visibles los campos de cuotas
+    // No debe haber selector de modalidad ni campos de cuotas
+    expect(find.text('Modalidad del compromiso *'), findsNothing);
     expect(find.text('Cantidad de cuotas *'), findsNothing);
+    expect(find.text('Frecuencia *'), findsNothing);
+    expect(find.text('Monto total del compromiso *'), findsNothing);
+
+    // Debe mostrar campo de monto simple
+    expect(find.text('Monto *'), findsOneWidget);
+    expect(find.text('Fecha programada *'), findsOneWidget);
   });
 
-  testWidgets('CrearCompromisoPage - Cambio a modalidad MONTO_TOTAL_CUOTAS',
+  testWidgets('CrearCompromisoPage - Banner informativo visible',
       (WidgetTester tester) async {
-    await AppDatabase.instance();
-    
-    final db = await AppDatabase.instance();
-    await db.insert('unidades_gestion', {
-      'nombre': 'Fútbol Mayor',
-      'activo': 1,
-      'created_ts': DateTime.now().millisecondsSinceEpoch,
-      'updated_ts': DateTime.now().millisecondsSinceEpoch,
-    });
-
     final settings = AppSettings();
     await settings.ensureLoaded();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings,
-        child: MaterialApp(
-          home: const CrearCompromisoPage(),
-        ),
-      ),
+    await tester.pumpWidget(_buildTestWidget(settings));
+    await _waitForLoad(tester);
+
+    // Debe mostrar banner informativo
+    expect(
+      find.text('Un compromiso es un pago o cobro puntual esperado.'),
+      findsOneWidget,
     );
 
-    await tester.pumpAndSettle();
-
-    // Seleccionar MONTO_TOTAL_CUOTAS
-    await tester.tap(find.text('Monto total en cuotas'));
-    await tester.pumpAndSettle();
-
-    // Verificar que aparecen los campos correspondientes
-    expect(find.text('Monto total del compromiso *'), findsOneWidget);
-    expect(find.text('Cantidad de cuotas *'), findsOneWidget);
-    expect(find.text('Frecuencia *'), findsOneWidget);
+    // Debe mostrar sugerencia de acuerdos
+    expect(find.textContaining('Se repite o tiene cuotas?'), findsOneWidget);
   });
 
-  testWidgets('CrearCompromisoPage - Validación de formulario vacío',
+  testWidgets('CrearCompromisoPage - Validacion de formulario vacio',
       (WidgetTester tester) async {
-    await AppDatabase.instance();
-    
-    final db = await AppDatabase.instance();
-    await db.insert('unidades_gestion', {
-      'nombre': 'Fútbol Mayor',
-      'activo': 1,
-      'created_ts': DateTime.now().millisecondsSinceEpoch,
-      'updated_ts': DateTime.now().millisecondsSinceEpoch,
-    });
-
     final settings = AppSettings();
     await settings.ensureLoaded();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings,
-        child: MaterialApp(
-          home: const CrearCompromisoPage(),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(_buildTestWidget(settings));
+    await _waitForLoad(tester);
 
     // Intentar guardar sin llenar campos
-    await tester.tap(find.text('Guardar Compromiso'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('Crear Compromiso'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    // Verificar que aparecen mensajes de error
-    expect(find.text('Ingresá un nombre'), findsOneWidget);
-    expect(find.text('Ingresá un monto'), findsOneWidget);
+    // Verificar que aparecen mensajes de validacion
+    expect(find.text('Ingresa un nombre'), findsOneWidget);
+    expect(find.text('Ingresa un monto'), findsOneWidget);
   });
 
   testWidgets('CrearCompromisoPage - Crear compromiso PAGO_UNICO exitoso',
       (WidgetTester tester) async {
-    await AppDatabase.instance();
-    
-    final db = await AppDatabase.instance();
-    await db.insert('unidades_gestion', {
-      'nombre': 'Fútbol Mayor',
-      'activo': 1,
-      'created_ts': DateTime.now().millisecondsSinceEpoch,
-      'updated_ts': DateTime.now().millisecondsSinceEpoch,
-    });
-
     final settings = AppSettings();
     await settings.ensureLoaded();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings,
-        child: MaterialApp(
-          home: const CrearCompromisoPage(),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
+    await tester.pumpWidget(_buildTestWidget(settings));
+    await _waitForLoad(tester);
 
     // Llenar campos del formulario
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nombre del compromiso *'),
       'Sponsor Nike',
     );
-    
+
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Monto *'),
       '50000',
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // Guardar
-    await tester.tap(find.text('Guardar Compromiso'));
-    await tester.pumpAndSettle(const Duration(seconds: 2));
+    // Tap en "Crear Compromiso"
+    await tester.tap(find.text('Crear Compromiso'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    // Verificar que se guardó en la BD
+    // Aparece dialog de confirmacion
+    expect(find.text('Confirmar Compromiso'), findsOneWidget);
+    expect(find.text('Sponsor Nike'), findsWidgets);
+
+    // Confirmar
+    await tester.tap(find.text('Confirmar'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    // Verificar que se guardo en la BD
     final compromisos = await db.query('compromisos');
     expect(compromisos.length, 1);
     expect(compromisos.first['nombre'], 'Sponsor Nike');
     expect(compromisos.first['monto'], 50000.0);
     expect(compromisos.first['modalidad'], 'PAGO_UNICO');
 
-    // Verificar que se generó la cuota
+    // Verificar que se genero la cuota
     final cuotas = await db.query('compromiso_cuotas');
     expect(cuotas.length, 1);
     expect(cuotas.first['numero_cuota'], 1);
     expect(cuotas.first['monto_esperado'], 50000.0);
   });
 
-  testWidgets('CrearCompromisoPage - Crear compromiso MONTO_TOTAL_CUOTAS con 3 cuotas',
+  testWidgets('CrearCompromisoPage - Tipo ingreso/egreso funciona',
       (WidgetTester tester) async {
-    await AppDatabase.instance();
-    
-    final db = await AppDatabase.instance();
-    await db.insert('unidades_gestion', {
-      'nombre': 'Fútbol Mayor',
-      'activo': 1,
-      'created_ts': DateTime.now().millisecondsSinceEpoch,
-      'updated_ts': DateTime.now().millisecondsSinceEpoch,
-    });
-
     final settings = AppSettings();
     await settings.ensureLoaded();
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppSettings>.value(
-        value: settings,
-        child: MaterialApp(
-          home: const CrearCompromisoPage(),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_buildTestWidget(settings));
+    await _waitForLoad(tester);
 
-    await tester.pumpAndSettle();
+    // Por defecto deberia ser INGRESO
+    expect(find.text('Ingreso'), findsOneWidget);
+    expect(find.text('Egreso'), findsOneWidget);
 
-    // Seleccionar modalidad MONTO_TOTAL_CUOTAS
-    await tester.tap(find.text('Monto total en cuotas'));
-    await tester.pumpAndSettle();
+    // Cambiar a EGRESO
+    await tester.tap(find.text('Egreso'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    // Llenar campos
+    // Llenar formulario y crear
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nombre del compromiso *'),
-      'Equipamiento',
+      'Compra insumos',
     );
-    
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Monto total del compromiso *'),
-      '30000',
+      find.widgetWithText(TextFormField, 'Monto *'),
+      '15000',
     );
+    await tester.pump();
 
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Cantidad de cuotas *'),
-      '3',
-    );
+    await tester.tap(find.text('Crear Compromiso'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    await tester.pumpAndSettle();
+    // Confirmar en el dialog
+    expect(find.text('Confirmar Compromiso'), findsOneWidget);
+    await tester.tap(find.text('Confirmar'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
 
-    // Debería mostrar vista previa de cuotas
-    expect(find.text('📋 Vista previa de cuotas'), findsOneWidget);
-
-    // Guardar
-    await tester.tap(find.text('Guardar Compromiso'));
-    await tester.pumpAndSettle(const Duration(seconds: 2));
-
-    // Verificar que se guardó
+    // Verificar tipo EGRESO en BD
     final compromisos = await db.query('compromisos');
     expect(compromisos.length, 1);
-    expect(compromisos.first['cuotas'], 3);
-
-    // Verificar que se generaron 3 cuotas
-    final cuotas = await db.query('compromiso_cuotas');
-    expect(cuotas.length, 3);
-    
-    // Verificar que la suma de montos es correcta
-    final sumaMontos = cuotas.fold<double>(
-      0, 
-      (sum, cuota) => sum + (cuota['monto_esperado'] as double),
-    );
-    expect((sumaMontos - 30000.0).abs(), lessThan(0.01));
+    expect(compromisos.first['tipo'], 'EGRESO');
+    expect(compromisos.first['monto'], 15000.0);
   });
 }

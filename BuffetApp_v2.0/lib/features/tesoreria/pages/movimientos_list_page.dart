@@ -9,7 +9,10 @@ import '../../shared/services/compromisos_service.dart';
 import '../../shared/services/filtros_persistentes_service.dart';
 import '../../shared/format.dart';
 import '../../shared/widgets/progress_dialog.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/pagination_controls.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
 import '../../../domain/paginated_result.dart';
 import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
@@ -17,6 +20,8 @@ import '../../shared/state/app_settings.dart';
 import 'detalle_movimiento_page.dart';
 import 'confirmar_movimiento_page.dart';
 import 'crear_movimiento_page.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../services/categoria_movimiento_service.dart';
 
 /// Pantalla para listar todos los movimientos financieros de una Unidad de Gestión
@@ -33,9 +38,10 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   final _proyectadosSvc = MovimientosProyectadosService.instance;
   final _compromisosService = CompromisosService.instance;
   
-  // FASE 31: Paginación
+  // FASE 31: Paginación real (SQL LIMIT/OFFSET)
   PaginatedResult<Map<String, dynamic>> _movimientosPaginados = PaginatedResult.empty();
   static const int _pageSize = 50;
+  int _paginaActual = 1;
   
   List<MovimientoProyectado> _movimientosEsperados = [];
   List<MovimientoProyectado> _movimientosCancelados = [];
@@ -76,12 +82,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         _filtroTipo = filtros[FiltrosKeys.tipo] as String?;
         _filtroEstado = filtros[FiltrosKeys.estado] as String?;
         
-        // Restaurar mes seleccionado
-        final year = filtros[FiltrosKeys.mesYear] as int?;
-        final month = filtros[FiltrosKeys.mesMonth] as int?;
-        if (year != null && month != null) {
-          _mesSeleccionado = DateTime(year, month);
-        }
+        // No restaurar mes: siempre abrir en el mes actual (I.1)
       });
     }
   }
@@ -118,9 +119,16 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           _unidadGestionNombre = (rows.first['nombre'] ?? '').toString();
         }
         
-        // Cargar movimientos (aún usa disciplinaId para compatibilidad)
-        // TODO: migrar a unidadGestionId cuando la tabla evento_movimiento lo soporte
-        final movs = await _svc.listar(disciplinaId: unidadGestionId);
+        // Cargar movimientos paginados con filtros SQL
+        final movsPaginados = await _svc.listarPaginado(
+          disciplinaId: unidadGestionId,
+          year: _mesSeleccionado.year,
+          month: _mesSeleccionado.month,
+          tipo: _filtroTipo,
+          estado: (_filtroEstado != null && _filtroEstado != 'ESPERADO') ? _filtroEstado : null,
+          page: _paginaActual,
+          pageSize: _pageSize,
+        );
         
         // Calcular movimientos esperados del mes
         final esperados = await _proyectadosSvc.calcularMovimientosEsperadosMes(
@@ -180,12 +188,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         }
         
         setState(() {
-          _movimientosPaginados = PaginatedResult(
-            items: movs,
-            totalCount: movs.length,
-            currentPage: 1,
-            pageSize: _pageSize,
-          );
+          _movimientosPaginados = movsPaginados;
           _movimientosEsperados = esperados;
           _movimientosCancelados = cancelados;
           _pendientesCount = pendientes;
@@ -205,45 +208,15 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar: $e')),
+          const SnackBar(content: Text('Error al cargar movimientos. Intente nuevamente.')),
         );
       }
     }
   }
 
+  /// Items de la página actual (filtrados en SQL)
   List<Map<String, dynamic>> get _movimientosFiltrados {
-    var resultado = _movimientosPaginados.items;
-    
-    // Filtrar por mes
-    resultado = resultado.where((m) {
-      final ts = m['created_ts'];
-      DateTime? fecha;
-      if (ts is int) {
-        fecha = DateTime.fromMillisecondsSinceEpoch(ts);
-      } else if (ts is String) {
-        fecha = DateTime.tryParse(ts);
-      }
-      
-      if (fecha == null) return false;
-      
-      return fecha.year == _mesSeleccionado.year && 
-             fecha.month == _mesSeleccionado.month;
-    }).toList();
-    
-    // Filtrar por tipo (Ingreso/Egreso)
-    if (_filtroTipo != null) {
-      resultado = resultado.where((m) => m['tipo'] == _filtroTipo).toList();
-    }
-    // Filtrar por estado (solo movimientos confirmados/cancelados)
-    if (_filtroEstado != null && _filtroEstado != 'ESPERADO') {
-      if (_filtroEstado == 'CONFIRMADO') {
-        resultado = resultado.where((m) => (m['estado'] as String? ?? 'CONFIRMADO') == 'CONFIRMADO').toList();
-      } else if (_filtroEstado == 'CANCELADO') {
-        resultado = resultado.where((m) => (m['estado'] as String?) == 'CANCELADO').toList();
-      }
-    }
-    
-    return resultado;
+    return _movimientosPaginados.items;
   }
   
   List<MovimientoProyectado> get _esperadosFiltrados {
@@ -485,7 +458,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 Text('Error al sincronizar'),
               ],
             ),
-            content: Text('$e'),
+            content: const Text('Error al procesar. Intente nuevamente.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -579,7 +552,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Error al abrir: $e'),
+                          content: const Text('Error al abrir. Intente nuevamente.'),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -614,7 +587,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 Text('Error al exportar'),
               ],
             ),
-            content: Text('$e'),
+            content: const Text('Error al procesar. Intente nuevamente.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -632,10 +605,11 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     final settings = context.watch<AppSettings>();
     final unidadGestionId = settings.unidadGestionActivaId;
 
-    return TesoreriaScaffold(
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/movimientos',
       title: 'Movimientos',
-      currentRouteName: '/movimientos',
-      appBarColor: Colors.teal,
       actions: [
         // Botón restaurar filtros guardados
         FutureBuilder<bool>(
@@ -655,6 +629,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     _filtroTipo = null;
                     _filtroEstado = null;
                     _mesSeleccionado = DateTime.now();
+                    _paginaActual = 1;
                   });
                   await _load();
                   if (mounted) {
@@ -733,10 +708,17 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         },
         icon: const Icon(Icons.add),
         label: const Text('Crear'),
-        backgroundColor: Colors.teal,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Movimientos',
+              subtitle: _unidadGestionNombre ?? '',
+            ),
+          Expanded(
+            child: _loading
+          ? SkeletonLoader.cards(count: 4)
           : unidadGestionId == null
               ? _buildSinUnidadGestion()
               : Column(
@@ -979,6 +961,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                                   _mesSeleccionado.year,
                                   _mesSeleccionado.month - 1,
                                 );
+                                _paginaActual = 1;
                               });
                               await _guardarFiltros();
                               await _load(); // Recargar movimientos del nuevo mes
@@ -1004,6 +987,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                                   _mesSeleccionado.year,
                                   _mesSeleccionado.month + 1,
                                 );
+                                _paginaActual = 1;
                               });
                               await _guardarFiltros();
                               await _load(); // Recargar movimientos del nuevo mes
@@ -1015,6 +999,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                             onPressed: () async {
                               setState(() {
                                 _mesSeleccionado = DateTime.now();
+                                _paginaActual = 1;
                               });
                               await _guardarFiltros();
                               await _load(); // Recargar movimientos del mes actual
@@ -1050,9 +1035,13 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                               ),
                             ],
                             selected: {_filtroTipo},
-                            onSelectionChanged: (Set<String?> selected) {
-                              setState(() => _filtroTipo = selected.first);
-                              _guardarFiltros();
+                            onSelectionChanged: (Set<String?> selected) async {
+                              setState(() {
+                                _filtroTipo = selected.first;
+                                _paginaActual = 1;
+                              });
+                              await _guardarFiltros();
+                              await _load();
                             },
                           ),
                           const SizedBox(height: 8),
@@ -1080,9 +1069,13 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                               ),
                             ],
                             selected: {_filtroEstado},
-                            onSelectionChanged: (Set<String?> selected) {
-                              setState(() => _filtroEstado = selected.first);
-                              _guardarFiltros();
+                            onSelectionChanged: (Set<String?> selected) async {
+                              setState(() {
+                                _filtroEstado = selected.first;
+                                _paginaActual = 1;
+                              });
+                              await _guardarFiltros();
+                              await _load();
                             },
                           ),
                         ],
@@ -1094,65 +1087,56 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       child: RefreshIndicator(
                         onRefresh: _load,
                         child: _movimientosCombinados.isEmpty
-                          ? LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return SingleChildScrollView(
-                                    physics: const AlwaysScrollableScrollPhysics(),
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minHeight: constraints.maxHeight,
-                                      ),
-                                      child: Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.inbox_outlined,
-                                              size: 64,
-                                              color: Colors.grey.shade400,
-                                            ),
-                                            const SizedBox(height: 16),
-                                            Text(
-                                              _filtroEstado == 'ESPERADO'
-                                                  ? 'No hay movimientos esperados'
-                                                  : _filtroTipo == null
-                                                  ? 'No hay movimientos registrados'
-                                                  : 'No hay ${_filtroTipo == 'INGRESO' ? 'ingresos' : 'egresos'} registrados',
-                                              style: TextStyle(
-                                                color: Colors.grey.shade600,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
+                          ? EmptyState(
+                                icon: Icons.inbox_outlined,
+                                title: _filtroEstado == 'ESPERADO'
+                                    ? 'No hay movimientos esperados'
+                                    : _filtroTipo == null
+                                    ? 'No hay movimientos registrados'
+                                    : 'No hay ${_filtroTipo == 'INGRESO' ? 'ingresos' : 'egresos'} registrados',
+                                subtitle: 'Usá el botón + para crear uno nuevo',
                               )
                             : _vistaTabla
                                 ? SingleChildScrollView(
                                     physics: const AlwaysScrollableScrollPhysics(),
                                     child: _buildMovimientosTable(),
                                   )
-                                : ListView.builder(
-                                    physics: const AlwaysScrollableScrollPhysics(),
-                                    padding: const EdgeInsets.all(8),
-                                    itemCount: _movimientosCombinados.length,
-                                    itemBuilder: (context, index) {
-                                      final item = _movimientosCombinados[index];
-                                      if (item is Map<String, dynamic>) {
-                                        return _buildMovimientoCard(item);
-                                      } else if (item is MovimientoProyectado) {
-                                        return _buildMovimientoEsperadoCard(item);
-                                      }
-                                      return const SizedBox.shrink();
-                                    },
+                                : Align(
+                                    alignment: Alignment.topCenter,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(maxWidth: 700),
+                                      child: ListView.builder(
+                                        physics: const AlwaysScrollableScrollPhysics(),
+                                        padding: const EdgeInsets.all(8),
+                                        itemCount: _movimientosCombinados.length,
+                                        itemBuilder: (context, index) {
+                                          final item = _movimientosCombinados[index];
+                                          if (item is Map<String, dynamic>) {
+                                            return _buildMovimientoCard(item);
+                                          } else if (item is MovimientoProyectado) {
+                                            return _buildMovimientoEsperadoCard(item);
+                                          }
+                                          return const SizedBox.shrink();
+                                        },
+                                      ),
+                                    ),
                                   ),
                       ),
                     ),
+                    // Controles de paginación
+                    if (_movimientosPaginados.totalPages > 1)
+                      PaginationControls(
+                        paginatedResult: _movimientosPaginados,
+                        onPageChanged: (page) {
+                          setState(() => _paginaActual = page);
+                          _load();
+                        },
+                      ),
                   ],
                 ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1163,6 +1147,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         scrollDirection: Axis.horizontal,
         physics: const AlwaysScrollableScrollPhysics(),
         child: DataTable(
+          showCheckboxColumn: false,
           columnSpacing: 8,
           dataRowMinHeight: 36,
           dataRowMaxHeight: 56,
@@ -1190,20 +1175,10 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           final esIngreso = item.tipo == 'INGRESO';
           final esCancelado = item.estado == 'CANCELADO';
           return DataRow(
-            selected: _movimientoSeleccionado == item,
             color: WidgetStateProperty.all(
               esCancelado ? Colors.red.shade50 : Colors.grey.shade100
             ),
-            onSelectChanged: (_) {
-              // Seleccionar/deseleccionar movimiento (cancelados también se pueden seleccionar para reactivar)
-              setState(() {
-                if (_movimientoSeleccionado == item) {
-                  _movimientoSeleccionado = null;
-                } else {
-                  _movimientoSeleccionado = item;
-                }
-              });
-            },
+            onSelectChanged: (_) => _mostrarDetalleMovimientoEsperado(item),
             cells: [
               DataCell(
                 Text(
@@ -1971,8 +1946,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error al reactivar: $e'),
+                        const SnackBar(
+                          content: Text('Error al reactivar. Intente nuevamente.'),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -2533,8 +2508,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al reactivar: $e'),
+          const SnackBar(
+            content: Text('Error al reactivar. Intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -3036,8 +3011,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar detalle: $e'),
+          const SnackBar(
+            content: Text('Error al cargar detalle. Intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -3202,8 +3177,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al reactivar: $e'),
+            const SnackBar(
+              content: Text('Error al reactivar. Intente nuevamente.'),
               backgroundColor: Colors.red,
             ),
           );

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/responsive_container.dart';
-import '../widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
+import '../format.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:io' show File, Platform;
@@ -323,10 +324,9 @@ class _SettingsPageState extends State<SettingsPage> {
       },
       child: modeState.isBuffetMode
           ? _buildBuffetScaffold(context, appSettings, modeState, pv, alias)
-          : TesoreriaScaffold(
+          : ErpLayout(
+        currentRoute: '/settings',
         title: 'Configuraciones',
-        currentRouteName: '/settings',
-        appBarColor: Colors.grey,
         actions: [
           TextButton(
             onPressed: _loading ? null : _save,
@@ -1177,7 +1177,7 @@ class _VentasGridPreviewPageState extends State<_VentasGridPreviewPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '\$ ${price.toStringAsFixed(0)}',
+                    Format.moneyNoDecimals(price),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -1400,7 +1400,7 @@ class _VentasGridPreviewPageState extends State<_VentasGridPreviewPage> {
           maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Row(children: [
         Text(
-          '\$ ${(p['precio_venta'] as num?)?.toStringAsFixed(0) ?? '0'}',
+          Format.moneyNoDecimals((p['precio_venta'] as num?) ?? 0),
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(width: 12),

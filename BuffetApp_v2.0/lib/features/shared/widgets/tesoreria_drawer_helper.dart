@@ -13,6 +13,7 @@ import '../../tesoreria/pages/acuerdos_page.dart';
 import '../../tesoreria/pages/plantel_page.dart';
 import '../../tesoreria/pages/categorias_movimiento_page.dart';
 import '../../tesoreria/pages/reportes_index_page.dart';
+import '../../tesoreria/pages/dashboard_page.dart';
 import '../../tesoreria/pages/saldos_iniciales_list_page.dart';
 import '../../tesoreria/pages/unidad_gestion_selector_page.dart';
 import '../../cuentas/pages/cuentas_page.dart';
@@ -99,7 +100,7 @@ class TesoreriaDrawerHelper {
           label: 'Crear Movimiento',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const CrearMovimientoPage()),
             );
@@ -114,7 +115,7 @@ class TesoreriaDrawerHelper {
           label: 'Ver Movimientos',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const MovimientosListPage()),
             );
@@ -129,7 +130,7 @@ class TesoreriaDrawerHelper {
           label: 'Compromisos',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const CompromisosPage()),
             );
@@ -144,7 +145,7 @@ class TesoreriaDrawerHelper {
           label: 'Acuerdos',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const AcuerdosPage()),
             );
@@ -159,7 +160,7 @@ class TesoreriaDrawerHelper {
           label: 'Cuentas de Fondos',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const CuentasPage()),
             );
@@ -174,7 +175,7 @@ class TesoreriaDrawerHelper {
           label: 'Plantel',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const PlantelPage()),
             );
@@ -189,7 +190,7 @@ class TesoreriaDrawerHelper {
           label: 'Reportes',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const ReportesIndexPage()),
             );
@@ -198,13 +199,28 @@ class TesoreriaDrawerHelper {
           activeColor: Colors.blue,
         ),
         
+        // Dashboard
+        DrawerMenuItem(
+          icon: Icons.dashboard,
+          label: 'Dashboard',
+          onTap: () {
+            final nav = Navigator.of(context);
+            if (!isDrawerFixed) Navigator.pop(context);
+            nav.push(
+              MaterialPageRoute(builder: (_) => const DashboardPage()),
+            );
+          },
+          isActive: currentRouteName == '/dashboard' || currentRouteName == '/reportes/dashboard',
+          activeColor: Colors.indigo,
+        ),
+        
         // Categorías
         DrawerMenuItem(
           icon: Icons.category,
           label: 'Categorías',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const CategoriasMovimientoPage()),
             );
@@ -219,7 +235,7 @@ class TesoreriaDrawerHelper {
           label: 'Saldos Iniciales',
           onTap: () {
             final nav = Navigator.of(context);
-            Navigator.pop(context);
+            if (!isDrawerFixed) Navigator.pop(context);
             nav.push(
               MaterialPageRoute(builder: (_) => const SaldosInicialesListPage()),
             );

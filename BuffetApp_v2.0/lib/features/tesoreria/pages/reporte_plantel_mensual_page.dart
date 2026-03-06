@@ -6,9 +6,12 @@ import '../../shared/services/plantel_service.dart';
 import '../../shared/services/export_service.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/widgets/progress_dialog.dart';
 import '../../shared/format.dart';
 import '../../shared/state/app_settings.dart';
+import '../services/reporte_pdf_service.dart';
 import 'detalle_movimientos_entidad_page.dart';
 
 /// FASE 35: Reporte mensual de estado de pagos por entidad (jugador/staff CT)
@@ -108,8 +111,6 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
             sumaPendiente += esperado;
             sumaMovAsociadosIngresos += movIngreso;
             sumaMovAsociadosEgresos += movEgreso;
-            sumaPagado += pagado;
-            sumaPendiente += esperado;
           }
         } catch (e, stack) {
           await AppDatabase.logLocalError(
@@ -247,7 +248,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
           } catch (e) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('No se pudo abrir el archivo: $e')),
+                const SnackBar(content: Text('No se pudo abrir el archivo. Intente nuevamente.')),
               );
             }
           }
@@ -265,7 +266,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al exportar: $e'),
+            content: const Text('Error al exportar. Intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -292,12 +293,44 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
       title: 'Reporte Mensual de Plantel',
       currentRouteName: '/reportes/plantel_mensual',
       appBarColor: Colors.blue,
+      actions: [
+        if (_entidadesConEstado.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () async {
+              try {
+                await ReportePdfService.instance.shareReportePlantel(
+                  entidades: _entidadesConEstado,
+                  resumen: {
+                    'totalComprometido': _totalIngresosEsperados,
+                    'totalPagado': _totalPagado,
+                    'totalPendiente': _totalPendiente,
+                  },
+                  mes: _mesActual,
+                  anio: _anioActual,
+                );
+              } catch (e, st) {
+                await AppDatabase.logLocalError(
+                  scope: 'reporte_plantel.export_pdf',
+                  error: e,
+                  stackTrace: st,
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Error al generar PDF. Intente nuevamente.')),
+                  );
+                }
+              }
+            },
+            tooltip: 'Exportar a PDF',
+          ),
+      ],
       body: ResponsiveContainer(
         maxWidth: 1400,
         child: RefreshIndicator(
           onRefresh: _cargarDatos,
           child: _cargando
-              ? const Center(child: CircularProgressIndicator())
+              ? SkeletonLoader.table(rows: 5, columns: 4)
               : SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Column(
@@ -355,33 +388,33 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
 
   Widget _buildResumenGeneral() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.grey.shade100,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.summarize, color: Colors.blue, size: 24),
-              SizedBox(width: 8),
+              Icon(Icons.summarize, color: Colors.blue, size: 20),
+              SizedBox(width: 6),
               Text(
                 'Resumen General',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: _buildKpiCard(
-                  'Total Comprometido',
+                  'Comprometido',
                   Format.money(_totalIngresosEsperados),
                   Icons.account_balance_wallet,
                   Colors.blue,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildKpiCard(
                   'Pagado',
@@ -390,11 +423,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   Colors.green,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildKpiCard(
                   'Pendiente',
@@ -403,7 +432,11 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   Colors.orange,
                 ),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
               Expanded(
                 child: _buildKpiCard(
                   'Entidades',
@@ -412,23 +445,19 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   Colors.purple,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildKpiCard(
-                  'Mov. Asociados (↓)',
+                  'Mov. (↓)',
                   Format.money(_totalMovimientosAsociadosIngresos),
                   Icons.arrow_downward,
                   Colors.green,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildKpiCard(
-                  'Mov. Asociados (↑)',
+                  'Mov. (↑)',
                   Format.money(_totalMovimientosAsociadosEgresos),
                   Icons.arrow_upward,
                   Colors.red,
@@ -443,33 +472,35 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
 
   Widget _buildKpiCard(String label, String valor, IconData icono, Color color) {
     return Card(
-      elevation: 2,
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(vertical: 2),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(icono, size: 16, color: color),
-                const SizedBox(width: 4),
+                Icon(icono, size: 14, color: color),
+                const SizedBox(width: 3),
                 Expanded(
                   child: Text(
                     label,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               valor,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -478,23 +509,10 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
   }
 
   Widget _buildEmpty() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          Icon(Icons.calendar_today, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'No hay movimientos en este mes',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Navegá a otro mes usando las flechas',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-          ),
-        ],
-      ),
+    return const EmptyState(
+      icon: Icons.calendar_today,
+      title: 'No hay movimientos en este mes',
+      subtitle: 'Navegá a otro mes usando las flechas',
     );
   }
 

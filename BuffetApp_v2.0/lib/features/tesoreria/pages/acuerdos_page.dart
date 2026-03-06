@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 
 import '../../../features/shared/services/acuerdos_service.dart';
+import '../widgets/ayuda_tesoreria_dialog.dart';
 import '../../../features/shared/format.dart';
 import '../../../data/dao/db.dart';
 import 'crear_acuerdo_page.dart';
@@ -10,7 +15,7 @@ import 'detalle_acuerdo_page.dart';
 import 'nuevo_acuerdo_grupal_page.dart';
 
 /// FASE 18.5: Página principal de gestión de acuerdos financieros
-/// 
+///
 /// Muestra lista de acuerdos con filtros y acciones.
 /// Los acuerdos son reglas/contratos que generan compromisos automáticamente.
 class AcuerdosPage extends StatefulWidget {
@@ -25,14 +30,14 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
   List<Map<String, dynamic>> _unidadesGestion = [];
   List<Map<String, dynamic>> _entidadesPlantel = [];
   bool _isLoading = true;
-  
+
   // Filtros
   int? _unidadGestionId;
   int? _entidadPlantelId;
   String? _tipoFiltro; // 'INGRESO', 'EGRESO', null = todos
   bool? _activoFiltro; // true = activos, false = finalizados, null = todos
   String? _origenFiltro; // 'MANUAL', 'GRUPAL', null = todos
-  
+
   // Vista
   bool _vistaTabla = true; // false = tarjetas, true = tabla
 
@@ -44,17 +49,19 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
 
   Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final db = await AppDatabase.instance();
-      
+
       // Cargar catálogos
-      final unidades = await db.query('unidades_gestion', where: 'activo = 1', orderBy: 'nombre');
-      final entidades = await db.query('entidades_plantel', where: 'estado_activo = 1', orderBy: 'nombre');
-      
+      final unidades = await db.query('unidades_gestion',
+          where: 'activo = 1', orderBy: 'nombre');
+      final entidades = await db.query('entidades_plantel',
+          where: 'estado_activo = 1', orderBy: 'nombre');
+
       // Cargar acuerdos con filtro de origen
       List<Map<String, dynamic>> acuerdosRaw;
-      
+
       if (_origenFiltro != null) {
         final soloGrupal = _origenFiltro == 'GRUPAL';
         acuerdosRaw = await AcuerdosService.listarAcuerdos(
@@ -63,7 +70,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           tipo: _tipoFiltro,
           soloActivos: _activoFiltro,
         );
-        
+
         // Filtrar por origen
         acuerdosRaw = acuerdosRaw.where((a) {
           final origenGrupal = (a['origen_grupal'] as int?) == 1;
@@ -77,15 +84,16 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           soloActivos: _activoFiltro,
         );
       }
-      
+
       // Convertir a Maps mutables para poder enriquecerlos
-      final acuerdos = acuerdosRaw.map((a) => Map<String, dynamic>.from(a)).toList();
-      
+      final acuerdos =
+          acuerdosRaw.map((a) => Map<String, dynamic>.from(a)).toList();
+
       // Enriquecer acuerdos con nombres de catálogos
       for (final acuerdo in acuerdos) {
         final unidadId = acuerdo['unidad_gestion_id'] as int?;
         final entidadId = acuerdo['entidad_plantel_id'] as int?;
-        
+
         if (unidadId != null) {
           final unidad = unidades.firstWhere(
             (u) => u['id'] == unidadId,
@@ -93,7 +101,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           );
           acuerdo['_unidad_nombre'] = unidad['nombre'];
         }
-        
+
         if (entidadId != null) {
           final entidad = entidades.firstWhere(
             (e) => e['id'] == entidadId,
@@ -101,12 +109,13 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           );
           acuerdo['_entidad_nombre'] = entidad['nombre'];
         }
-        
+
         // Cargar estadísticas
-        final stats = await AcuerdosService.obtenerEstadisticasAcuerdo(acuerdo['id'] as int);
+        final stats = await AcuerdosService.obtenerEstadisticasAcuerdo(
+            acuerdo['id'] as int);
         acuerdo['_stats'] = stats;
       }
-      
+
       setState(() {
         _acuerdos = acuerdos;
         _unidadesGestion = unidades;
@@ -119,18 +128,19 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         error: e.toString(),
         stackTrace: stack,
       );
-      
+
       setState(() {
         _acuerdos = [];
         _unidadesGestion = [];
         _entidadesPlantel = [];
         _isLoading = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Error al cargar acuerdos. Por favor, intente nuevamente.'),
+            content: Text(
+                'Error al cargar acuerdos. Por favor, intente nuevamente.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -157,7 +167,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     try {
       // FASE 22.6: Consultar cuotas esperadas antes de finalizar
       final db = await AppDatabase.instance();
-      
+
       // Obtener IDs de compromisos asociados al acuerdo
       final compromisosAsociados = await db.query(
         'compromisos',
@@ -165,16 +175,20 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         where: 'acuerdo_id = ? AND eliminado = 0',
         whereArgs: [id],
       );
-      
-      final compromisoIds = compromisosAsociados.map((c) => c['id'] as int).toList();
-      
+
+      final compromisoIds =
+          compromisosAsociados.map((c) => c['id'] as int).toList();
+
       // Consultar cuotas ESPERADO de esos compromisos
-      final cuotasEsperadas = compromisoIds.isEmpty ? <Map<String, dynamic>>[] : await db.query(
-        'compromiso_cuotas',
-        where: 'compromiso_id IN (${List.filled(compromisoIds.length, '?').join(',')}) AND estado = ?',
-        whereArgs: [...compromisoIds, 'ESPERADO'],
-      );
-      
+      final cuotasEsperadas = compromisoIds.isEmpty
+          ? <Map<String, dynamic>>[]
+          : await db.query(
+              'compromiso_cuotas',
+              where:
+                  'compromiso_id IN (${List.filled(compromisoIds.length, '?').join(',')}) AND estado = ?',
+              whereArgs: [...compromisoIds, 'ESPERADO'],
+            );
+
       // Mostrar diálogo con opciones
       String? accion;
       if (cuotasEsperadas.isNotEmpty) {
@@ -210,7 +224,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Finalizar Acuerdo'),
-            content: Text('¿Finalizar el acuerdo \"$nombre\"?\n\nEsto marcará el acuerdo como inactivo.'),
+            content: Text(
+                '¿Finalizar el acuerdo \"$nombre\"?\n\nEsto marcará el acuerdo como inactivo.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -225,25 +240,26 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         );
         accion = confirm == true ? 'SOLO_FINALIZAR' : null;
       }
-      
+
       if (accion == null) return; // Usuario canceló
-      
+
       // Finalizar acuerdo
       await AcuerdosService.finalizarAcuerdo(id);
-      
+
       // Si eligió cancelar cuotas, hacerlo
       if (accion == 'FINALIZAR_Y_CANCELAR') {
         int cancelados = 0;
-        
+
         for (final cuota in cuotasEsperadas) {
           final cuotaId = cuota['id'] as int;
-          
+
           try {
             await db.update(
               'compromiso_cuotas',
               {
                 'estado': 'CANCELADO',
-                'observacion_cancelacion': 'Cancelada por finalización de acuerdo',
+                'observacion_cancelacion':
+                    'Cancelada por finalización de acuerdo',
                 'updated_ts': DateTime.now().millisecondsSinceEpoch,
               },
               where: 'id = ?',
@@ -258,10 +274,12 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
             );
           }
         }
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Acuerdo finalizado. $cancelados cuota${cancelados > 1 ? 's' : ''} cancelada${cancelados > 1 ? 's' : ''}.')),
+            SnackBar(
+                content: Text(
+                    'Acuerdo finalizado. $cancelados cuota${cancelados > 1 ? 's' : ''} cancelada${cancelados > 1 ? 's' : ''}.')),
           );
         }
       } else {
@@ -271,7 +289,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           );
         }
       }
-      
+
       _cargarDatos();
     } catch (e, stack) {
       await AppDatabase.logLocalError(
@@ -280,7 +298,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         stackTrace: stack,
         payload: {'id': id},
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -294,10 +312,17 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/acuerdos',
       title: 'Acuerdos',
-      currentRouteName: '/acuerdos',
       actions: [
+        IconButton(
+          icon: const Icon(Icons.help_outline),
+          tooltip: 'Ayuda: Acuerdos vs Compromisos',
+          onPressed: () => AyudaTesoreriaDialog.show(context),
+        ),
         IconButton(
           icon: Icon(_vistaTabla ? Icons.view_list : Icons.table_chart),
           tooltip: _vistaTabla ? 'Vista tarjetas' : 'Vista tabla',
@@ -311,37 +336,50 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _mostrarMenuCreacion,
-        backgroundColor: Colors.purple,
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Acuerdo'),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // FASE 22.5: Filtros visibles
-                _buildFiltrosVisibles(),
-                const Divider(height: 1),
-                
-                Expanded(
-                  child: ResponsiveContainer(
-                    maxWidth: _vistaTabla ? 1400 : 1000,
-                    child: Column(
-                      children: [
-                  if (_tieneFiltrosActivos()) _buildFiltrosActivos(),
-                  Expanded(
-                    child: _acuerdos.isEmpty
-                        ? _buildEmptyState()
-                        : _vistaTabla
-                            ? _buildVistaTabla()
-                            : _buildVistaTarjetas(),
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Acuerdos',
+              subtitle: '${_acuerdos.length} registro${_acuerdos.length != 1 ? 's' : ''}',
+              action: ElevatedButton.icon(
+                onPressed: _mostrarMenuCreacion,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Nuevo Acuerdo'),
+              ),
+            ),
+          Expanded(
+            child: _isLoading
+                ? SkeletonLoader.cards(count: 3)
+                : Column(
+                    children: [
+                      _buildFiltrosVisibles(),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ResponsiveContainer(
+                          maxWidth: _vistaTabla ? 1400 : 1000,
+                          child: Column(
+                            children: [
+                              if (_tieneFiltrosActivos()) _buildFiltrosActivos(),
+                              Expanded(
+                                child: _acuerdos.isEmpty
+                                    ? _buildEmptyState()
+                                    : _vistaTabla
+                                        ? _buildVistaTabla()
+                                        : _buildVistaTarjetas(),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            ],
           ),
+        ],
+      ),
     );
   }
 
@@ -370,7 +408,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         ),
       ),
     );
-    
+
     if (opcion == 'INDIVIDUAL') {
       _crearNuevoAcuerdo();
     } else if (opcion == 'GRUPAL') {
@@ -382,10 +420,11 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     final resultado = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (ctx) => NuevoAcuerdoGrupalPage(unidadGestionId: _unidadGestionId ?? 1),
+        builder: (ctx) =>
+            NuevoAcuerdoGrupalPage(unidadGestionId: _unidadGestionId ?? 1),
       ),
     );
-    
+
     if (resultado != null) {
       _cargarDatos();
     }
@@ -414,7 +453,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                 if (_unidadGestionId != null)
                   Chip(
                     label: Text(_unidadesGestion
-                        .firstWhere((u) => u['id'] == _unidadGestionId)['nombre']
+                        .firstWhere(
+                            (u) => u['id'] == _unidadGestionId)['nombre']
                         .toString()),
                     onDeleted: () {
                       setState(() => _unidadGestionId = null);
@@ -424,7 +464,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                 if (_entidadPlantelId != null)
                   Chip(
                     label: Text(_entidadesPlantel
-                        .firstWhere((e) => e['id'] == _entidadPlantelId)['nombre']
+                        .firstWhere(
+                            (e) => e['id'] == _entidadPlantelId)['nombre']
                         .toString()),
                     onDeleted: () {
                       setState(() => _entidadPlantelId = null);
@@ -460,32 +501,14 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.description_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.outline,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _tieneFiltrosActivos()
-                ? 'No hay acuerdos con los filtros aplicados'
-                : 'No hay acuerdos registrados',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          if (!_tieneFiltrosActivos())
-            Text(
-              'Crea tu primer acuerdo para comenzar',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-            ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.description_outlined,
+      title: _tieneFiltrosActivos()
+          ? 'No hay acuerdos con los filtros aplicados'
+          : 'No hay acuerdos registrados',
+      subtitle: !_tieneFiltrosActivos()
+          ? 'Crea tu primer acuerdo para comenzar'
+          : null,
     );
   }
 
@@ -511,21 +534,23 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     decoration: const InputDecoration(
                       labelText: 'Unidad de Gestión',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('Todas')),
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('Todas')),
                       ..._unidadesGestion.map((u) => DropdownMenuItem<int?>(
-                        value: u['id'] as int,
-                        child: Text(u['nombre'] as String),
-                      )),
+                            value: u['id'] as int,
+                            child: Text(u['nombre'] as String),
+                          )),
                     ],
                     onChanged: (val) => setState(() => _unidadGestionId = val),
                   ),
                 ),
-                
+
                 // Entidad
                 SizedBox(
                   width: 200,
@@ -534,21 +559,23 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     decoration: const InputDecoration(
                       labelText: 'Entidad',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('Todas')),
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('Todas')),
                       ..._entidadesPlantel.map((e) => DropdownMenuItem<int?>(
-                        value: e['id'] as int,
-                        child: Text(e['nombre'] as String),
-                      )),
+                            value: e['id'] as int,
+                            child: Text(e['nombre'] as String),
+                          )),
                     ],
                     onChanged: (val) => setState(() => _entidadPlantelId = val),
                   ),
                 ),
-                
+
                 // Tipo
                 SizedBox(
                   width: 150,
@@ -557,19 +584,21 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     decoration: const InputDecoration(
                       labelText: 'Tipo',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
-                      DropdownMenuItem(value: 'INGRESO', child: Text('Ingreso')),
+                      DropdownMenuItem(
+                          value: 'INGRESO', child: Text('Ingreso')),
                       DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
                     ],
                     onChanged: (val) => setState(() => _tipoFiltro = val),
                   ),
                 ),
-                
+
                 // Estado (activo/finalizado)
                 SizedBox(
                   width: 150,
@@ -578,19 +607,21 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     decoration: const InputDecoration(
                       labelText: 'Estado',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
                       DropdownMenuItem(value: true, child: Text('Activos')),
-                      DropdownMenuItem(value: false, child: Text('Finalizados')),
+                      DropdownMenuItem(
+                          value: false, child: Text('Finalizados')),
                     ],
                     onChanged: (val) => setState(() => _activoFiltro = val),
                   ),
                 ),
-                
+
                 // Origen
                 SizedBox(
                   width: 150,
@@ -599,7 +630,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     decoration: const InputDecoration(
                       labelText: 'Origen',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
                       fillColor: Colors.white,
                     ),
@@ -613,9 +645,9 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Botones de acción
             Row(
               children: [
@@ -678,15 +710,15 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     final unidadNombre = acuerdo['_unidad_nombre']?.toString() ?? 'Desconocida';
     final entidadNombre = acuerdo['_entidad_nombre']?.toString();
     final stats = acuerdo['_stats'] as Map<String, dynamic>?;
-    
+
     final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
         ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
         : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
-    
+
     final cuotasConfirmadas = stats?['cuotas_confirmadas'] as int? ?? 0;
     final cuotasEsperadas = stats?['cuotas_esperadas'] as int? ?? 0;
     final cuotasTotal = cuotasConfirmadas + cuotasEsperadas;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -709,7 +741,9 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
               Row(
                 children: [
                   Icon(
-                    tipo == 'INGRESO' ? Icons.arrow_downward : Icons.arrow_upward,
+                    tipo == 'INGRESO'
+                        ? Icons.arrow_downward
+                        : Icons.arrow_upward,
                     color: tipo == 'INGRESO' ? Colors.green : Colors.red,
                   ),
                   const SizedBox(width: 8),
@@ -725,8 +759,11 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: Chip(
-                        avatar: const Icon(Icons.group, size: 16, color: Colors.white),
-                        label: const Text('Grupal', style: TextStyle(fontSize: 11, color: Colors.white)),
+                        avatar: const Icon(Icons.group,
+                            size: 16, color: Colors.white),
+                        label: const Text('Grupal',
+                            style:
+                                TextStyle(fontSize: 11, color: Colors.white)),
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         visualDensity: VisualDensity.compact,
                         backgroundColor: Colors.blue,
@@ -734,7 +771,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                     ),
                   if (!activo)
                     Chip(
-                      label: const Text('Finalizado', style: TextStyle(fontSize: 11)),
+                      label: const Text('Finalizado',
+                          style: TextStyle(fontSize: 11)),
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       visualDensity: VisualDensity.compact,
                       backgroundColor: Colors.grey.shade300,
@@ -742,11 +780,12 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                 ],
               ),
               const SizedBox(height: 8),
-              
+
               // Unidad de gestión y entidad
               Row(
                 children: [
-                  Icon(Icons.business, size: 16, color: Theme.of(context).colorScheme.outline),
+                  Icon(Icons.business,
+                      size: 16, color: Theme.of(context).colorScheme.outline),
                   const SizedBox(width: 4),
                   Text(
                     unidadNombre,
@@ -754,7 +793,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                   ),
                   if (entidadNombre != null) ...[
                     const SizedBox(width: 16),
-                    Icon(Icons.person, size: 16, color: Theme.of(context).colorScheme.outline),
+                    Icon(Icons.person,
+                        size: 16, color: Theme.of(context).colorScheme.outline),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -767,7 +807,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               // Monto y modalidad
               Row(
                 children: [
@@ -789,7 +829,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                   ),
                 ],
               ),
-              
+
               // Progreso de cuotas
               if (cuotasTotal > 0) ...[
                 const SizedBox(height: 12),
@@ -806,7 +846,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
-              
+
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -871,18 +911,18 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
                 );
                 return DataRow(cells: [
                   DataCell(const Text('Error')),
-                DataCell(Container()),
-                DataCell(Container()),
-                DataCell(Container()),
-                DataCell(Container()),
-                DataCell(Container()),
-                DataCell(Container()),
-                DataCell(Container()),
-              ]);
-            }
-          }).toList(),
+                  DataCell(Container()),
+                  DataCell(Container()),
+                  DataCell(Container()),
+                  DataCell(Container()),
+                  DataCell(Container()),
+                  DataCell(Container()),
+                  DataCell(Container()),
+                ]);
+              }
+            }).toList(),
+          ),
         ),
-      ),
       ),
     );
   }
@@ -895,15 +935,15 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     final activo = (acuerdo['activo'] as int?) == 1;
     final entidadNombre = acuerdo['_entidad_nombre']?.toString() ?? '-';
     final stats = acuerdo['_stats'] as Map<String, dynamic>?;
-    
+
     final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
         ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
         : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
-    
+
     final cuotasConfirmadas = stats?['cuotas_confirmadas'] as int? ?? 0;
     final cuotasEsperadas = stats?['cuotas_esperadas'] as int? ?? 0;
     final cuotasTotal = cuotasConfirmadas + cuotasEsperadas;
-    
+
     return DataRow(
       cells: [
         DataCell(
@@ -925,10 +965,12 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         DataCell(Text('$cuotasConfirmadas / $cuotasTotal')),
         DataCell(
           Chip(
-            label: Text(activo ? 'Activo' : 'Finalizado', style: const TextStyle(fontSize: 11)),
+            label: Text(activo ? 'Activo' : 'Finalizado',
+                style: const TextStyle(fontSize: 11)),
             padding: const EdgeInsets.symmetric(horizontal: 8),
             visualDensity: VisualDensity.compact,
-            backgroundColor: activo ? Colors.green.shade100 : Colors.grey.shade300,
+            backgroundColor:
+                activo ? Colors.green.shade100 : Colors.grey.shade300,
           ),
         ),
         DataCell(
@@ -970,7 +1012,7 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         builder: (ctx) => const CrearAcuerdoPage(),
       ),
     );
-    
+
     if (resultado == true) {
       _cargarDatos();
     }

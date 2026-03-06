@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../app_version.dart';
 import '../state/app_mode.dart';
-import '../widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../widgets/responsive_container.dart';
 import '../../home/home_page.dart';
 import '../../home/main_menu_page.dart';
@@ -251,10 +251,9 @@ class HelpPage extends StatelessWidget {
       );
     }
 
-    return TesoreriaScaffold(
+    return ErpLayout(
+      currentRoute: '/help',
       title: 'Ayuda',
-      currentRouteName: '/help',
-      appBarColor: Colors.blue,
       body: body,
     );
   }

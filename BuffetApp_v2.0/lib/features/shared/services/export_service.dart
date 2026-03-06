@@ -10,6 +10,7 @@ import 'package:open_filex/open_filex.dart';
 import 'dart:typed_data';
 import 'package:sqflite/sqflite.dart';
 import '../../../data/dao/db.dart';
+import '../../../domain/safe_map.dart';
 import '../../buffet/services/caja_service.dart';
 import '../../../app_version.dart';
 import 'package:excel/excel.dart';

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/widgets/responsive_container.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../../domain/models.dart';
 import '../services/saldo_inicial_service.dart';
 import '../../shared/format.dart';
@@ -248,7 +249,7 @@ class _ConfigurarSaldoInicialPageState
         title: Text(_modoEdicion ? 'Editar Saldo Inicial' : 'Configurar Saldo Inicial'),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? SkeletonLoader.list(count: 5)
           : ResponsiveContainer(
               maxWidth: 800,
               child: SingleChildScrollView(

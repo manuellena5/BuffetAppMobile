@@ -3,12 +3,15 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/format.dart';
 import '../services/reporte_resumen_service.dart';
+import '../services/reporte_pdf_service.dart';
 import '../../../data/dao/db.dart';
 
 /// Pantalla de Reporte Resumen Mensual (mes a mes del año)
@@ -20,7 +23,7 @@ class ReporteResumenMensualPage extends StatefulWidget {
 }
 
 class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
-  final int _yearActual = DateTime.now().year;
+  int _yearActual = DateTime.now().year;
   String? _unidadGestionNombre;
   
   List<Map<String, dynamic>> _datos = [];
@@ -73,7 +76,7 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar datos: $e')),
+          const SnackBar(content: Text('Error al cargar datos. Intente nuevamente.')),
         );
       }
     }
@@ -204,7 +207,7 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
       if (mounted) {
         setState(() => _exportando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al exportar: $e')),
+          const SnackBar(content: Text('Error al exportar. Intente nuevamente.')),
         );
       }
     }
@@ -217,6 +220,34 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
       currentRouteName: '/reportes/resumen_mensual',
       appBarColor: Colors.green,
       actions: [
+        IconButton(
+          icon: const Icon(Icons.picture_as_pdf),
+          onPressed: _datos.isEmpty
+              ? null
+              : () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await ReportePdfService.instance.shareResumenMensual(
+                      datos: _datos,
+                      year: _yearActual,
+                      unidadGestion: _unidadGestionNombre,
+                    );
+                  } catch (e, st) {
+                    await AppDatabase.logLocalError(
+                      scope: 'reporte_mensual.export_pdf',
+                      error: e,
+                      stackTrace: st,
+                    );
+                    if (mounted) {
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Error al generar PDF. Intente nuevamente.')),
+                      );
+                    }
+                  }
+                },
+          tooltip: 'Exportar a PDF',
+        ),
+        const SizedBox(width: 4),
         IconButton(
           icon: _exportando
               ? const SizedBox(
@@ -236,6 +267,58 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
         maxWidth: 1200,
         child: Column(
           children: [
+          // Selector de Año
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () {
+                    setState(() => _yearActual--);
+                    _cargarDatos();
+                  },
+                  tooltip: 'Año anterior',
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'Año $_yearActual',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _yearActual == DateTime.now().year
+                      ? null
+                      : () {
+                          setState(() => _yearActual++);
+                          _cargarDatos();
+                        },
+                  tooltip: 'Año siguiente',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.today),
+                  onPressed: () {
+                    setState(() => _yearActual = DateTime.now().year);
+                    _cargarDatos();
+                  },
+                  tooltip: 'Año actual',
+                ),
+              ],
+            ),
+          ),
           // Unidad de Gestión
           if (_unidadGestionNombre != null)
             Container(
@@ -264,20 +347,11 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
           // Tabla
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? SkeletonLoader.table(rows: 5, columns: 4)
                 : _datos.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.inbox, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text(
-                              'No hay datos disponibles',
-                              style: TextStyle(color: Colors.grey, fontSize: 16),
-                            ),
-                          ],
-                        ),
+                    ? const EmptyState(
+                        icon: Icons.inbox,
+                        title: 'No hay datos disponibles',
                       )
                     : SingleChildScrollView(
                         padding: const EdgeInsets.all(16),

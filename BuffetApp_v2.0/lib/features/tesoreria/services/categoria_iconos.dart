@@ -85,6 +85,14 @@ class CategoriaIconos {
     {'code': 'casino', 'label': 'Juegos'},
     {'code': 'home', 'label': 'Hogar/Local'},
     
+    // Tendencias y métricas financieras
+    {'code': 'trending_up', 'label': 'Tendencia alza'},
+    {'code': 'trending_down', 'label': 'Tendencia baja'},
+    {'code': 'trending_flat', 'label': 'Tendencia estable'},
+    {'code': 'show_chart', 'label': 'Gráfico'},
+    {'code': 'bar_chart', 'label': 'Barras'},
+    {'code': 'percent', 'label': 'Porcentaje'},
+    
     // General
     {'code': 'category', 'label': 'Categoría'},
     {'code': 'label', 'label': 'Etiqueta'},

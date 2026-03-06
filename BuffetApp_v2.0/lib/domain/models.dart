@@ -282,10 +282,11 @@ class CuentaFondos {
     return saldoInicial + ingresos - egresos;
   }
 
-  /// Calcula el monto de comisión bancaria para un movimiento
-  double? calcularComision(double monto) {
+  /// Calcula el monto de comisión bancaria para un movimiento.
+  /// Retorna 0.0 si la cuenta no tiene comisión configurada.
+  double calcularComision(double monto) {
     if (!tieneComision || comisionPorcentaje == null || comisionPorcentaje! <= 0) {
-      return null;
+      return 0.0;
     }
     return monto * (comisionPorcentaje! / 100);
   }

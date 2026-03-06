@@ -76,6 +76,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });
@@ -90,6 +91,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 1000,
         'updated_ts': now + 1000,
       });
@@ -104,6 +106,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 2000,
         'updated_ts': now + 2000,
       });
@@ -141,6 +144,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });
@@ -155,6 +159,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 1000,
         'updated_ts': now + 1000,
       });
@@ -192,6 +197,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });
@@ -207,6 +213,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 1000,
         'updated_ts': now + 1000,
       });
@@ -222,6 +229,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 2000,
         'updated_ts': now + 2000,
       });
@@ -237,6 +245,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now + 3000,
         'updated_ts': now + 3000,
       });
@@ -417,6 +426,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });
@@ -454,6 +464,7 @@ void main() {
         'es_transferencia': 0,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
+        'fecha': '2025-01-01',
         'created_ts': now,
         'updated_ts': now,
       });

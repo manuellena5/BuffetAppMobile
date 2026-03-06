@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../../../data/dao/db.dart';
+import '../../../domain/safe_map.dart';
 
 /// FASE 18.3: Servicio para gestión de Acuerdos (reglas/contratos que generan compromisos)
 /// 
@@ -337,7 +338,7 @@ class AcuerdosService {
         WHERE c.acuerdo_id = ? AND cc.estado = 'CONFIRMADO'
       ''', [id]);
       
-      final countConfirmados = (compromisosConfirmados.first['count'] as int?) ?? 0;
+      final countConfirmados = compromisosConfirmados.first.safeInt('count');
       
       // Detectar si hay cambios que requieren versionado
       final cambiosVersionables = modalidad != null ||
@@ -376,7 +377,7 @@ class AcuerdosService {
       if (nombre != null) updates['nombre'] = nombre;
       if (fechaFin != null) {
         // Validar fecha_fin >= fecha_inicio
-        final fechaInicio = DateTime.parse(acuerdo['fecha_inicio'] as String);
+        final fechaInicio = DateTime.parse(acuerdo.safeString('fecha_inicio'));
         final fechaFinDate = DateTime.parse(fechaFin);
         if (fechaFinDate.isBefore(fechaInicio)) {
           throw ArgumentError('fecha_fin debe ser >= fecha_inicio');
@@ -435,7 +436,7 @@ class AcuerdosService {
         '${ayer.month.toString().padLeft(2, '0')}-'
         '${ayer.day.toString().padLeft(2, '0')}';
     
-    final versionActual = (acuerdoActual['version_actual'] as int?) ?? 1;
+    final versionActual = acuerdoActual.safeInt('version_actual', 1);
     final nuevaVersion = versionActual + 1;
     
     // 1) Cerrar versión anterior (fecha_vigencia_hasta = ayer)
@@ -696,10 +697,10 @@ class AcuerdosService {
         throw ArgumentError('Acuerdo $acuerdoId no existe');
       }
       
-      final modalidad = acuerdo['modalidad'] as String;
-      final fechaInicio = DateTime.parse(acuerdo['fecha_inicio'] as String);
-      final fechaFin = acuerdo['fecha_fin'] != null 
-          ? DateTime.parse(acuerdo['fecha_fin'] as String) 
+      final modalidad = acuerdo.safeString('modalidad');
+      final fechaInicio = DateTime.parse(acuerdo.safeString('fecha_inicio'));
+      final fechaFin = acuerdo.safeStringOrNull('fecha_fin') != null
+          ? DateTime.parse(acuerdo.safeString('fecha_fin'))
           : null;
       
       final db = await AppDatabase.instance();
@@ -713,7 +714,7 @@ class AcuerdosService {
         throw StateError('Frecuencia ${acuerdo['frecuencia']} no encontrada');
       }
       
-      final frecuenciaDias = frecuenciaData.first['dias'] as int?;
+      final frecuenciaDias = frecuenciaData.first.safeIntOrNull('dias');
       if (frecuenciaDias == null) {
         throw StateError('Frecuencia ${acuerdo['frecuencia']} no tiene días definidos');
       }
@@ -721,8 +722,8 @@ class AcuerdosService {
       final compromisos = <Map<String, dynamic>>[];
       
       if (modalidad == 'MONTO_TOTAL_CUOTAS') {
-        final montoTotal = (acuerdo['monto_total'] as num).toDouble();
-        final cuotas = acuerdo['cuotas'] as int;
+        final montoTotal = acuerdo.safeDouble('monto_total');
+        final cuotas = acuerdo.safeInt('cuotas', 1);
         final montoCuota = montoTotal / cuotas;
         
         for (int i = 0; i < cuotas; i++) {
@@ -741,7 +742,7 @@ class AcuerdosService {
           });
         }
       } else if (modalidad == 'RECURRENTE') {
-        final montoPeriodico = (acuerdo['monto_periodico'] as num).toDouble();
+        final montoPeriodico = acuerdo.safeDouble('monto_periodico');
         
         var fechaActual = fechaInicio;
         var cuotaNum = 1;
@@ -891,12 +892,12 @@ class AcuerdosService {
       final stats = cuotasStats.first;
       
       return {
-        'compromisos_generados': (compromisosGenerados.first['count'] as int?) ?? 0,
-        'cuotas_esperadas': (stats['esperadas'] as int?) ?? 0,
-        'cuotas_confirmadas': (stats['confirmadas'] as int?) ?? 0,
-        'cuotas_canceladas': (stats['canceladas'] as int?) ?? 0,
-        'monto_total_esperado': (stats['monto_esperado'] as num?)?.toDouble() ?? 0.0,
-        'monto_total_confirmado': (stats['monto_confirmado'] as num?)?.toDouble() ?? 0.0,
+        'compromisos_generados': compromisosGenerados.first.safeInt('count'),
+        'cuotas_esperadas': stats.safeInt('esperadas'),
+        'cuotas_confirmadas': stats.safeInt('confirmadas'),
+        'cuotas_canceladas': stats.safeInt('canceladas'),
+        'monto_total_esperado': stats.safeDouble('monto_esperado'),
+        'monto_total_confirmado': stats.safeDouble('monto_confirmado'),
       };
     } catch (e, stack) {
       await AppDatabase.logLocalError(

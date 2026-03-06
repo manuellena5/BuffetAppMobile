@@ -622,7 +622,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
                     children: [
                       const Text('Monto transferido:'),
                       Text(
-                        '\$ ${widget.montoTransferido.toStringAsFixed(2)}',
+                        Format.money(widget.montoTransferido),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -644,7 +644,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
                     children: [
                       const Text('Comisión calculada:'),
                       Text(
-                        '\$ ${widget.comision.toStringAsFixed(2)}',
+                        Format.money(widget.comision),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.orange,

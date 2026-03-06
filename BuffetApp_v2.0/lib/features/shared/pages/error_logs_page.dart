@@ -7,7 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../data/dao/db.dart';
-import '../widgets/tesoreria_scaffold.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../layout/erp_layout.dart';
+import '../../../widgets/app_header.dart';
 
 class ErrorLogsPage extends StatefulWidget {
   const ErrorLogsPage({super.key});
@@ -70,15 +72,24 @@ class _ErrorLogsPageState extends State<ErrorLogsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+
+    return ErpLayout(
+      currentRoute: '/logs',
       title: 'Logs de errores',
-      currentRouteName: '/error_logs',
-      appBarColor: Colors.red,
       actions: [
         IconButton(onPressed: _share, icon: const Icon(Icons.share)),
         IconButton(onPressed: _clearAll, icon: const Icon(Icons.delete_forever)),
       ],
-      body: _loading
+      body: Column(
+        children: [
+          if (isDesktop)
+            AppHeader(
+              title: 'Logs de errores',
+              subtitle: '${_rows.length} registros',
+            ),
+          Expanded(
+            child: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
@@ -110,6 +121,9 @@ class _ErrorLogsPageState extends State<ErrorLogsPage> {
                       },
                     ),
             ),
+          ),
+        ],
+      ),
     );
   }
 

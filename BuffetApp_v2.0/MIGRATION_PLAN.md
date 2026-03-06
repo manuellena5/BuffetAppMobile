@@ -3428,3 +3428,303 @@ Una vez que **todos los dispositivos** hayan ejecutado al menos una vez la app c
 ### Criterio para revertir
 - Cuando se confirme que **ningún dispositivo** tiene una DB sin `medio_pago_id` (se puede verificar remotamente vía logs de error: si nunca más aparece `no such column: cm.medio_pago_id`, es seguro limpiar).
 - Estimación: 2-4 semanas después de que todos los dispositivos actualicen a v1.3.2+.
+
+---
+
+# 🔬 AUDITORÍA COMPLETA DEL MÓDULO DE TESORERÍA — Marzo 2026
+
+## 📊 Estado General del Módulo
+
+### Inventario del Módulo
+| Componente | Cantidad | Líneas estimadas |
+|---|---|---|
+| **Páginas** (features/tesoreria/pages/) | 34 | ~12,000 |
+| **Servicios** (features/tesoreria/services/) | 10 | ~2,300 |
+| **Servicios compartidos** (shared/services/) | 4 relevantes | ~2,500 |
+| **Tests** | 21 archivos | ~4,800 |
+| **Tablas SQLite** | 27 | — |
+| **Versión DB** | 20 | — |
+
+### Funcionalidades Completadas
+| Funcionalidad | Estado | Calidad |
+|---|---|---|
+| Movimientos CRUD | ✅ Completo | ⭐⭐⭐⭐ |
+| Compromisos CRUD + proyección | ✅ Completo | ⭐⭐⭐⭐ |
+| Acuerdos individuales | ✅ Completo | ⭐⭐⭐ |
+| Acuerdos grupales | ✅ Parcial (DB + servicio, UI incompleta) | ⭐⭐⭐ |
+| Plantel (vista económica) | ✅ Completo | ⭐⭐⭐⭐ |
+| Cuentas de fondos | ✅ Completo | ⭐⭐⭐⭐ |
+| Transferencias entre cuentas | ✅ Completo | ⭐⭐⭐ |
+| Categorías de movimiento | ✅ Completo | ⭐⭐⭐⭐ |
+| Import/Export Excel (plantel) | ✅ Completo | ⭐⭐⭐⭐ |
+| Saldos iniciales | ✅ Completo | ⭐⭐⭐ |
+| Reportes mensuales/anuales | ✅ Parcial | ⭐⭐ |
+| Reporte por categorías | ✅ Parcial (bug filtro) | ⭐⭐ |
+| Reporte plantel mensual | ⏳ Solo estructura | ⭐ |
+| Sync Supabase (movimientos) | ✅ Parcial | ⭐⭐ |
+| Sync Supabase (compromisos/acuerdos) | ❌ No implementado | — |
+| Breadcrumbs y navegación | ✅ Completo | ⭐⭐⭐⭐ |
+| Drawer fijo/colapsable | ✅ Parcial (solo home) | ⭐⭐⭐ |
+| Paginación | ✅ Infra completa, UI parcial | ⭐⭐⭐ |
+
+---
+
+## 🐛 BUGS CONFIRMADOS (Prioridad Alta)
+
+### BUG-01: `evento_movimiento` — Columna `unidad_gestion_id` faltante en CREATE TABLE
+- **Severidad:** CRÍTICA
+- **Ubicación:** [db.dart](lib/data/dao/db.dart) línea ~1031 (CREATE TABLE evento_movimiento)
+- **Problema:** La tabla `evento_movimiento` en `_createTesoreriaTables()` (usada en `onCreate`) NO incluye `unidad_gestion_id`. Esa columna solo se agrega vía migración en `onUpgrade`. Una instalación nueva (sin migraciones previas) NO tendrá la columna.
+- **Impacto:** Los servicios `ReporteCategoriasService`, `ReporteResumenService`, y filtros por unidad en `EventoMovimientoService` fallarán en instalaciones frescas.
+- **Fix:** Agregar `unidad_gestion_id INTEGER` al CREATE TABLE de `evento_movimiento`.
+
+### BUG-02: `reporte_categorias_page.dart` — No filtra por unidad de gestión activa
+- **Severidad:** ALTA
+- **Ubicación:** [reporte_categorias_page.dart](lib/features/tesoreria/pages/reporte_categorias_page.dart)
+- **Problema:** No pasa `unidadGestionId` al servicio de reportes. Muestra datos de TODAS las unidades mezclados.
+- **Impacto:** Funcional: datos incorrectos en reporte. Conceptual: viola la separación por unidad de gestión.
+
+### BUG-03: `transferencia_service.dart` — `verificarIntegridad` falla con comisiones
+- **Severidad:** ALTA
+- **Ubicación:** [transferencia_service.dart](lib/features/tesoreria/services/transferencia_service.dart)
+- **Problema:** Espera exactamente 2 movimientos por transferencia, pero `crear()` puede generar 3-4 (con comisiones en origen/destino). Siempre retorna `false` para transferencias con comisión.
+
+### BUG-04: `MovimientoService.eliminar` — DELETE físico
+- **Severidad:** ALTA
+- **Ubicación:** [movimiento_service.dart](lib/features/tesoreria/services/movimiento_service.dart)
+- **Problema:** Usa `db.delete()` (delete físico) en vez de soft delete (`eliminado=1`). Viola la política no negociable de la app.
+
+---
+
+## ⚠️ PROBLEMAS DE CALIDAD (Prioridad Media)
+
+### PERF-01: N+1 Queries masivos
+| Ubicación | Método | Impacto |
+|---|---|---|
+| `plantel_service.dart` | `calcularResumenGeneral()` | ~3 queries × N entidades |
+| `compromisos_service.dart` | `listarVencimientosEnRango()` | ~3 queries × N compromisos |
+| `reporte_resumen_service.dart` | `obtenerResumenMensual()` | 12 queries (1 por mes) |
+| `acuerdos_grupales_service.dart` | `validarJugadores()` | ~2 queries × N jugadores |
+| `cuenta_service.dart` | `obtenerSaldosPorUnidad()` | 1 query × N cuentas |
+| `movimientos_proyectados_service.dart` | `calcularMovimientosCanceladosMes()` | N queries |
+
+### ERR-01: Error handling inconsistente
+| Servicio | % métodos con try-catch | Estado |
+|---|---|---|
+| `cuenta_service.dart` | 100% | ✅ Excelente |
+| `transferencia_service.dart` | 100% | ✅ Excelente |
+| `categoria_movimiento_service.dart` | 100% | ✅ Excelente |
+| `acuerdos_grupales_service.dart` | ~80% | ⚠️ Bueno |
+| `movimiento_service.dart` | ~80% | ⚠️ Bueno |
+| `compromisos_service.dart` | ~50% | ❌ Malo |
+| `plantel_service.dart` | ~30% | ❌ Malo |
+| `movimientos_proyectados_service.dart` | 0% | ❌ Crítico |
+| `saldo_inicial_service.dart` | 0% | ❌ Crítico |
+| `reporte_resumen_service.dart` | ~50% | ⚠️ Regular |
+
+### UI-01: Mensajes de error técnicos al usuario
+- `reporte_resumen_mensual_page.dart`: Muestra `$e` directo
+- `reporte_resumen_anual_page.dart`: Muestra `$e` directo
+- `reporte_categorias_page.dart`: Muestra `$e` directo
+
+### SYNC-01: Sincronización muy incompleta
+- **Solo sincroniza:** `evento_movimiento` y `unidades_gestion`
+- **No sincroniza:** compromisos, acuerdos, cuentas de fondos, entidades_plantel, cuotas, categorías, saldos_iniciales, transferencias
+- **Usa upsert** para `unidades_gestion` (contradice regla NO upsert)
+
+### REPORT-01: Reportes con limitaciones importantes
+- `reporte_resumen_service.dart`: Saldo inicial anual hardcodeado a `0.0` (TODO pendiente)
+- `reporte_resumen_mensual_page.dart`: No permite cambiar de año
+- `reporte_categorias_page.dart`: Genera CSV pero método se llama `_exportarExcel` (confuso)
+- `reporte_plantel_mensual_page.dart`: Solo estructura, no implementado
+
+### HOME-01: `tesoreria_home_page.dart`
+- Variable `_loading` se setea pero nunca se evalúa en `build()`
+- Método `_loadVersion()` existe pero nunca se invoca desde `initState()`
+
+---
+
+## 🔍 COMPARATIVA CON SISTEMAS SIMILARES
+
+### Sistemas de referencia para tesorería de clubes deportivos
+| Funcionalidad | BuffetApp | Tesorero (AR) | ClubManager | Deportes Pro | ESTADO |
+|---|---|---|---|---|---|
+| Movimientos CRUD | ✅ | ✅ | ✅ | ✅ | Al día |
+| Compromisos/cuotas | ✅ | ✅ | ✅ | ✅ | Al día |
+| Acuerdos/contratos | ✅ | ❌ | ✅ | ❌ | **Ventaja** |
+| Multi-cuenta (bancos) | ✅ | ✅ | ✅ | ✅ | Al día |
+| Transferencias | ✅ | ✅ | ✅ | ❌ | Al día |
+| Comisiones bancarias | ✅ | ✅ | ❌ | ❌ | **Ventaja** |
+| Plantel económico | ✅ | ❌ | ✅ | ✅ | Al día |
+| Presupuesto anual | ❌ | ✅ | ✅ | ❌ | **Brecha** |
+| Flujo de caja proyectado | ❌ | ✅ | ✅ | ❌ | **Brecha** |
+| Conciliación bancaria | ❌ | ✅ | ❌ | ❌ | **Brecha menor** |
+| Reportes imprimibles PDF | ❌ | ✅ | ✅ | ✅ | **Brecha** |
+| Dashboard visual | ❌ | ❌ | ✅ | ✅ | **Brecha** |
+| Notificaciones vencimiento | ❌ | ✅ | ✅ | ✅ | **Brecha** |
+| Multi-dispositivo sync | ✅ (parcial) | ✅ | ✅ | ❌ | Parcial |
+| Offline-first | ✅ | ❌ | ❌ | ❌ | **Gran ventaja** |
+| Import/Export masivo | ✅ | ✅ | ✅ | ❌ | Al día |
+| Auditoría/historial | ✅ (parcial) | ✅ | ✅ | ❌ | Parcial |
+| Edición de movimientos | ❌ (pendiente F21) | ✅ | ✅ | ✅ | **Brecha** |
+| Adjuntos (comprobantes) | ✅ | ❌ | ✅ | ❌ | **Ventaja** |
+| Categorías custom | ✅ | ✅ | ❌ | ❌ | **Ventaja** |
+
+### Brechas principales vs. competencia
+1. **No hay Presupuesto Anual:** Casi todos los sistemas de tesorería permiten definir un presupuesto por categoría y comparar ejecución vs presupuesto.
+2. **No hay Flujo de Caja Proyectado:** Clave para un tesorero — poder ver "cuánto voy a tener en 3 meses".
+3. **No hay Reportes PDF exportables:** Los reportes existen pero solo como pantallas. No hay generación de PDF con formato profesional para rendición de cuentas.
+4. **No hay Dashboard visual:** Gráficos (torta de egresos, barras de evolución mensual, línea de saldo) son estándar en apps de gestión.
+5. **No hay Notificaciones de vencimiento:** Un compromiso con cuota vencida no genera ningún alerta visual persistente.
+6. **Edición de movimientos no implementada:** La Fase 21.8 está pendiente. Es funcionalidad básica.
+
+### Ventajas competitivas de BuffetApp
+1. **Offline-first real:** Ningún competidor directo funciona tan bien sin internet.
+2. **Acuerdos con generación automática de compromisos:** Funcionalidad avanzada que pocos tienen.
+3. **Comisiones bancarias semiautomáticas:** Buen diseño de UX para esto.
+4. **Categorías totalmente customizables con iconos:** Buena diferenciación.
+5. **Adjuntos (fotos de comprobantes):** Útil en cancha.
+
+---
+
+## 🗺️ FASES PROPUESTAS (Actualización Marzo 2026)
+
+### FASE A — HOTFIX BUGS CRÍTICOS (1-2 días) 🚨
+**Prioridad:** BLOQUEANTE — hacer ANTES de cualquier feature nuevo
+
+| # | Tarea | Archivo | Esfuerzo |
+|---|---|---|---|
+| A.1 | Agregar `unidad_gestion_id INTEGER` al CREATE TABLE de `evento_movimiento` | db.dart | 15 min |
+| A.2 | Pasar `unidadGestionId` en `reporte_categorias_page.dart` | reporte_categorias_page | 30 min |
+| A.3 | Corregir `verificarIntegridad` para soportar 2-4 movimientos por transferencia | transferencia_service | 1 hr |
+| A.4 | Cambiar `MovimientoService.eliminar` a soft delete (`eliminado=1`) | movimiento_service | 30 min |
+| A.5 | Tests de regresión para los 4 fixes | tests | 2 hr |
+
+### FASE B — SOLIDEZ DEL CÓDIGO (3-5 días) ⚠️
+**Objetivo:** Error handling uniforme + Performance
+
+| # | Tarea | Archivos | Esfuerzo |
+|---|---|---|---|
+| B.1 | Agregar try-catch + logging a `movimientos_proyectados_service.dart` (0% → 100%) | 1 servicio | 2 hr |
+| B.2 | Agregar try-catch + logging a `saldo_inicial_service.dart` (0% → 100%) | 1 servicio | 1 hr |
+| B.3 | Agregar try-catch + logging a ~50% faltante de `compromisos_service.dart` | 1 servicio | 2 hr |
+| B.4 | Agregar try-catch + logging a ~70% faltante de `plantel_service.dart` | 1 servicio | 2 hr |
+| B.5 | Reemplazar `$e` por mensajes amigables en 3 páginas de reportes | 3 páginas | 1 hr |
+| B.6 | Resolver N+1 en `calcularResumenGeneral` (PlantelService) — usar JOIN batch | 1 servicio | 3 hr |
+| B.7 | Resolver N+1 en `obtenerResumenMensual` (ReporteResumenService) — un solo GROUP BY | 1 servicio | 2 hr |
+| B.8 | Integrar `SaldoInicialService` con `ReporteResumenService` (eliminar TODO) | 2 servicios | 2 hr |
+| B.9 | Fix `_loading` y `_loadVersion` en `tesoreria_home_page.dart` | 1 página | 30 min |
+| B.10 | Tests del servicio `PlantelService` (pendiente desde Fase 17) | 1 test file (~400 líneas) | 4 hr |
+
+### FASE C — COMPLETAR FASE 21 PENDIENTE (5-7 días) 🔧
+**Objetivo:** Cerrar todas las mejoras post-Fase 20
+
+| # | Tarea | Estado actual | Esfuerzo |
+|---|---|---|---|
+| C.1 | 21.2: Correcciones en categorías de movimientos | 0/5 | 3 hr |
+| C.2 | 21.3: Adjuntos PDF en movimientos | 0/4 | 2 hr |
+| C.3 | 21.4: Responsive en páginas de cuentas | 0/5 | 3 hr |
+| C.4 | 21.5: Carrusel de meses en detalle de cuenta | 0/6 | 4 hr |
+| C.5 | 21.6: Comisión en transferencias (3 movimientos) | 0/5 | 3 hr |
+| C.6 | 21.7: Modal editable para comisión | 0/7 | 3 hr |
+| C.7 | 21.8: Editar movimiento desde detalle | 0/6 | 5 hr |
+| C.8 | 21.9: Mejoras acuerdos grupales paso 4 | 0/5 | 4 hr |
+| C.9 | 21.10: Preview acuerdos grupales paso 5 | 0/4 | 3 hr |
+
+### FASE D — REPORTES PROFESIONALES (5-7 días) 📊
+**Objetivo:** Llevar reportes al nivel de un sistema de tesorería serio
+
+| # | Tarea | Esfuerzo |
+|---|---|---|
+| D.1 | Selector de año en `reporte_resumen_mensual_page.dart` | 1 hr |
+| D.2 | Completar `reporte_plantel_mensual_page.dart` + `detalle_movimientos_entidad_page.dart` (Fase 35) | 8 hr |
+| D.3 | Generación de PDF para reporte mensual (usando paquete `printing`/`pdf`) | 6 hr |
+| D.4 | Generación de PDF para reporte por categorías | 4 hr |
+| D.5 | Generación de PDF para reporte de plantel mensual | 4 hr |
+| D.6 | **NUEVO: Dashboard visual** — gráficos de torta (egresos por categoría) y barras (evolución mensual) usando `fl_chart` o equivalente | 8 hr |
+| D.7 | **NUEVO: Indicadores de vencimiento** — badge/alerta en home para compromisos vencidos no pagados | 3 hr |
+
+### FASE E — PRESUPUESTO Y PROYECCIÓN (7-10 días) 💰
+**Objetivo:** Funcionalidades que todo sistema de tesorería debería tener
+
+| # | Tarea | Esfuerzo |
+|---|---|---|
+| E.1 | Nueva tabla `presupuesto_anual` (por categoría, tipo, unidad, año) | 2 hr |
+| E.2 | Pantalla `presupuesto_page.dart` — CRUD de partidas presupuestarias | 6 hr |
+| E.3 | Comparativa presupuesto vs ejecución real (integrar en reporte mensual) | 4 hr |
+| E.4 | **NUEVO: Flujo de caja proyectado** — combinación de compromisos esperados + saldos de cuentas proyectados a 1/3/6 meses | 8 hr |
+| E.5 | Pantalla `proyeccion_flujo_page.dart` con tabla y gráfico lineal | 6 hr |
+
+### FASE F — SINCRONIZACIÓN COMPLETA (10-15 días) 🔄
+**Objetivo:** Todas las entidades de tesorería sincronizadas a Supabase
+
+| # | Tarea | Esfuerzo |
+|---|---|---|
+| F.1 | Esquema Supabase para `compromisos`, `compromiso_cuotas`, `frecuencias` | 3 hr |
+| F.2 | Esquema Supabase para `acuerdos`, `acuerdos_grupales_historico` | 3 hr |
+| F.3 | Esquema Supabase para `cuentas_fondos`, `saldos_iniciales` | 2 hr |
+| F.4 | Esquema Supabase para `entidades_plantel`, `categoria_movimiento` | 2 hr |
+| F.5 | Servicio `CompromisosSyncService` (insert-only, con adjuntos) | 6 hr |
+| F.6 | Servicio `AcuerdosSyncService` (insert-only, con adjuntos) | 6 hr |
+| F.7 | Servicio `CuentasSyncService` (insert-only) | 4 hr |
+| F.8 | Servicio `PlantelSyncService` (insert-only) | 4 hr |
+| F.9 | Eliminar upsert en `syncUnidadGestion` — cambiar a insert-only | 1 hr |
+| F.10 | Pantalla unificada "Pendientes de sincronizar" con todas las entidades | 6 hr |
+| F.11 | Tests end-to-end de sincronización | 8 hr |
+| F.12 | Retry con backoff exponencial en `TesoreriaSyncService` | 3 hr |
+
+### FASE G — DRAWER COMPLETO + UX FINAL (3-5 días) 🎨
+**Objetivo:** Menú lateral funcional en todas las pantallas, no solo en home
+
+| # | Tarea | Esfuerzo |
+|---|---|---|
+| G.1 | Integrar drawer fijo en `MovimientosListPage` | 2 hr |
+| G.2 | Integrar drawer fijo en `CompromisosPage` | 2 hr |
+| G.3 | Integrar drawer fijo en `PlantelPage` | 2 hr |
+| G.4 | Integrar drawer fijo en `AcuerdosPage` | 2 hr |
+| G.5 | Integrar drawer fijo en `CuentasPage` | 2 hr |
+| G.6 | Integrar drawer fijo en `ReportesIndexPage` | 2 hr |
+| G.7 | Testing de navegación completa entre pantallas con drawer | 2 hr |
+
+### FASE H — CÓDIGO LIMPIO (3-5 días) ♻️
+
+| # | Tarea | Esfuerzo |
+|---|---|---|
+| H.1 | Crear extension `SafeMap` para casteos seguros de DB | 2 hr |
+| H.2 | Refactorizar servicios para usar `SafeMap` | 4 hr |
+| H.3 | Extender clase `Format` con `fecha()`, `fechaHora()`, `mes()`, `numero()` | 2 hr |
+| H.4 | Unificar uso de `Format.money()` en todo el proyecto (eliminar `formatCurrency`) | 2 hr |
+| H.5 | Migrar páginas a usar endpoints paginados (integrar `PaginationControls`) | 6 hr |
+| H.6 | Completar transacción en `compromisos_service.confirmarCuota()` (pendiente F23) | 2 hr |
+| H.7 | Limpieza de deuda `medio_pago_id` (eliminar branches defensivas) | 2 hr |
+
+---
+
+## 📅 CALENDARIO SUGERIDO
+
+| Semana | Fase | Entregable |
+|---|---|---|
+| S1 (Mar 2-6) | **FASE A** | Bugs críticos corregidos, app estable |
+| S1-S2 (Mar 6-13) | **FASE B** | Calidad uniforme, performance mejorada |
+| S2-S3 (Mar 13-20) | **FASE C** | F21 cerrada, todas las mejoras post-F20 |
+| S3-S4 (Mar 20-27) | **FASE D** | Reportes PDF, dashboard, alertas vencimiento |
+| S4-S5 (Mar 27-Abr 3) | **FASE E** | Presupuesto + flujo de caja proyectado |
+| S5-S7 (Abr 3-17) | **FASE F** | Sync completa a Supabase |
+| S7-S8 (Abr 17-24) | **FASE G + H** | UX final + código limpio |
+
+---
+
+## 📈 MÉTRICAS DE MADUREZ
+
+| Área | Actual | Objetivo Post-Fases |
+|---|---|---|
+| Cobertura de tests | ~40% | 70% |
+| Error handling uniforme | ~60% | 95% |
+| N+1 queries | 6 conocidos | 0 |
+| Funcionalidades sync | 1/10 entidades | 10/10 |
+| Reportes PDF | 0 | 3+ |
+| Gráficos/Dashboard | 0 | 1 página con 3+ gráficos |
+| Presupuesto | No existe | Completo |
+| Proyección de flujo | No existe | 1/3/6 meses |
+
+**Última actualización:** Marzo 2, 2026

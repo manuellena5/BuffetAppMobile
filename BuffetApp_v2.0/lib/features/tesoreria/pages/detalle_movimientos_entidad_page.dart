@@ -8,6 +8,8 @@ import '../../../data/dao/db.dart';
 import '../../shared/services/movimientos_proyectados_service.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/progress_dialog.dart';
+import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/format.dart';
 import 'detalle_compromiso_page.dart';
 
@@ -297,7 +299,7 @@ class _DetalleMovimientosEntidadPageState extends State<DetalleMovimientosEntida
         child: RefreshIndicator(
           onRefresh: _cargarDatos,
           child: _cargando
-              ? const Center(child: CircularProgressIndicator())
+              ? SkeletonLoader.list(count: 5)
               : SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Column(
@@ -475,18 +477,9 @@ class _DetalleMovimientosEntidadPageState extends State<DetalleMovimientosEntida
   }
 
   Widget _buildEmpty() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          Icon(Icons.inbox, size: 64, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'No hay movimientos en este mes',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-        ],
-      ),
+    return const EmptyState(
+      icon: Icons.inbox,
+      title: 'No hay movimientos en este mes',
     );
   }
 
