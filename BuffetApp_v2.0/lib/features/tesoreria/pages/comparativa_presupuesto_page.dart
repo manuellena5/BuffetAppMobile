@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
@@ -104,10 +104,9 @@ class _ComparativaPresupuestoPageState
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Presupuesto vs Ejecución $_anio',
-      currentRouteName: '/reportes/comparativa_presupuesto',
-      appBarColor: Colors.deepPurple,
+      currentRoute: '/reportes/comparativa_presupuesto',
       body: ResponsiveContainer(
         maxWidth: 1100,
         child: Column(

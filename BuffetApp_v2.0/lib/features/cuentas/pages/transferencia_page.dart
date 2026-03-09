@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../domain/models.dart';
 import '../../shared/state/app_settings.dart';
@@ -98,7 +99,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al cargar datos: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -188,13 +189,13 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          icon: const Icon(Icons.check_circle, size: 64, color: Colors.green),
+          icon: const Icon(Icons.check_circle, size: 64, color: AppColors.ingreso),
           title: const Text('Transferencia Exitosa'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('ID: $transferenciaId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('ID: $transferenciaId', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
               const SizedBox(height: 16),
               _buildResultRow('Origen:', cuentaOrigen.nombre),
               _buildResultRow('Destino:', cuentaDestinoResultado.nombre),
@@ -233,7 +234,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          icon: const Icon(Icons.error, size: 64, color: Colors.red),
+          icon: const Icon(Icons.error, size: 64, color: AppColors.egreso),
           title: const Text('Error en Transferencia'),
           content: Text(
             'No se pudo completar la transferencia:\n\n${e.toString()}',
@@ -242,7 +243,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.egreso),
               child: const Text('Cerrar'),
             ),
           ],
@@ -263,7 +264,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
             label,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey.shade700,
+              color: AppColors.textSecondary,
             ),
           ),
           Text(
@@ -271,7 +272,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: isHighlight ? Colors.orange.shade700 : Colors.black87,
+              color: isHighlight ? AppColors.advertencia : AppColors.textSecondary,
             ),
           ),
         ],
@@ -334,7 +335,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
                                 padding: EdgeInsets.only(left: 48),
                                 child: Text(
                                   'Calculando saldo...',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                                 ),
                               );
                             }
@@ -346,7 +347,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: saldo >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                  color: saldo >= 0 ? AppColors.ingreso : AppColors.egreso,
                                 ),
                               ),
                             );
@@ -357,7 +358,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
 
                       // Icono de flecha
                       const Center(
-                        child: Icon(Icons.arrow_downward, size: 32, color: Colors.grey),
+                        child: Icon(Icons.arrow_downward, size: 32, color: AppColors.textMuted),
                       ),
                       const SizedBox(height: 16),
 
@@ -451,7 +452,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
 
                       // Información
                       const Card(
-                        color: Colors.blue,
+                        color: AppColors.infoDim,
                         child: Padding(
                           padding: EdgeInsets.all(12.0),
                           child: Column(
@@ -459,13 +460,13 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.info_outline, color: Colors.white),
+                                  Icon(Icons.info_outline, color: AppColors.infoLight),
                                   SizedBox(width: 8),
                                   Text(
                                     'Información',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: AppColors.infoLight,
                                     ),
                                   ),
                                 ],
@@ -475,7 +476,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
                                 '• La transferencia genera 2 movimientos vinculados.\n'
                                 '• NO afecta el saldo total del sistema.\n'
                                 '• Solo mueve dinero entre cuentas de la misma unidad.',
-                                style: TextStyle(fontSize: 13, color: Colors.white),
+                                style: TextStyle(fontSize: 13, color: AppColors.infoLight),
                               ),
                             ],
                           ),
@@ -521,7 +522,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.warning_amber, size: 64, color: Colors.orange),
+            const Icon(Icons.warning_amber, size: 64, color: AppColors.advertencia),
             const SizedBox(height: 16),
             const Text(
               'Cuentas insuficientes',
@@ -532,7 +533,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
               'Necesitas al menos 2 cuentas activas para realizar transferencias.\n\n'
               'Cuentas disponibles: ${_cuentas.length}',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              style: const TextStyle(fontSize: 16, color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -593,7 +594,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
     final porcentaje = widget.cuenta.comisionPorcentaje ?? 0.0;
     
     return AlertDialog(
-      icon: const Icon(Icons.account_balance, size: 48, color: Colors.orange),
+      icon: const Icon(Icons.account_balance, size: 48, color: AppColors.advertencia),
       title: const Text('Comisión Bancaria'),
       content: SingleChildScrollView(
         child: Column(
@@ -610,9 +611,9 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: AppColors.infoDim,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
+                border: Border.all(color: AppColors.info),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,7 +648,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
                         Format.money(widget.comision),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.orange,
+                          color: AppColors.advertencia,
                         ),
                       ),
                     ],
@@ -671,7 +672,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: AppColors.bgElevated,
               ),
             ),
             
@@ -690,7 +691,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: AppColors.bgElevated,
               ),
             ),
           ],
@@ -712,7 +713,7 @@ class _DialogComisionTransferenciaState extends State<_DialogComisionTransferenc
             });
           },
           style: FilledButton.styleFrom(
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.advertencia,
           ),
           child: const Text('Confirmar'),
         ),

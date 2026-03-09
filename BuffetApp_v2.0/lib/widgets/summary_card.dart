@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_text_styles.dart';
+import '../core/theme/app_theme.dart';
 
 /// Tarjeta de resumen (KPI) estilo ERP.
 /// Muestra título, monto, icono lateral y color de estado.
@@ -22,27 +21,18 @@ class SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? AppColors.cardDark : AppColors.cardLight;
-    final borderColor = isDark ? AppColors.borderDark : AppColors.borderLight;
-
+    final c = context.appColors;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
       child: Container(
         height: 80,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: c.bgSurface,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          border: Border.all(color: c.border),
+          boxShadow: AppShadows.cardFor(context),
         ),
         child: Row(
           children: [
@@ -53,14 +43,14 @@ class SummaryCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: AppTextStyles.caption(),
+                    style: AppText.caption,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     value,
-                    style: AppTextStyles.bigNumber(color: isDark ? AppColors.textPrimaryDark : null),
+                    style: AppText.kpiLg,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -72,7 +62,7 @@ class SummaryCard extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
               ),
               child: Icon(icon, color: color, size: 22),
             ),

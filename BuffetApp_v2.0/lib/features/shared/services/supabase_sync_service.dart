@@ -370,10 +370,6 @@ class SupaSyncService {
             .toList(growable: false);
 
     final db = await AppDatabase.instance();
-    await AppDatabase.ensureCajaDiariaColumn(
-        'visible', 'visible INTEGER NOT NULL DEFAULT 1');
-    await AppDatabase.ensureCajaDiariaColumn(
-        'sync_estado', 'sync_estado TEXT DEFAULT "PENDIENTE"');
 
     // Map remoto product.id -> local product.id
     final productIdMap = <int, int>{};
@@ -539,7 +535,6 @@ class SupaSyncService {
     required Map<String, dynamic> caja,
     required List<Map<String, dynamic>> items,
   }) async {
-    await AppDatabase.ensureCajaCierreResumenTable();
     final db = await AppDatabase.instance();
 
     final codigoCaja = (caja['codigo_caja'] ?? '').toString();
@@ -1202,8 +1197,8 @@ class SupaSyncService {
       'scope': scope,
       'message': message,
       'payload': payload,
-      // Guardar hora local del dispositivo para que el log coincida con UI.
-      'created_ts': AppDatabase.nowLocalSqlString(),
+      // Guardar hora UTC para consistencia con Supabase.
+      'created_ts': AppDatabase.nowUtcSqlString(),
     });
     // También encolo para enviar a Supabase cuando haya conectividad
     Object? payloadJson;
@@ -1399,20 +1394,7 @@ class SupaSyncService {
 
     final nowTs = DateTime.now().millisecondsSinceEpoch;
     try {
-      // Asegurar columnas locales de tracking (sin romper instalaciones viejas)
-      await AppDatabase.ensureCajaDiariaColumn(
-          'sync_estado', "sync_estado TEXT DEFAULT 'PENDIENTE'");
-      await AppDatabase.ensureCajaDiariaColumn(
-          'sync_last_error', 'sync_last_error TEXT');
-      await AppDatabase.ensureCajaDiariaColumn(
-          'sync_last_ts', 'sync_last_ts INTEGER');
-    } catch (_) {
-      // Si falla el ensure, seguimos igual (no debe bloquear la sync)
-    }
-
-    // Política: limpiar logs locales antiguos (best-effort, no bloquea).
-    try {
-      await AppDatabase.purgeOldErrorLogs(months: 6);
+      await ErrorLogDao.purgeOldErrorLogs(months: 6);
     } catch (_) {
       // no-op
     }

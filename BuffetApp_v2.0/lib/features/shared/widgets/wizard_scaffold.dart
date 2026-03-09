@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Widget reutilizable estilo wizard profesional (tipo Dynamics 365 / SAP).
 ///
 /// Características:
@@ -245,9 +247,9 @@ class _StepIndicator extends StatelessWidget {
 
     switch (state) {
       case _StepState.completed:
-        bgColor = Colors.green;
+        bgColor = AppColors.ingreso;
         fgColor = Colors.white;
-        textColor = Colors.green.shade700;
+        textColor = AppColors.ingreso;
         textWeight = FontWeight.w500;
         break;
       case _StepState.active:
@@ -257,9 +259,9 @@ class _StepIndicator extends StatelessWidget {
         textWeight = FontWeight.bold;
         break;
       case _StepState.pending:
-        bgColor = Colors.grey.shade300;
-        fgColor = Colors.grey.shade600;
-        textColor = Colors.grey.shade500;
+        bgColor = context.appColors.border;
+        fgColor = context.appColors.textMuted;
+        textColor = context.appColors.textMuted;
         textWeight = FontWeight.normal;
         break;
     }
@@ -325,7 +327,7 @@ class _StepConnector extends StatelessWidget {
       child: Container(
         width: 32,
         height: 2,
-        color: isCompleted ? Colors.green : Colors.grey.shade300,
+        color: isCompleted ? AppColors.ingreso : context.appColors.border,
       ),
     );
   }
@@ -378,7 +380,7 @@ class _StepHeader extends StatelessWidget {
           Text(
             subtitle!,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade600,
+              color: context.appColors.textMuted,
             ),
           ),
         ],
@@ -427,7 +429,7 @@ class _WizardBottomBar extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),

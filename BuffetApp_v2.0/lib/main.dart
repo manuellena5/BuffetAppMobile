@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -63,15 +64,24 @@ class App extends StatelessWidget {
         builder: (_, settings, __) {
           final scale = settings.uiScale <= 0 ? 1.0 : settings.uiScale;
 
-          // Design System ERP: light + dark con fuente Inter
-          final lightTheme = AppTheme.applyScale(AppTheme.light(), scale);
-          final darkTheme = AppTheme.applyScale(AppTheme.dark(), scale);
+          // Design System CDM: Light + Dark con fuente DM Sans
+          final lightTheme = AppTheme.applyScale(AppTheme.light, scale);
+          final darkTheme  = AppTheme.applyScale(AppTheme.dark, scale);
 
           return MaterialApp(
-            title: 'BuffetApp',
+            title: 'CDM Gestión',
             theme: lightTheme,
             darkTheme: darkTheme,
             themeMode: settings.materialThemeMode,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('es', 'AR'),
+              Locale('en', 'US'),
+            ],
             builder: (context, child) {
               if (child == null) return const SizedBox.shrink();
               final mq = MediaQuery.of(context);
@@ -168,7 +178,7 @@ class _SeedGateState extends State<_SeedGate> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.error_outline,
-                      size: 48, color: Colors.redAccent),
+                      size: 48, color: AppColors.egreso),
                   const SizedBox(height: 12),
                   const Text('Error al iniciar'),
                   Padding(
@@ -177,7 +187,7 @@ class _SeedGateState extends State<_SeedGate> {
                       snap.error.toString(),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                          fontSize: 12, color: Colors.redAccent),
+                          fontSize: 12, color: AppColors.egreso),
                     ),
                   ),
                   ElevatedButton(

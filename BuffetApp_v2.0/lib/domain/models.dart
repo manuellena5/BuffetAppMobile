@@ -191,6 +191,8 @@ class CuentaFondos {
   final String? bancoNombre;
   final String? cbuAlias;
   final String? dispositivoId;
+  final String? fechaFinPlazo;
+  final String estadoCuenta;
   final bool eliminado;
   final String syncEstado;
   final int createdTs;
@@ -210,6 +212,8 @@ class CuentaFondos {
     this.bancoNombre,
     this.cbuAlias,
     this.dispositivoId,
+    this.fechaFinPlazo,
+    this.estadoCuenta = 'ACTIVA',
     required this.eliminado,
     required this.syncEstado,
     required this.createdTs,
@@ -231,6 +235,8 @@ class CuentaFondos {
       'banco_nombre': bancoNombre,
       'cbu_alias': cbuAlias,
       'dispositivo_id': dispositivoId,
+      'fecha_fin_plazo': fechaFinPlazo,
+      'estado_cuenta': estadoCuenta,
       'eliminado': eliminado ? 1 : 0,
       'sync_estado': syncEstado,
       'created_ts': createdTs,
@@ -253,6 +259,8 @@ class CuentaFondos {
       bancoNombre: map['banco_nombre'] as String?,
       cbuAlias: map['cbu_alias'] as String?,
       dispositivoId: map['dispositivo_id'] as String?,
+      fechaFinPlazo: map['fecha_fin_plazo'] as String?,
+      estadoCuenta: map['estado_cuenta'] as String? ?? 'ACTIVA',
       eliminado: (map['eliminado'] as int?) == 1,
       syncEstado: map['sync_estado'] as String? ?? 'PENDIENTE',
       createdTs: map['created_ts'] as int,

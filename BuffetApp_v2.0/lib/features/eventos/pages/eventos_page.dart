@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../buffet/services/caja_service.dart';
 import '../../buffet/pages/caja_page.dart';
@@ -637,22 +638,22 @@ class _EventosPageState extends State<EventosPage> {
       case _EventoSyncEstado.sincronizada:
         return (
           label: 'Sync OK',
-          fg: Colors.green.shade700,
-          bg: Colors.green.withValues(alpha: 0.12),
+          fg: AppColors.ingreso,
+          bg: AppColors.ingresoDim,
           icon: Icons.check_circle,
         );
       case _EventoSyncEstado.parcial:
         return (
           label: 'Parcial',
-          fg: Colors.amber.shade800,
-          bg: Colors.amber.withValues(alpha: 0.12),
+          fg: AppColors.advertencia,
+          bg: AppColors.advertenciaDim,
           icon: null,
         );
       case _EventoSyncEstado.error:
         return (
           label: 'Error',
-          fg: Colors.red.shade700,
-          bg: Colors.red.withValues(alpha: 0.10),
+          fg: AppColors.egreso,
+          bg: AppColors.egresoDim,
           icon: Icons.error,
         );
       case _EventoSyncEstado.pendiente:
@@ -671,8 +672,8 @@ class _EventosPageState extends State<EventosPage> {
     if (!c.cerrada) {
       return (
         label: 'Abierta',
-        fg: Colors.green.shade700,
-        bg: Colors.green.withValues(alpha: 0.10),
+        fg: AppColors.ingreso,
+        bg: AppColors.ingresoDim,
         icon: Icons.lock_open,
       );
     }
@@ -680,22 +681,22 @@ class _EventosPageState extends State<EventosPage> {
       case _SyncEstadoCaja.sincronizada:
         return (
           label: 'Sync OK',
-          fg: Colors.green.shade700,
-          bg: Colors.green.withValues(alpha: 0.10),
+          fg: AppColors.ingreso,
+          bg: AppColors.ingresoDim,
           icon: Icons.cloud_done,
         );
       case _SyncEstadoCaja.error:
         return (
           label: 'Error',
-          fg: Colors.red.shade700,
-          bg: Colors.red.withValues(alpha: 0.10),
+          fg: AppColors.egreso,
+          bg: AppColors.egresoDim,
           icon: Icons.error,
         );
       case _SyncEstadoCaja.pendiente:
         return (
           label: 'Pendiente',
-          fg: Colors.amber.shade800,
-          bg: Colors.amber.withValues(alpha: 0.12),
+          fg: AppColors.advertencia,
+          bg: AppColors.advertenciaDim,
           icon: Icons.cloud_upload,
         );
     }
@@ -948,14 +949,14 @@ class _EventosPageState extends State<EventosPage> {
                       color: c.cerrada
                           ? theme.colorScheme.surfaceContainerHighest
                               .withValues(alpha: 0.35)
-                          : Colors.green.withValues(alpha: 0.12),
+                          : AppColors.ingresoDim,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Icon(Icons.point_of_sale,
                         size: 20,
                         color: c.cerrada
                             ? theme.colorScheme.onSurfaceVariant
-                            : Colors.green.shade700),
+                            : AppColors.ingreso),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1017,9 +1018,9 @@ class _EventosPageState extends State<EventosPage> {
                   theme, 'Total Ventas', formatCurrencyNoDecimals(c.total)),
               _detailRow(
                   theme, 'Ingresos', formatCurrencyNoDecimals(c.ingresos),
-                  valueColor: Colors.teal),
+                  valueColor: AppColors.accent),
               _detailRow(theme, 'Retiros', formatCurrencyNoDecimals(c.retiros),
-                  valueColor: Colors.red.shade400),
+                  valueColor: AppColors.egresoLight),
               const SizedBox(height: 4),
               Divider(
                   height: 1,
@@ -1031,18 +1032,18 @@ class _EventosPageState extends State<EventosPage> {
                 formatCurrencyNoDecimals(resultadoNeto),
                 bold: true,
                 valueColor: resultadoNeto >= 0
-                    ? Colors.green.shade700
-                    : Colors.red.shade700,
+                    ? AppColors.ingreso
+                    : AppColors.egreso,
               ),
               _detailRow(
                 theme,
                 'Diferencia',
                 '${c.diferencia >= 0 ? '+' : ''}${formatCurrencyNoDecimals(c.diferencia)}',
                 valueColor: c.diferencia == 0
-                    ? Colors.green.shade700
+                    ? AppColors.ingreso
                     : (c.diferencia > 0
-                        ? Colors.blue
-                        : Colors.red.shade700),
+                        ? AppColors.info
+                        : AppColors.egreso),
               ),
               _detailRow(
                 theme,
@@ -1050,8 +1051,8 @@ class _EventosPageState extends State<EventosPage> {
                 formatCurrencyNoDecimals(resultadoConDif),
                 bold: true,
                 valueColor: resultadoConDif >= 0
-                    ? Colors.green.shade700
-                    : Colors.red.shade700,
+                    ? AppColors.ingreso
+                    : AppColors.egreso,
               ),
             ],
           ),
@@ -1103,7 +1104,7 @@ class _EventosPageState extends State<EventosPage> {
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: c.cerrada
                         ? theme.colorScheme.onSurfaceVariant
-                        : Colors.green.shade700,
+                        : AppColors.ingreso,
                     fontWeight: FontWeight.w700,
                   ),
                 )),
@@ -1111,15 +1112,15 @@ class _EventosPageState extends State<EventosPage> {
                     style: theme.textTheme.bodySmall)),
                 DataCell(Text(formatCurrencyNoDecimals(c.total))),
                 DataCell(Text(formatCurrencyNoDecimals(c.ingresos),
-                    style: const TextStyle(color: Colors.teal))),
+                    style: const TextStyle(color: AppColors.accent))),
                 DataCell(Text(formatCurrencyNoDecimals(c.retiros),
-                    style: TextStyle(color: Colors.red.shade400))),
+                    style: TextStyle(color: AppColors.egresoLight))),
                 DataCell(Text(
                   formatCurrencyNoDecimals(rn),
                   style: TextStyle(
                     color: rn >= 0
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
+                        ? AppColors.ingreso
+                        : AppColors.egreso,
                     fontWeight: FontWeight.w700,
                   ),
                 )),
@@ -1129,10 +1130,10 @@ class _EventosPageState extends State<EventosPage> {
                       : '—',
                   style: TextStyle(
                     color: c.diferencia == 0
-                        ? Colors.green.shade700
+                        ? AppColors.ingreso
                         : (c.diferencia > 0
-                            ? Colors.blue
-                            : Colors.red.shade700),
+                            ? AppColors.info
+                            : AppColors.egreso),
                   ),
                 )),
                 DataCell(Text(
@@ -1290,10 +1291,10 @@ class _EventosPageState extends State<EventosPage> {
                       formatCurrencyNoDecimals(e.totalVentas)),
                   _detailRow(theme, 'Ingresos',
                       formatCurrencyNoDecimals(e.totalIngresos),
-                      valueColor: Colors.teal),
+                      valueColor: AppColors.accent),
                   _detailRow(theme, 'Retiros',
                       formatCurrencyNoDecimals(e.totalRetiros),
-                      valueColor: Colors.red.shade400),
+                      valueColor: AppColors.egresoLight),
                   const SizedBox(height: 4),
                   Divider(
                       height: 1,
@@ -1305,18 +1306,18 @@ class _EventosPageState extends State<EventosPage> {
                     formatCurrencyNoDecimals(resultadoNeto),
                     bold: true,
                     valueColor: resultadoNeto >= 0
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
+                        ? AppColors.ingreso
+                        : AppColors.egreso,
                   ),
                   _detailRow(
                     theme,
                     'Diferencia',
                     '${e.totalDiferencia >= 0 ? '+' : ''}${formatCurrencyNoDecimals(e.totalDiferencia)}',
                     valueColor: e.totalDiferencia == 0
-                        ? Colors.green.shade700
+                        ? AppColors.ingreso
                         : (e.totalDiferencia > 0
-                            ? Colors.blue
-                            : Colors.red.shade700),
+                            ? AppColors.info
+                            : AppColors.egreso),
                   ),
                   _detailRow(
                     theme,
@@ -1324,8 +1325,8 @@ class _EventosPageState extends State<EventosPage> {
                     formatCurrencyNoDecimals(resultadoConDif),
                     bold: true,
                     valueColor: resultadoConDif >= 0
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
+                        ? AppColors.ingreso
+                        : AppColors.egreso,
                   ),
 
                   const SizedBox(height: 8),
@@ -1432,15 +1433,15 @@ class _EventosPageState extends State<EventosPage> {
                 DataCell(Text('${e.cajasDetectadas}')),
                 DataCell(Text(formatCurrencyNoDecimals(e.totalVentas))),
                 DataCell(Text(formatCurrencyNoDecimals(e.totalIngresos),
-                    style: const TextStyle(color: Colors.teal))),
+                    style: const TextStyle(color: AppColors.accent))),
                 DataCell(Text(formatCurrencyNoDecimals(e.totalRetiros),
-                    style: TextStyle(color: Colors.red.shade400))),
+                    style: TextStyle(color: AppColors.egresoLight))),
                 DataCell(Text(
                   formatCurrencyNoDecimals(rn),
                   style: TextStyle(
                     color: rn >= 0
-                        ? Colors.green.shade700
-                        : Colors.red.shade700,
+                        ? AppColors.ingreso
+                        : AppColors.egreso,
                     fontWeight: FontWeight.w700,
                   ),
                 )),
@@ -1448,10 +1449,10 @@ class _EventosPageState extends State<EventosPage> {
                   '${e.totalDiferencia >= 0 ? '+' : ''}${formatCurrencyNoDecimals(e.totalDiferencia)}',
                   style: TextStyle(
                     color: e.totalDiferencia == 0
-                        ? Colors.green.shade700
+                        ? AppColors.ingreso
                         : (e.totalDiferencia > 0
-                            ? Colors.blue
-                            : Colors.red.shade700),
+                            ? AppColors.info
+                            : AppColors.egreso),
                   ),
                 )),
                 DataCell(Text(

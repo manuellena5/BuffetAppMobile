@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../state/drawer_state.dart';
 import '../pages/settings_page.dart';
 import '../pages/help_page.dart';
@@ -53,7 +54,7 @@ class BuffetDrawerHelper {
             );
           },
           isActive: currentRouteName == '/home',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Unidad de Gestión activa
@@ -72,7 +73,7 @@ class BuffetDrawerHelper {
               );
             });
           },
-          activeColor: Colors.orange,
+          activeColor: AppColors.advertencia,
         ),
 
         // Ventas (requiere caja abierta)
@@ -95,7 +96,7 @@ class BuffetDrawerHelper {
             );
           },
           isActive: currentRouteName == '/ventas',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Tickets (requiere caja abierta)
@@ -119,7 +120,7 @@ class BuffetDrawerHelper {
             );
           },
           isActive: currentRouteName == '/tickets',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Caja
@@ -141,7 +142,7 @@ class BuffetDrawerHelper {
             }
           },
           isActive: currentRouteName == '/caja',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Eventos
@@ -156,7 +157,7 @@ class BuffetDrawerHelper {
             );
           },
           isActive: currentRouteName == '/eventos',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Movimientos caja (requiere caja abierta)
@@ -181,7 +182,7 @@ class BuffetDrawerHelper {
             );
           },
           isActive: currentRouteName == '/movimientos_caja',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Productos
@@ -196,7 +197,7 @@ class BuffetDrawerHelper {
             );
           },
           isActive: currentRouteName == '/productos',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
 
         // Menú Principal
@@ -213,7 +214,7 @@ class BuffetDrawerHelper {
               (route) => false,
             );
           },
-          activeColor: Colors.deepPurple,
+          activeColor: AppColors.accentDim,
         ),
 
         // Logs de errores (solo si funciones avanzadas están activadas)
@@ -228,7 +229,7 @@ class BuffetDrawerHelper {
                 MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
               );
             },
-            activeColor: Colors.red,
+            activeColor: AppColors.egreso,
           ),
 
         // Configuración impresora
@@ -242,7 +243,7 @@ class BuffetDrawerHelper {
               MaterialPageRoute(builder: (_) => const PrinterTestPage()),
             );
           },
-          activeColor: Colors.grey,
+          activeColor: AppColors.textMuted,
         ),
 
         // Configuración
@@ -258,7 +259,7 @@ class BuffetDrawerHelper {
             onLoadVersion?.call();
           },
           isActive: currentRouteName == '/settings',
-          activeColor: Colors.grey,
+          activeColor: AppColors.textMuted,
         ),
 
         // Ayuda
@@ -272,7 +273,7 @@ class BuffetDrawerHelper {
               MaterialPageRoute(builder: (_) => const HelpPage()),
             );
           },
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
       ],
     );

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../shared/widgets/responsive_container.dart';
 import 'package:intl/intl.dart';
 import '../../shared/services/plantel_import_export_service.dart';
@@ -107,7 +108,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.blue[700]),
+                Icon(Icons.info_outline, color: AppColors.info),
                 const SizedBox(width: 8),
                 Text(
                   'Instrucciones',
@@ -128,26 +129,29 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             _buildInstruccionItem('8', 'Nombres duplicados serán ignorados'),
             _buildInstruccionItem('9', 'Consulte la hoja "_Valores" del template para ver todos los valores permitidos'),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber[50],
-                border: Border.all(color: Colors.amber),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber, color: Colors.amber[900]),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Los datos serán validados antes de importar. Revise la previsualización.',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+            Builder(builder: (ctx) {
+              final cs = ctx.appColors;
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.advertenciaDim,
+                  border: Border.all(color: AppColors.advertencia),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: AppColors.advertencia),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Los datos serán validados antes de importar. Revise la previsualización.',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ),
+              );
+            }),
           ],
         ),
       ),
@@ -164,7 +168,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: Colors.blue[700],
+              color: AppColors.info,
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -205,16 +209,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             ),
             const SizedBox(height: 16),
             if (_archivoSeleccionado != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  border: Border.all(color: Colors.green),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.insert_drive_file, color: Colors.green[700]),
+              Builder(builder: (ctx) {
+                final cs = ctx.appColors;
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.ingresoDim,
+                    border: Border.all(color: AppColors.ingreso),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.insert_drive_file, color: AppColors.ingreso),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -241,7 +247,8 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                     ),
                   ],
                 ),
-              ),
+              );
+              }),
               const SizedBox(height: 12),
             ],
             ElevatedButton.icon(
@@ -263,8 +270,9 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   }
 
   Widget _buildErrores() {
+    final cs = context.appColors;
     return Card(
-      color: Colors.red[50],
+      color: cs.egresoDim,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -272,13 +280,13 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.red[700]),
+                Icon(Icons.error_outline, color: AppColors.egreso),
                 const SizedBox(width: 8),
                 Text(
                   'Errores encontrados (${_erroresLectura.length})',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.red[900],
+                    color: AppColors.egreso,
                   ),
                 ),
               ],
@@ -290,7 +298,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.circle, size: 6, color: Colors.red[700]),
+                    Icon(Icons.circle, size: 6, color: AppColors.egreso),
                     const SizedBox(width: 8),
                     Expanded(child: Text(error)),
                   ],
@@ -321,7 +329,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 ),
                 Chip(
                   label: Text('${_jugadoresPreview.length} jugadores'),
-                  backgroundColor: Colors.blue[100],
+                  backgroundColor: context.appColors.infoDim,
                 ),
               ],
             ),
@@ -337,7 +345,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.vertical,
                   child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(Colors.grey[200]),
+                    headingRowColor: WidgetStateProperty.all(context.appColors.bgElevated),
                     columns: const [
                       DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
                       DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -355,7 +363,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                   
                   return DataRow(
                     color: tieneErrores 
-                        ? WidgetStateProperty.all(Colors.orange[50])
+                        ? WidgetStateProperty.all(context.appColors.advertenciaDim)
                         : null,
                     cells: [
                       DataCell(Text(jugador['nombre']?.toString() ?? '')),
@@ -363,31 +371,31 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                         rolInvalido
                             ? Row(
                                 children: [
-                                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                                  Icon(Icons.warning_amber, size: 16, color: AppColors.advertencia),
                                   const SizedBox(width: 4),
                                   Text(
                                     jugador['rol']?.toString() ?? '-',
-                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                    style: TextStyle(color: AppColors.advertencia, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               )
                             : Chip(
                                 label: Text(
                                   jugador['rol']?.toString() ?? '',
-                                  style: const TextStyle(fontSize: 12),
+                                  style: const TextStyle(fontSize: 12, color: Colors.white),
                                 ),
-                                backgroundColor: _getColorRol(jugador['rol']?.toString()),
+                                backgroundColor: _getColorRol(context, jugador['rol']?.toString()),
                               ),
                       ),
                       DataCell(
                         tipoContratacionInvalido
                             ? Row(
                                 children: [
-                                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                                  Icon(Icons.warning_amber, size: 16, color: AppColors.advertencia),
                                   const SizedBox(width: 4),
                                   Text(
                                     jugador['tipo_contratacion']?.toString() ?? '-',
-                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                    style: TextStyle(color: AppColors.advertencia, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               )
@@ -397,11 +405,11 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                         posicionInvalida
                             ? Row(
                                 children: [
-                                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                                  Icon(Icons.warning_amber, size: 16, color: AppColors.advertencia),
                                   const SizedBox(width: 4),
                                   Text(
                                     jugador['posicion']?.toString() ?? '-',
-                                    style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                                    style: TextStyle(color: AppColors.advertencia, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               )
@@ -424,8 +432,9 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   }
 
   Widget _buildAlertaPosicionesInvalidas() {
+    final cs = context.appColors;
     return Card(
-      color: Colors.orange[50],
+      color: cs.advertenciaDim,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -433,14 +442,14 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.warning_amber, color: Colors.orange[800]),
+                Icon(Icons.warning_amber, color: AppColors.advertencia),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Posiciones inválidas detectadas (${_jugadoresConErrorPosicion.length})',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange[900],
+                      color: AppColors.advertencia,
                     ),
                   ),
                 ),
@@ -449,7 +458,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             const Divider(height: 16),
             Text(
               'Los siguientes jugadores tienen posiciones que no coinciden con los valores permitidos:',
-              style: TextStyle(color: Colors.orange[900]),
+              style: TextStyle(color: AppColors.advertencia),
             ),
             const SizedBox(height: 12),
             ..._jugadoresConErrorPosicion.map((jugador) => Padding(
@@ -474,18 +483,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cs.bgSurface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Posiciones válidas:',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange[900],
+                      color: AppColors.advertencia,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -503,8 +512,9 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   }
 
   Widget _buildAlertaRolesInvalidos() {
+    final cs = context.appColors;
     return Card(
-      color: Colors.red[50],
+      color: cs.egresoDim,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -512,14 +522,14 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.red[800]),
+                Icon(Icons.error_outline, color: AppColors.egreso),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Roles inválidos detectados (${_jugadoresConErrorRol.length})',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.red[900],
+                      color: AppColors.egreso,
                     ),
                   ),
                 ),
@@ -528,7 +538,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             const Divider(height: 16),
             Text(
               'Los siguientes registros tienen roles que no coinciden con los valores permitidos:',
-              style: TextStyle(color: Colors.red[900]),
+              style: TextStyle(color: AppColors.egreso),
             ),
             const SizedBox(height: 12),
             ..._jugadoresConErrorRol.map((jugador) => Padding(
@@ -553,18 +563,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cs.bgSurface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red),
+                border: Border.all(color: AppColors.egreso),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Roles válidos:',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.red[900],
+                      color: AppColors.egreso,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -582,8 +592,9 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
   }
 
   Widget _buildAlertaTiposContratacionInvalidos() {
+    final cs = context.appColors;
     return Card(
-      color: Colors.amber[50],
+      color: cs.advertenciaDim,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -591,14 +602,14 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.warning, color: Colors.amber[800]),
+                Icon(Icons.warning, color: AppColors.advertencia),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Tipos de contratación inválidos (${_jugadoresConErrorTipoContratacion.length})',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.amber[900],
+                      color: AppColors.advertencia,
                     ),
                   ),
                 ),
@@ -607,7 +618,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             const Divider(height: 16),
             Text(
               'Los siguientes jugadores tienen tipos de contratación que no coinciden con los valores permitidos:',
-              style: TextStyle(color: Colors.amber[900]),
+              style: TextStyle(color: AppColors.advertencia),
             ),
             const SizedBox(height: 12),
             ..._jugadoresConErrorTipoContratacion.map((jugador) => Padding(
@@ -632,18 +643,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cs.bgSurface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Tipos de contratación válidos:',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.amber[900],
+                      color: AppColors.advertencia,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -673,30 +684,33 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (tienePendientes)
-          Container(
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              border: Border.all(color: Colors.orange),
-              borderRadius: BorderRadius.circular(8),
-            ),
+          Builder(builder: (ctx) {
+            final cs = ctx.appColors;
+            return Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: cs.advertenciaDim,
+                border: Border.all(color: AppColors.advertencia),
+                borderRadius: BorderRadius.circular(8),
+              ),
             child: Row(
               children: [
-                Icon(Icons.warning_amber, color: Colors.orange[800]),
+                const Icon(Icons.warning_amber, color: AppColors.advertencia),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'Debe corregir los $totalErrores registros con datos inválidos antes de importar',
-                    style: TextStyle(
-                      color: Colors.orange[900],
+                    style: const TextStyle(
+                      color: AppColors.advertencia,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ],
             ),
-          ),
+          );
+          }),
         Row(
           children: [
             Expanded(
@@ -718,10 +732,10 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 label: Text('Importar ${_jugadoresPreview.length} jugadores'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
-                  backgroundColor: Colors.green,
+                  backgroundColor: AppColors.ingreso,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey[300],
-                  disabledForegroundColor: Colors.grey[600],
+                  disabledBackgroundColor: AppColors.border,
+                  disabledForegroundColor: AppColors.textMuted,
                 ),
               ),
             ),
@@ -733,8 +747,10 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
 
   Widget _buildResultado() {
     final creados = _resultadoImport!['creados'] as int;
+    final actualizados = (_resultadoImport!['actualizados'] as int?) ?? 0;
     final duplicados = _resultadoImport!['duplicados'] as List<String>;
     final errores = _resultadoImport!['errores'] as List<String>;
+    final hayExito = creados > 0 || actualizados > 0;
 
     return Card(
       child: Padding(
@@ -743,9 +759,9 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Icon(
-              creados > 0 ? Icons.check_circle : Icons.info_outline,
+              hayExito ? Icons.check_circle : Icons.info_outline,
               size: 64,
-              color: creados > 0 ? Colors.green : Colors.orange,
+              color: hayExito ? AppColors.ingreso : AppColors.advertencia,
             ),
             const SizedBox(height: 16),
             Text(
@@ -760,15 +776,24 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
               Icons.person_add,
               'Creados',
               creados.toString(),
-              Colors.green,
+              AppColors.ingreso,
             ),
+            if (actualizados > 0) ...[
+              const SizedBox(height: 12),
+              _buildResultadoItem(
+                Icons.update,
+                'Actualizados',
+                actualizados.toString(),
+                AppColors.accent,
+              ),
+            ],
             if (duplicados.isNotEmpty) ...[
               const SizedBox(height: 12),
               _buildResultadoItem(
                 Icons.content_copy,
                 'Duplicados (ignorados)',
                 duplicados.length.toString(),
-                Colors.orange,
+                AppColors.advertencia,
               ),
               const SizedBox(height: 8),
               ...duplicados.map(
@@ -784,7 +809,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 Icons.error,
                 'Errores',
                 errores.length.toString(),
-                Colors.red,
+                AppColors.egreso,
               ),
               const SizedBox(height: 8),
               ...errores.map(
@@ -796,7 +821,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             ],
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => Navigator.pop(context, creados > 0),
+              onPressed: () => Navigator.pop(context, hayExito),
               icon: const Icon(Icons.done),
               label: const Text('Finalizar'),
               style: ElevatedButton.styleFrom(
@@ -830,18 +855,19 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
     );
   }
 
-  Color _getColorRol(String? rol) {
+  Color _getColorRol(BuildContext context, String? rol) {
+    final cs = context.appColors;
     switch (rol) {
       case 'DT':
-        return Colors.purple[100]!;
+        return cs.accentDim;
       case 'JUGADOR':
-        return Colors.blue[100]!;
+        return cs.infoDim;
       case 'AYUDANTE':
-        return Colors.green[100]!;
+        return cs.ingresoDim;
       case 'PF':
-        return Colors.orange[100]!;
+        return cs.advertenciaDim;
       default:
-        return Colors.grey[200]!;
+        return cs.bgElevated;
     }
   }
 
@@ -908,10 +934,12 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
       if (mounted) {
         await showDialog(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) {
+            final cs = context.appColors;
+            return AlertDialog(
             title: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green[700]),
+                const Icon(Icons.check_circle, color: AppColors.ingreso),
                 const SizedBox(width: 8),
                 const Text('Template descargado'),
               ],
@@ -928,12 +956,13 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.grey[200],
+                    color: cs.bgElevated,
+                    border: Border.all(color: cs.border),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: SelectableText(
                     outputPath,
-                    style: const TextStyle(fontSize: 12),
+                    style: TextStyle(fontSize: 12, color: cs.textSecondary),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -958,7 +987,8 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
                 label: const Text('Abrir carpeta'),
               ),
             ],
-          ),
+          );
+          },
         );
       }
     } catch (e, stack) {
@@ -979,7 +1009,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           builder: (context) => AlertDialog(
             title: Row(
               children: [
-                Icon(Icons.error, color: Colors.red[700]),
+                Icon(Icons.error, color: AppColors.egreso),
                 const SizedBox(width: 8),
                 const Text('Error'),
               ],
@@ -1059,7 +1089,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('El archivo no contiene datos válidos.'),
-              backgroundColor: Colors.orange,
+              backgroundColor: AppColors.advertencia,
             ),
           );
         }
@@ -1077,7 +1107,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al leer archivo: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -1103,18 +1133,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.orange[50],
+                color: AppColors.advertenciaDim,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.orange),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                  Icon(Icons.warning_amber, size: 16, color: AppColors.advertencia),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Posición inválida: "${jugador['posicion']}"',
-                      style: TextStyle(color: Colors.orange[900]),
+                      style: TextStyle(color: AppColors.advertencia),
                     ),
                   ),
                 ],
@@ -1181,7 +1211,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Posición corregida para ${jugador['nombre']}: $resultado'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.ingreso,
           ),
         );
       }
@@ -1224,18 +1254,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red[50],
+                color: AppColors.egresoDim,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.red),
+                border: Border.all(color: AppColors.egreso),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.error_outline, size: 16, color: Colors.red[800]),
+                  Icon(Icons.error_outline, size: 16, color: AppColors.egreso),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Rol inválido: "${jugador['rol']}"',
-                      style: TextStyle(color: Colors.red[900]),
+                      style: TextStyle(color: AppColors.egreso),
                     ),
                   ),
                 ],
@@ -1300,7 +1330,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Rol corregido para ${jugador['nombre']}: $resultado'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.ingreso,
           ),
         );
       }
@@ -1326,18 +1356,18 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.amber[50],
+                color: AppColors.advertenciaDim,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.amber),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning, size: 16, color: Colors.amber[800]),
+                  Icon(Icons.warning, size: 16, color: AppColors.advertencia),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Tipo de contratación inválido: "${jugador['tipo_contratacion']}"',
-                      style: TextStyle(color: Colors.amber[900]),
+                      style: TextStyle(color: AppColors.advertencia),
                     ),
                   ),
                 ],
@@ -1402,7 +1432,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Tipo de contratación corregido para ${jugador['nombre']}: $resultado'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.ingreso,
           ),
         );
       }
@@ -1452,88 +1482,168 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
     });
   }
 
+  Future<Set<String>?> _mostrarModalDuplicados(List<Map<String, dynamic>> duplicadosData) async {
+    final seleccionados = <String>{
+      ...duplicadosData.map((e) => e['nombre']?.toString() ?? ''),
+    };
+
+    return showDialog<Set<String>>(
+      context: context,
+      builder: (dialogCtx) {
+        final cs = dialogCtx.appColors;
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.sync_problem, color: AppColors.advertencia),
+                const SizedBox(width: 8),
+                const Text('Jugadores duplicados'),
+              ],
+            ),
+            content: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Se encontraron ${duplicadosData.length} jugadores que ya existen en el sistema.',
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Seleccioná los que querés ACTUALIZAR con los datos del archivo:',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => setStateDialog(() {
+                          seleccionados.addAll(
+                            duplicadosData.map((e) => e['nombre']?.toString() ?? ''),
+                          );
+                        }),
+                        child: const Text('Seleccionar todos'),
+                      ),
+                      TextButton(
+                        onPressed: () => setStateDialog(() => seleccionados.clear()),
+                        child: const Text('Deseleccionar todos'),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: duplicadosData.map((dup) {
+                          final nombre = dup['nombre']?.toString() ?? '';
+                          final rol = dup['rol']?.toString() ?? '-';
+                          final posicion = dup['posicion']?.toString() ?? '-';
+                          final tipo = dup['tipo_contratacion']?.toString() ?? '-';
+                          return CheckboxListTile(
+                            dense: true,
+                            value: seleccionados.contains(nombre),
+                            onChanged: (val) => setStateDialog(() {
+                              if (val == true) {
+                                seleccionados.add(nombre);
+                              } else {
+                                seleccionados.remove(nombre);
+                              }
+                            }),
+                            title: Text(nombre, style: const TextStyle(fontWeight: FontWeight.w500)),
+                            subtitle: Text('$rol · $posicion · $tipo'),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: cs.advertenciaDim,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Seleccionados: ${seleccionados.length} / ${duplicadosData.length} — los no seleccionados serán ignorados',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogCtx, Set<String>.from(seleccionados)),
+                child: const Text('Continuar'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _confirmarImportacion() async {
-    // Detectar duplicados antes de confirmar
+    // 1. Detectar duplicados antes de confirmar
     final db = await AppDatabase.instance();
     final jugadoresExistentes = await db.query('entidades_plantel');
     final nombresExistentes = jugadoresExistentes
         .map((e) => (e['nombre'] as String?)?.toLowerCase().trim())
         .where((n) => n != null)
         .toSet();
-    
-    final duplicados = <String>[];
+
+    final duplicadosData = <Map<String, dynamic>>[];
     for (final jugador in _jugadoresPreview) {
       final nombre = (jugador['nombre'] as String?)?.toLowerCase().trim();
       if (nombre != null && nombresExistentes.contains(nombre)) {
-        duplicados.add(jugador['nombre'] as String);
+        duplicadosData.add(jugador);
       }
     }
 
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar Importación'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('¿Desea importar ${_jugadoresPreview.length} jugadores?'),
-            const SizedBox(height: 12),
-            if (duplicados.isNotEmpty) ...[
-              const Divider(),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.warning_amber, color: Colors.orange[800], size: 20),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Jugadores duplicados (serán ignorados):',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 200),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: duplicados.map((nombre) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.person, size: 16),
-                          const SizedBox(width: 4),
-                          Expanded(child: Text(nombre)),
-                        ],
-                      ),
-                    )).toList(),
-                  ),
-                ),
-              ),
-            ] else
-              const Text('No se detectaron duplicados.'),
+    Set<String> nombresAActualizar = {};
+
+    // 2. Si hay duplicados, mostrar modal con checkboxes
+    if (duplicadosData.isNotEmpty) {
+      if (!mounted) return;
+      final seleccionados = await _mostrarModalDuplicados(duplicadosData);
+      if (seleccionados == null) return; // Cancelado
+      nombresAActualizar = seleccionados;
+    } else {
+      // Sin duplicados: confirmación simple
+      if (!mounted) return;
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirmar Importación'),
+          content: Text('¿Importar ${_jugadoresPreview.length} jugadores?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirmar'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar != true) return;
+      );
+      if (confirmar != true) return;
+    }
 
     setState(() => _cargando = true);
 
     try {
-      final resultado = await _importSvc.importarJugadores(_jugadoresPreview);
+      final resultado = await _importSvc.importarJugadores(
+        _jugadoresPreview,
+        nombresAActualizar: nombresAActualizar,
+      );
 
       setState(() {
         _importacionCompletada = true;
@@ -1553,7 +1663,7 @@ class _ImportarJugadoresPageState extends State<ImportarJugadoresPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error al importar jugadores. Revise los logs.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }

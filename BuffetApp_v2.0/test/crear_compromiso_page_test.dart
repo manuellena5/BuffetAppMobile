@@ -6,9 +6,10 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:buffet_app/features/tesoreria/pages/crear_compromiso_page.dart';
-import 'package:buffet_app/features/shared/state/app_settings.dart';
-import 'package:buffet_app/data/dao/db.dart';
+import 'package:cdm_gestion/core/theme/app_theme.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/crear_compromiso_page.dart';
+import 'package:cdm_gestion/features/shared/state/app_settings.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
 
 // Mock para PathProvider
 class MockPathProviderPlatform extends Fake
@@ -25,8 +26,9 @@ class MockPathProviderPlatform extends Fake
 Widget _buildTestWidget(AppSettings settings) {
   return ChangeNotifierProvider<AppSettings>.value(
     value: settings,
-    child: const MaterialApp(
-      home: CrearCompromisoPage(),
+    child: MaterialApp(
+      theme: AppTheme.dark,
+      home: const CrearCompromisoPage(),
     ),
   );
 }
@@ -45,6 +47,10 @@ void main() {
 
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    
+    // Evitar que google_fonts intente descargar fuentes por HTTP en tests
+    AppTheme.useSystemFonts = true;
+    
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
 

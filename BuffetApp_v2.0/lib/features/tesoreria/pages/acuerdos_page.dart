@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../layout/erp_layout.dart';
 import '../../../widgets/app_header.dart';
-import '../../shared/widgets/responsive_container.dart';
+import '../../../widgets/summary_card.dart';
+import '../../../widgets/status_badge.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
@@ -14,9 +15,9 @@ import 'crear_acuerdo_page.dart';
 import 'detalle_acuerdo_page.dart';
 import 'nuevo_acuerdo_grupal_page.dart';
 
-/// FASE 18.5: Página principal de gestión de acuerdos financieros
+/// Página principal de gestión de acuerdos financieros.
 ///
-/// Muestra lista de acuerdos con filtros y acciones.
+/// Muestra KPIs, filtros tipo tabs, tabla estilizada y acciones.
 /// Los acuerdos son reglas/contratos que generan compromisos automáticamente.
 class AcuerdosPage extends StatefulWidget {
   const AcuerdosPage({super.key});
@@ -53,13 +54,11 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     try {
       final db = await AppDatabase.instance();
 
-      // Cargar catálogos
       final unidades = await db.query('unidades_gestion',
           where: 'activo = 1', orderBy: 'nombre');
       final entidades = await db.query('entidades_plantel',
           where: 'estado_activo = 1', orderBy: 'nombre');
 
-      // Cargar acuerdos con filtro de origen
       List<Map<String, dynamic>> acuerdosRaw;
 
       if (_origenFiltro != null) {
@@ -70,8 +69,6 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           tipo: _tipoFiltro,
           soloActivos: _activoFiltro,
         );
-
-        // Filtrar por origen
         acuerdosRaw = acuerdosRaw.where((a) {
           final origenGrupal = (a['origen_grupal'] as int?) == 1;
           return origenGrupal == soloGrupal;
@@ -85,11 +82,9 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         );
       }
 
-      // Convertir a Maps mutables para poder enriquecerlos
       final acuerdos =
           acuerdosRaw.map((a) => Map<String, dynamic>.from(a)).toList();
 
-      // Enriquecer acuerdos con nombres de catálogos
       for (final acuerdo in acuerdos) {
         final unidadId = acuerdo['unidad_gestion_id'] as int?;
         final entidadId = acuerdo['entidad_plantel_id'] as int?;
@@ -110,7 +105,6 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
           acuerdo['_entidad_nombre'] = entidad['nombre'];
         }
 
-        // Cargar estadísticas
         final stats = await AcuerdosService.obtenerEstadisticasAcuerdo(
             acuerdo['id'] as int);
         acuerdo['_stats'] = stats;
@@ -138,18 +132,14 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Error al cargar acuerdos. Por favor, intente nuevamente.'),
-            backgroundColor: Colors.red,
+          SnackBar(
+            content: const Text(
+                'Error al cargar acuerdos. Por favor, intentá nuevamente.'),
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
     }
-  }
-
-  void _aplicarFiltros() {
-    _cargarDatos();
   }
 
   void _limpiarFiltros() {
@@ -165,10 +155,8 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
 
   Future<void> _finalizarAcuerdo(int id, String nombre) async {
     try {
-      // FASE 22.6: Consultar cuotas esperadas antes de finalizar
       final db = await AppDatabase.instance();
 
-      // Obtener IDs de compromisos asociados al acuerdo
       final compromisosAsociados = await db.query(
         'compromisos',
         columns: ['id'],
@@ -179,7 +167,6 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
       final compromisoIds =
           compromisosAsociados.map((c) => c['id'] as int).toList();
 
-      // Consultar cuotas ESPERADO de esos compromisos
       final cuotasEsperadas = compromisoIds.isEmpty
           ? <Map<String, dynamic>>[]
           : await db.query(
@@ -189,64 +176,157 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
               whereArgs: [...compromisoIds, 'ESPERADO'],
             );
 
-      // Mostrar diálogo con opciones
       String? accion;
       if (cuotasEsperadas.isNotEmpty) {
         accion = await showDialog<String>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Finalizar Acuerdo'),
-            content: Text(
-              '¿Desea finalizar el acuerdo \"$nombre\"?\n\n'
-              'Este acuerdo tiene ${cuotasEsperadas.length} cuota${cuotasEsperadas.length > 1 ? 's' : ''} en estado ESPERADO.\n\n'
-              '¿Qué desea hacer con ellas?',
+          builder: (ctx) => Dialog(
+            backgroundColor: context.appColors.bgSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+              side: BorderSide(color: context.appColors.border),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancelar'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.advertencia.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                          ),
+                          child: const Icon(Icons.warning_amber_rounded,
+                              color: AppColors.advertencia, size: 22),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Text('Finalizar Acuerdo', style: AppText.titleLg),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      '¿Desea finalizar el acuerdo "$nombre"?',
+                      style: AppText.bodyLg.copyWith(color: context.appColors.textPrimary),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: context.appColors.advertenciaDim.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        border: Border.all(color: AppColors.advertencia.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline,
+                              color: AppColors.advertencia, size: 18),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              '${cuotasEsperadas.length} cuota${cuotasEsperadas.length > 1 ? 's' : ''} en estado ESPERADO',
+                              style: AppText.bodyMd.copyWith(
+                                  color: AppColors.advertenciaLight),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: TextButton.styleFrom(
+                            foregroundColor: context.appColors.textMuted,
+                          ),
+                          child: const Text('Cancelar'),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, 'SOLO_FINALIZAR'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: context.appColors.textSecondary,
+                          ),
+                          child: const Text('Solo finalizar'),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        FilledButton(
+                          onPressed: () =>
+                              Navigator.pop(ctx, 'FINALIZAR_Y_CANCELAR'),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.advertencia),
+                          child: const Text('Finalizar y cancelar cuotas'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, 'SOLO_FINALIZAR'),
-                child: const Text('Solo finalizar acuerdo'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, 'FINALIZAR_Y_CANCELAR'),
-                style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-                child: const Text('Finalizar y cancelar cuotas'),
-              ),
-            ],
+            ),
           ),
         );
       } else {
-        // No hay cuotas ESPERADO, solo confirmar
         final confirm = await showDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Finalizar Acuerdo'),
-            content: Text(
-                '¿Finalizar el acuerdo \"$nombre\"?\n\nEsto marcará el acuerdo como inactivo.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancelar'),
+          builder: (ctx) => Dialog(
+            backgroundColor: context.appColors.bgSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+              side: BorderSide(color: context.appColors.border),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xxl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Finalizar Acuerdo', style: AppText.titleLg),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      '¿Finalizar el acuerdo "$nombre"?\nEsto marcará el acuerdo como inactivo.',
+                      style: AppText.bodyMd,
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          style: TextButton.styleFrom(
+                              foregroundColor: context.appColors.textMuted),
+                          child: const Text('Cancelar'),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.advertencia),
+                          child: const Text('Finalizar'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Finalizar'),
-              ),
-            ],
+            ),
           ),
         );
         accion = confirm == true ? 'SOLO_FINALIZAR' : null;
       }
 
-      if (accion == null) return; // Usuario canceló
+      if (accion == null) return;
 
-      // Finalizar acuerdo
       await AcuerdosService.finalizarAcuerdo(id);
 
-      // Si eligió cancelar cuotas, hacerlo
       if (accion == 'FINALIZAR_Y_CANCELAR') {
         int cancelados = 0;
 
@@ -302,17 +382,53 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al finalizar: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            content: const Text('No se pudo finalizar el acuerdo. Intentá nuevamente.'),
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
     }
   }
 
+  // ─── KPIs derivados ─────────────────────────────────────────────────────────
+  double get _totalIngresoMensual {
+    double sum = 0;
+    for (final a in _acuerdos) {
+      if ((a['tipo']?.toString() ?? '') == 'INGRESO' &&
+          (a['activo'] as int?) == 1) {
+        sum += (a['monto_periodico'] as num?)?.toDouble() ?? 0;
+      }
+    }
+    return sum;
+  }
+
+  double get _totalEgresoMensual {
+    double sum = 0;
+    for (final a in _acuerdos) {
+      if ((a['tipo']?.toString() ?? '') == 'EGRESO' &&
+          (a['activo'] as int?) == 1) {
+        sum += (a['monto_periodico'] as num?)?.toDouble() ?? 0;
+      }
+    }
+    return sum;
+  }
+
+  int get _countActivos =>
+      _acuerdos.where((a) => (a['activo'] as int?) == 1).length;
+
+  int get _countIngresos => _acuerdos.where((a) =>
+      (a['tipo']?.toString() ?? '') == 'INGRESO' &&
+      (a['activo'] as int?) == 1).length;
+
+  int get _countEgresos => _acuerdos.where((a) =>
+      (a['tipo']?.toString() ?? '') == 'EGRESO' &&
+      (a['activo'] as int?) == 1).length;
+
+  // ─── BUILD ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
+    final isDesktop =
+        MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
 
     return ErpLayout(
       currentRoute: '/acuerdos',
@@ -335,76 +451,777 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         ),
       ],
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _mostrarMenuCreacion,
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo Acuerdo'),
-      ),
-      body: Column(
-        children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Acuerdos',
-              subtitle: '${_acuerdos.length} registro${_acuerdos.length != 1 ? 's' : ''}',
-              action: ElevatedButton.icon(
-                onPressed: _mostrarMenuCreacion,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Nuevo Acuerdo'),
+              onPressed: _mostrarMenuCreacion,
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.textPrimary,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo Acuerdo'),
+            ),
+      body: _isLoading
+          ? SkeletonLoader.cards(count: 3)
+          : RefreshIndicator(
+              onRefresh: _cargarDatos,
+              child: ListView(
+                padding: const EdgeInsets.all(AppSpacing.contentPadding),
+                children: [
+                  if (isDesktop)
+                    const SizedBox(height: AppSpacing.lg),
+
+                  // KPIs
+                  _buildKpis(isDesktop),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Filtros
+                  _buildFilterBar(),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Contenido
+                  _acuerdos.isEmpty
+                      ? _buildEmptyState()
+                      : _vistaTabla
+                          ? _buildStyledTable()
+                          : _buildVistaTarjetas(),
+                ],
               ),
             ),
-          Expanded(
-            child: _isLoading
-                ? SkeletonLoader.cards(count: 3)
-                : Column(
-                    children: [
-                      _buildFiltrosVisibles(),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: ResponsiveContainer(
-                          maxWidth: _vistaTabla ? 1400 : 1000,
-                          child: Column(
-                            children: [
-                              if (_tieneFiltrosActivos()) _buildFiltrosActivos(),
-                              Expanded(
-                                child: _acuerdos.isEmpty
-                                    ? _buildEmptyState()
-                                    : _vistaTabla
-                                        ? _buildVistaTabla()
-                                        : _buildVistaTarjetas(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+    );
+  }
+
+  // ─── KPI CARDS ──────────────────────────────────────────────────────────────
+  Widget _buildKpis(bool isDesktop) {
+    final resultado = _totalIngresoMensual - _totalEgresoMensual;
+    final resultadoColor =
+        resultado >= 0 ? AppColors.ingreso : AppColors.egreso;
+
+    final cards = [
+      SummaryCard(
+        title: 'INGRESO MENSUAL',
+        value: Format.moneyNoDecimals(_totalIngresoMensual),
+        icon: Icons.trending_up,
+        color: AppColors.ingreso,
+      ),
+      SummaryCard(
+        title: 'EGRESO MENSUAL',
+        value: Format.moneyNoDecimals(_totalEgresoMensual),
+        icon: Icons.trending_down,
+        color: AppColors.egreso,
+      ),
+      SummaryCard(
+        title: 'RESULTADO PROY.',
+        value: Format.moneyNoDecimals(resultado),
+        icon: resultado >= 0 ? Icons.thumb_up : Icons.thumb_down,
+        color: resultadoColor,
+      ),
+      SummaryCard(
+        title: 'ACTIVOS: $_countIngresos ing · $_countEgresos egr',
+        value: '$_countActivos',
+        icon: Icons.description_outlined,
+        color: AppColors.info,
+      ),
+    ];
+
+    if (isDesktop) {
+      return Row(
+        children: cards
+            .map((c) => Expanded(
+                child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                    child: c)))
+            .toList(),
+      );
+    }
+
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      children:
+          cards.map((c) => SizedBox(width: double.infinity, child: c)).toList(),
+    );
+  }
+
+  // ─── FILTER BAR (tabs + dropdowns) ──────────────────────────────────────────
+  Widget _buildFilterBar() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: AppDecorations.cardOf(context),
+      child: Column(
+        children: [
+          // Tipo tabs
+          Row(
+            children: [
+              _buildTabBtn('Todos', null),
+              const SizedBox(width: AppSpacing.xs),
+              _buildTabBtn('Ingresos', 'INGRESO'),
+              const SizedBox(width: AppSpacing.xs),
+              _buildTabBtn('Egresos', 'EGRESO'),
+              const Spacer(),
+              // Dropdown filtros adicionales
+              _buildDropdownFilter<bool?>(
+                value: _activoFiltro,
+                hint: 'Estado',
+                items: const {null: 'Todos', true: 'Activos', false: 'Finalizados'},
+                onChanged: (v) {
+                  setState(() => _activoFiltro = v);
+                  _cargarDatos();
+                },
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _buildDropdownFilter<String?>(
+                value: _origenFiltro,
+                hint: 'Origen',
+                items: const {null: 'Todos', 'MANUAL': 'Manual', 'GRUPAL': 'Grupal'},
+                onChanged: (v) {
+                  setState(() => _origenFiltro = v);
+                  _cargarDatos();
+                },
+              ),
+              if (_tieneFiltrosActivos()) ...[
+                const SizedBox(width: AppSpacing.sm),
+                IconButton(
+                  icon: Icon(Icons.clear, size: 18,
+                      color: context.appColors.textMuted),
+                  tooltip: 'Limpiar filtros',
+                  onPressed: _limpiarFiltros,
+                ),
+              ],
+            ],
           ),
+          // Unidad + Entidad (segunda fila)
+          if (_unidadesGestion.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                _buildDropdownFilter<int?>(
+                  value: _unidadGestionId,
+                  hint: 'Unidad de Gestión',
+                  items: {
+                    null: 'Todas',
+                    for (final u in _unidadesGestion)
+                      u['id'] as int: u['nombre'] as String,
+                  },
+                  onChanged: (v) {
+                    setState(() => _unidadGestionId = v);
+                    _cargarDatos();
+                  },
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                if (_entidadesPlantel.isNotEmpty)
+                  _buildDropdownFilter<int?>(
+                    value: _entidadPlantelId,
+                    hint: 'Entidad',
+                    items: {
+                      null: 'Todas',
+                      for (final e in _entidadesPlantel)
+                        e['id'] as int: e['nombre'] as String,
+                    },
+                    onChanged: (v) {
+                      setState(() => _entidadPlantelId = v);
+                      _cargarDatos();
+                    },
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
+  Widget _buildTabBtn(String label, String? tipoValue) {
+    final active = _tipoFiltro == tipoValue;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _tipoFiltro = tipoValue);
+        _cargarDatos();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: active ? context.appColors.bgElevated : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
+        child: Text(
+          label,
+          style: AppText.titleSm.copyWith(
+            color: active ? context.appColors.textPrimary : context.appColors.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownFilter<T>({
+    required T value,
+    required String hint,
+    required Map<T, String> items,
+    required ValueChanged<T> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      decoration: AppDecorations.inputOf(context),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          hint: Text(hint, style: AppText.bodyMd),
+          dropdownColor: context.appColors.bgElevated,
+          style: AppText.bodyMd.copyWith(color: context.appColors.textPrimary),
+          isDense: true,
+          items: items.entries
+              .map((e) => DropdownMenuItem<T>(
+                    value: e.key,
+                    child: Text(e.value),
+                  ))
+              .toList(),
+          onChanged: (v) => onChanged(v as T),
+        ),
+      ),
+    );
+  }
+
+  bool _tieneFiltrosActivos() {
+    return _unidadGestionId != null ||
+        _entidadPlantelId != null ||
+        _tipoFiltro != null ||
+        _activoFiltro != null ||
+        _origenFiltro != null;
+  }
+
+  Widget _buildEmptyState() {
+    return EmptyState(
+      icon: Icons.description_outlined,
+      title: _tieneFiltrosActivos()
+          ? 'No hay acuerdos con los filtros aplicados'
+          : 'No hay acuerdos registrados',
+      subtitle: !_tieneFiltrosActivos()
+          ? 'Creá tu primer acuerdo para comenzar'
+          : null,
+    );
+  }
+
+  // ─── STYLED TABLE ──────────────────────────────────────────────────────────
+  Widget _buildStyledTable() {
+    return Container(
+      decoration: AppDecorations.cardOf(context),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            decoration: BoxDecoration(
+              border: Border(
+                  bottom: BorderSide(color: context.appColors.border)),
+            ),
+            child: Row(
+              children: [
+                _tableHeader('NOMBRE', flex: 3),
+                _tableHeader('TIPO', flex: 1),
+                _tableHeader('ENTIDAD', flex: 2),
+                _tableHeader('MONTO', flex: 2),
+                _tableHeader('MODALIDAD', flex: 1),
+                _tableHeader('FRECUENCIA', flex: 1),
+                _tableHeader('PROGRESO', flex: 2),
+                _tableHeader('ESTADO', flex: 1),
+                _tableHeader('', flex: 1), // acciones
+              ],
+            ),
+          ),
+          // Rows
+          ..._acuerdos.asMap().entries.map((entry) {
+            try {
+              return _buildStyledRow(entry.value, entry.key);
+            } catch (e, stack) {
+              AppDatabase.logLocalError(
+                scope: 'acuerdos_page.render_fila_tabla',
+                error: e.toString(),
+                stackTrace: stack,
+                payload: {'acuerdo_id': entry.value['id']},
+              );
+              return Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: AppColors.advertencia, size: 18),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text('Error al mostrar acuerdo', style: AppText.bodyMd),
+                  ],
+                ),
+              );
+            }
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(String label, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        label,
+        style: AppText.label,
+      ),
+    );
+  }
+
+  Widget _buildStyledRow(Map<String, dynamic> acuerdo, int index) {
+    final id = acuerdo['id'] as int;
+    final nombre = acuerdo['nombre']?.toString() ?? 'Sin nombre';
+    final tipo = acuerdo['tipo']?.toString() ?? 'EGRESO';
+    final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
+    final frecuencia = acuerdo['frecuencia']?.toString() ?? '';
+    final activo = (acuerdo['activo'] as int?) == 1;
+    final origenGrupal = (acuerdo['origen_grupal'] as int?) == 1;
+    final entidadNombre = acuerdo['_entidad_nombre']?.toString() ?? '-';
+    final stats = acuerdo['_stats'] as Map<String, dynamic>?;
+
+    final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
+        ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
+        : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
+
+    final cuotasConfirmadas = stats?['cuotas_confirmadas'] as int? ?? 0;
+    final cuotasEsperadas = stats?['cuotas_esperadas'] as int? ?? 0;
+    final cuotasTotal = cuotasConfirmadas + cuotasEsperadas;
+    final progreso = cuotasTotal > 0 ? cuotasConfirmadas / cuotasTotal : 0.0;
+    final porciento = (progreso * 100).toInt();
+
+    final esIngreso = tipo == 'INGRESO';
+    final tipoColor = esIngreso ? AppColors.ingreso : AppColors.egreso;
+
+    // Iniciales para avatar
+    final iniciales = nombre.length >= 2
+        ? nombre.substring(0, 2).toUpperCase()
+        : nombre.toUpperCase();
+
+    return InkWell(
+      onTap: () => _verDetalle(id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          border: Border(
+              bottom: BorderSide(
+                  color: context.appColors.border.withValues(alpha: 0.5))),
+        ),
+        child: Row(
+          children: [
+            // Nombre con avatar
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  // Avatar
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: esIngreso
+                          ? context.appColors.ingresoDim
+                          : context.appColors.infoDim,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      iniciales,
+                      style: AppText.label.copyWith(
+                        color: esIngreso
+                            ? AppColors.ingresoLight
+                            : AppColors.infoLight,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nombre,
+                          style: AppText.titleSm,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (origenGrupal)
+                          Text('Grupal', style: AppText.caption),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Tipo
+            Expanded(
+              flex: 1,
+              child: StatusBadge(
+                label: tipo,
+                type: esIngreso ? StatusType.success : StatusType.danger,
+              ),
+            ),
+
+            // Entidad
+            Expanded(
+              flex: 2,
+              child: Text(
+                entidadNombre,
+                style: AppText.bodyMd,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+            // Monto
+            Expanded(
+              flex: 2,
+              child: Text(
+                Format.money(montoDisplay),
+                style: AppText.monoBold.copyWith(color: tipoColor),
+              ),
+            ),
+
+            // Modalidad
+            Expanded(
+              flex: 1,
+              child: Text(_modalidadLabel(modalidad), style: AppText.bodyMd),
+            ),
+
+            // Frecuencia
+            Expanded(
+              flex: 1,
+              child: Text(_frecuenciaLabel(frecuencia), style: AppText.caption),
+            ),
+
+            // Progreso
+            Expanded(
+              flex: 2,
+              child: cuotasTotal > 0
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: progreso,
+                                  minHeight: 4,
+                                  backgroundColor: context.appColors.bgElevated,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      tipoColor),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$cuotasConfirmadas/$cuotasTotal',
+                                style: AppText.caption,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text('$porciento%', style: AppText.monoSm),
+                      ],
+                    )
+                  : Text('-', style: AppText.bodyMd),
+            ),
+
+            // Estado
+            Expanded(
+              flex: 1,
+              child: StatusBadge(
+                label: activo ? 'Activo' : 'Finalizado',
+                type: activo ? StatusType.success : StatusType.neutral,
+              ),
+            ),
+
+            // Acciones
+            Expanded(
+              flex: 1,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _ghostButton('Ver', () => _verDetalle(id)),
+                  if (activo) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    _ghostButton(
+                        'Finalizar', () => _finalizarAcuerdo(id, nombre),
+                        color: AppColors.advertencia),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ghostButton(String label, VoidCallback onTap, {Color? color}) {
+    final c = color ?? AppColors.accent;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+        child: Text(
+          label,
+          style: AppText.labelMd.copyWith(color: c),
+        ),
+      ),
+    );
+  }
+
+  // ─── CARD VIEW ──────────────────────────────────────────────────────────────
+  Widget _buildVistaTarjetas() {
+    return Column(
+      children: _acuerdos.asMap().entries.map((entry) {
+        try {
+          return _buildTarjetaAcuerdo(entry.value);
+        } catch (e, stack) {
+          AppDatabase.logLocalError(
+            scope: 'acuerdos_page.render_tarjeta',
+            error: e.toString(),
+            stackTrace: stack,
+            payload: {'index': entry.key},
+          );
+          return Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: AppDecorations.cardOf(context),
+            child: Row(
+              children: [
+                const Icon(Icons.warning, color: AppColors.advertencia, size: 18),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Error al mostrar acuerdo', style: AppText.bodyMd),
+              ],
+            ),
+          );
+        }
+      }).toList(),
+    );
+  }
+
+  Widget _buildTarjetaAcuerdo(Map<String, dynamic> acuerdo) {
+    final id = acuerdo['id'] as int;
+    final nombre = acuerdo['nombre']?.toString() ?? 'Sin nombre';
+    final tipo = acuerdo['tipo']?.toString() ?? 'EGRESO';
+    final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
+    final activo = (acuerdo['activo'] as int?) == 1;
+    final origenGrupal = (acuerdo['origen_grupal'] as int?) == 1;
+    final unidadNombre = acuerdo['_unidad_nombre']?.toString() ?? 'Desconocida';
+    final entidadNombre = acuerdo['_entidad_nombre']?.toString();
+    final stats = acuerdo['_stats'] as Map<String, dynamic>?;
+
+    final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
+        ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
+        : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
+
+    final cuotasConfirmadas = stats?['cuotas_confirmadas'] as int? ?? 0;
+    final cuotasEsperadas = stats?['cuotas_esperadas'] as int? ?? 0;
+    final cuotasTotal = cuotasConfirmadas + cuotasEsperadas;
+    final progreso = cuotasTotal > 0 ? cuotasConfirmadas / cuotasTotal : 0.0;
+
+    final esIngreso = tipo == 'INGRESO';
+    final tipoColor = esIngreso ? AppColors.ingreso : AppColors.egreso;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: InkWell(
+        onTap: () => _verDetalle(id),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.cardPadding),
+          decoration: AppDecorations.cardOf(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Avatar
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: esIngreso
+                          ? context.appColors.ingresoDim
+                          : context.appColors.infoDim,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      esIngreso ? Icons.trending_up : Icons.trending_down,
+                      color: esIngreso
+                          ? AppColors.ingresoLight
+                          : AppColors.infoLight,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(nombre, style: AppText.titleMd),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$unidadNombre${entidadNombre != null ? ' · $entidadNombre' : ''}',
+                          style: AppText.caption,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  StatusBadge(
+                    label: tipo,
+                    type: esIngreso ? StatusType.success : StatusType.danger,
+                  ),
+                  if (origenGrupal) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    StatusBadge(
+                        label: 'Grupal', type: StatusType.info),
+                  ],
+                  if (!activo) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    const StatusBadge(
+                        label: 'Finalizado', type: StatusType.neutral),
+                  ],
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              // Monto + Modalidad
+              Row(
+                children: [
+                  Text(
+                    Format.money(montoDisplay),
+                    style: AppText.kpiSm.copyWith(color: tipoColor),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: context.appColors.bgElevated,
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusSm),
+                    ),
+                    child: Text(_modalidadLabel(modalidad),
+                        style: AppText.caption),
+                  ),
+                ],
+              ),
+
+              // Progreso
+              if (cuotasTotal > 0) ...[
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: progreso,
+                          minHeight: 4,
+                          backgroundColor: context.appColors.bgElevated,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(tipoColor),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Text(
+                      '$cuotasConfirmadas de $cuotasTotal cuotas',
+                      style: AppText.caption,
+                    ),
+                  ],
+                ),
+              ],
+
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (activo)
+                    _ghostButton(
+                        'Finalizar', () => _finalizarAcuerdo(id, nombre),
+                        color: AppColors.advertencia),
+                  const SizedBox(width: AppSpacing.sm),
+                  _ghostButton('Ver Detalle', () => _verDetalle(id)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── CREATION MODAL ─────────────────────────────────────────────────────────
   Future<void> _mostrarMenuCreacion() async {
     final opcion = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Crear Acuerdo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Acuerdo Individual'),
-              subtitle: const Text('Para un solo jugador/DT'),
-              onTap: () => Navigator.pop(ctx, 'INDIVIDUAL'),
+      barrierColor: context.appColors.bgOverlay,
+      builder: (ctx) => Dialog(
+        backgroundColor: context.appColors.bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+          side: BorderSide(color: context.appColors.border),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Crear Acuerdo', style: AppText.titleLg),
+                const SizedBox(height: AppSpacing.xs),
+                Text('Seleccioná el tipo de acuerdo a crear',
+                    style: AppText.bodyMd),
+                const SizedBox(height: AppSpacing.xl),
+
+                // Individual
+                _buildCreationOption(
+                  ctx: ctx,
+                  icon: Icons.person,
+                  color: AppColors.accent,
+                  title: 'Individual',
+                  subtitle: 'Para un solo jugador/DT',
+                  value: 'INDIVIDUAL',
+                ),
+                const SizedBox(height: AppSpacing.md),
+
+                // Grupal
+                _buildCreationOption(
+                  ctx: ctx,
+                  icon: Icons.group,
+                  color: AppColors.info,
+                  title: 'Grupal',
+                  subtitle: 'Para múltiples jugadores',
+                  value: 'GRUPAL',
+                ),
+
+                const SizedBox(height: AppSpacing.xl),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: TextButton.styleFrom(
+                        foregroundColor: context.appColors.textMuted),
+                    child: const Text('Cancelar'),
+                  ),
+                ),
+              ],
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.group),
-              title: const Text('Acuerdo Grupal'),
-              subtitle: const Text('Para múltiples jugadores'),
-              onTap: () => Navigator.pop(ctx, 'GRUPAL'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -413,6 +1230,65 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
       _crearNuevoAcuerdo();
     } else if (opcion == 'GRUPAL') {
       _crearAcuerdoGrupal();
+    }
+  }
+
+  Widget _buildCreationOption({
+    required BuildContext ctx,
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required String value,
+  }) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, value),
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: context.appColors.bgBase,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          border: Border.all(color: context.appColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppText.titleSm),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppText.caption),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: context.appColors.textMuted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── NAVIGATION HELPERS ─────────────────────────────────────────────────────
+  Future<void> _verDetalle(int id) async {
+    final resultado = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => DetalleAcuerdoPage(acuerdoId: id),
+      ),
+    );
+    if (resultado == true) {
+      _cargarDatos();
     }
   }
 
@@ -428,581 +1304,6 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
     if (resultado != null) {
       _cargarDatos();
     }
-  }
-
-  bool _tieneFiltrosActivos() {
-    return _unidadGestionId != null ||
-        _entidadPlantelId != null ||
-        _tipoFiltro != null ||
-        _activoFiltro != null ||
-        _origenFiltro != null;
-  }
-
-  Widget _buildFiltrosActivos() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Row(
-        children: [
-          const Icon(Icons.filter_alt, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              children: [
-                if (_unidadGestionId != null)
-                  Chip(
-                    label: Text(_unidadesGestion
-                        .firstWhere(
-                            (u) => u['id'] == _unidadGestionId)['nombre']
-                        .toString()),
-                    onDeleted: () {
-                      setState(() => _unidadGestionId = null);
-                      _cargarDatos();
-                    },
-                  ),
-                if (_entidadPlantelId != null)
-                  Chip(
-                    label: Text(_entidadesPlantel
-                        .firstWhere(
-                            (e) => e['id'] == _entidadPlantelId)['nombre']
-                        .toString()),
-                    onDeleted: () {
-                      setState(() => _entidadPlantelId = null);
-                      _cargarDatos();
-                    },
-                  ),
-                if (_tipoFiltro != null)
-                  Chip(
-                    label: Text(_tipoFiltro!),
-                    onDeleted: () {
-                      setState(() => _tipoFiltro = null);
-                      _cargarDatos();
-                    },
-                  ),
-                if (_activoFiltro != null)
-                  Chip(
-                    label: Text(_activoFiltro! ? 'Activos' : 'Finalizados'),
-                    onDeleted: () {
-                      setState(() => _activoFiltro = null);
-                      _cargarDatos();
-                    },
-                  ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: _limpiarFiltros,
-            child: const Text('Limpiar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return EmptyState(
-      icon: Icons.description_outlined,
-      title: _tieneFiltrosActivos()
-          ? 'No hay acuerdos con los filtros aplicados'
-          : 'No hay acuerdos registrados',
-      subtitle: !_tieneFiltrosActivos()
-          ? 'Crea tu primer acuerdo para comenzar'
-          : null,
-    );
-  }
-
-  /// FASE 22.5: Filtros visibles (similar a compromisos_page)
-  Widget _buildFiltrosVisibles() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.grey.shade100,
-      child: ResponsiveContainer(
-        maxWidth: 1400,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                // Unidad de Gestión
-                SizedBox(
-                  width: 200,
-                  child: DropdownButtonFormField<int?>(
-                    value: _unidadGestionId,
-                    decoration: const InputDecoration(
-                      labelText: 'Unidad de Gestión',
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                    items: [
-                      const DropdownMenuItem<int?>(
-                          value: null, child: Text('Todas')),
-                      ..._unidadesGestion.map((u) => DropdownMenuItem<int?>(
-                            value: u['id'] as int,
-                            child: Text(u['nombre'] as String),
-                          )),
-                    ],
-                    onChanged: (val) => setState(() => _unidadGestionId = val),
-                  ),
-                ),
-
-                // Entidad
-                SizedBox(
-                  width: 200,
-                  child: DropdownButtonFormField<int?>(
-                    value: _entidadPlantelId,
-                    decoration: const InputDecoration(
-                      labelText: 'Entidad',
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                    items: [
-                      const DropdownMenuItem<int?>(
-                          value: null, child: Text('Todas')),
-                      ..._entidadesPlantel.map((e) => DropdownMenuItem<int?>(
-                            value: e['id'] as int,
-                            child: Text(e['nombre'] as String),
-                          )),
-                    ],
-                    onChanged: (val) => setState(() => _entidadPlantelId = val),
-                  ),
-                ),
-
-                // Tipo
-                SizedBox(
-                  width: 150,
-                  child: DropdownButtonFormField<String?>(
-                    value: _tipoFiltro,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo',
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('Todos')),
-                      DropdownMenuItem(
-                          value: 'INGRESO', child: Text('Ingreso')),
-                      DropdownMenuItem(value: 'EGRESO', child: Text('Egreso')),
-                    ],
-                    onChanged: (val) => setState(() => _tipoFiltro = val),
-                  ),
-                ),
-
-                // Estado (activo/finalizado)
-                SizedBox(
-                  width: 150,
-                  child: DropdownButtonFormField<bool?>(
-                    value: _activoFiltro,
-                    decoration: const InputDecoration(
-                      labelText: 'Estado',
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('Todos')),
-                      DropdownMenuItem(value: true, child: Text('Activos')),
-                      DropdownMenuItem(
-                          value: false, child: Text('Finalizados')),
-                    ],
-                    onChanged: (val) => setState(() => _activoFiltro = val),
-                  ),
-                ),
-
-                // Origen
-                SizedBox(
-                  width: 150,
-                  child: DropdownButtonFormField<String?>(
-                    value: _origenFiltro,
-                    decoration: const InputDecoration(
-                      labelText: 'Origen',
-                      border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      filled: true,
-                      fillColor: Colors.white,
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('Todos')),
-                      DropdownMenuItem(value: 'MANUAL', child: Text('Manual')),
-                      DropdownMenuItem(value: 'GRUPAL', child: Text('Grupal')),
-                    ],
-                    onChanged: (val) => setState(() => _origenFiltro = val),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Botones de acción
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _aplicarFiltros,
-                  icon: const Icon(Icons.filter_alt, size: 18),
-                  label: const Text('Aplicar Filtros'),
-                ),
-                const SizedBox(width: 8),
-                if (_tieneFiltrosActivos())
-                  OutlinedButton.icon(
-                    onPressed: _limpiarFiltros,
-                    icon: const Icon(Icons.clear, size: 18),
-                    label: const Text('Limpiar'),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVistaTarjetas() {
-    return RefreshIndicator(
-      onRefresh: _cargarDatos,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _acuerdos.length,
-        itemBuilder: (context, index) {
-          try {
-            final acuerdo = _acuerdos[index];
-            return _buildTarjetaAcuerdo(acuerdo);
-          } catch (e, stack) {
-            AppDatabase.logLocalError(
-              scope: 'acuerdos_page.render_tarjeta',
-              error: e.toString(),
-              stackTrace: stack,
-              payload: {'index': index},
-            );
-            return Card(
-              child: ListTile(
-                leading: const Icon(Icons.warning, color: Colors.orange),
-                title: const Text('Error al mostrar acuerdo'),
-              ),
-            );
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildTarjetaAcuerdo(Map<String, dynamic> acuerdo) {
-    final id = acuerdo['id'] as int;
-    final nombre = acuerdo['nombre']?.toString() ?? 'Sin nombre';
-    final tipo = acuerdo['tipo']?.toString() ?? 'EGRESO';
-    final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
-    final activo = (acuerdo['activo'] as int?) == 1;
-    final origenGrupal = (acuerdo['origen_grupal'] as int?) == 1; // FASE 19
-    final unidadNombre = acuerdo['_unidad_nombre']?.toString() ?? 'Desconocida';
-    final entidadNombre = acuerdo['_entidad_nombre']?.toString();
-    final stats = acuerdo['_stats'] as Map<String, dynamic>?;
-
-    final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
-        ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
-        : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
-
-    final cuotasConfirmadas = stats?['cuotas_confirmadas'] as int? ?? 0;
-    final cuotasEsperadas = stats?['cuotas_esperadas'] as int? ?? 0;
-    final cuotasTotal = cuotasConfirmadas + cuotasEsperadas;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () async {
-          final resultado = await Navigator.push<bool>(
-            context,
-            MaterialPageRoute(
-              builder: (ctx) => DetalleAcuerdoPage(acuerdoId: id),
-            ),
-          );
-          if (resultado == true) {
-            _cargarDatos();
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    tipo == 'INGRESO'
-                        ? Icons.arrow_downward
-                        : Icons.arrow_upward,
-                    color: tipo == 'INGRESO' ? Colors.green : Colors.red,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      nombre,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ),
-                  if (origenGrupal) // FASE 19: Badge de origen grupal
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Chip(
-                        avatar: const Icon(Icons.group,
-                            size: 16, color: Colors.white),
-                        label: const Text('Grupal',
-                            style:
-                                TextStyle(fontSize: 11, color: Colors.white)),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        visualDensity: VisualDensity.compact,
-                        backgroundColor: Colors.blue,
-                      ),
-                    ),
-                  if (!activo)
-                    Chip(
-                      label: const Text('Finalizado',
-                          style: TextStyle(fontSize: 11)),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: Colors.grey.shade300,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Unidad de gestión y entidad
-              Row(
-                children: [
-                  Icon(Icons.business,
-                      size: 16, color: Theme.of(context).colorScheme.outline),
-                  const SizedBox(width: 4),
-                  Text(
-                    unidadNombre,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (entidadNombre != null) ...[
-                    const SizedBox(width: 16),
-                    Icon(Icons.person,
-                        size: 16, color: Theme.of(context).colorScheme.outline),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        entidadNombre,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Monto y modalidad
-              Row(
-                children: [
-                  Text(
-                    Format.money(montoDisplay),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: tipo == 'INGRESO' ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(width: 8),
-                  Chip(
-                    label: Text(
-                      _modalidadLabel(modalidad),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-
-              // Progreso de cuotas
-              if (cuotasTotal > 0) ...[
-                const SizedBox(height: 12),
-                LinearProgressIndicator(
-                  value: cuotasTotal > 0 ? cuotasConfirmadas / cuotasTotal : 0,
-                  backgroundColor: Colors.grey.shade300,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    tipo == 'INGRESO' ? Colors.green : Colors.blue,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$cuotasConfirmadas de $cuotasTotal cuotas confirmadas',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (activo)
-                    TextButton.icon(
-                      onPressed: () => _finalizarAcuerdo(id, nombre),
-                      icon: const Icon(Icons.stop, size: 18),
-                      label: const Text('Finalizar'),
-                    ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      final resultado = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (ctx) => DetalleAcuerdoPage(acuerdoId: id),
-                        ),
-                      );
-                      if (resultado == true) {
-                        _cargarDatos();
-                      }
-                    },
-                    icon: const Icon(Icons.info_outline, size: 18),
-                    label: const Text('Ver Detalle'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVistaTabla() {
-    return RefreshIndicator(
-      onRefresh: _cargarDatos,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          child: DataTable(
-            columns: const [
-              DataColumn(label: Text('Nombre')),
-              DataColumn(label: Text('Tipo')),
-              DataColumn(label: Text('Entidad')),
-              DataColumn(label: Text('Monto')),
-              DataColumn(label: Text('Modalidad')),
-              DataColumn(label: Text('Progreso')),
-              DataColumn(label: Text('Estado')),
-              DataColumn(label: Text('Acciones')),
-            ],
-            rows: _acuerdos.map((acuerdo) {
-              try {
-                return _buildFilaTabla(acuerdo);
-              } catch (e, stack) {
-                AppDatabase.logLocalError(
-                  scope: 'acuerdos_page.render_fila_tabla',
-                  error: e.toString(),
-                  stackTrace: stack,
-                  payload: {'acuerdo_id': acuerdo['id']},
-                );
-                return DataRow(cells: [
-                  DataCell(const Text('Error')),
-                  DataCell(Container()),
-                  DataCell(Container()),
-                  DataCell(Container()),
-                  DataCell(Container()),
-                  DataCell(Container()),
-                  DataCell(Container()),
-                  DataCell(Container()),
-                ]);
-              }
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  DataRow _buildFilaTabla(Map<String, dynamic> acuerdo) {
-    final id = acuerdo['id'] as int;
-    final nombre = acuerdo['nombre']?.toString() ?? 'Sin nombre';
-    final tipo = acuerdo['tipo']?.toString() ?? 'EGRESO';
-    final modalidad = acuerdo['modalidad']?.toString() ?? 'RECURRENTE';
-    final activo = (acuerdo['activo'] as int?) == 1;
-    final entidadNombre = acuerdo['_entidad_nombre']?.toString() ?? '-';
-    final stats = acuerdo['_stats'] as Map<String, dynamic>?;
-
-    final montoDisplay = modalidad == 'MONTO_TOTAL_CUOTAS'
-        ? (acuerdo['monto_total'] as num?)?.toDouble() ?? 0.0
-        : (acuerdo['monto_periodico'] as num?)?.toDouble() ?? 0.0;
-
-    final cuotasConfirmadas = stats?['cuotas_confirmadas'] as int? ?? 0;
-    final cuotasEsperadas = stats?['cuotas_esperadas'] as int? ?? 0;
-    final cuotasTotal = cuotasConfirmadas + cuotasEsperadas;
-
-    return DataRow(
-      cells: [
-        DataCell(
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
-            child: Text(nombre, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-        DataCell(
-          Icon(
-            tipo == 'INGRESO' ? Icons.arrow_downward : Icons.arrow_upward,
-            color: tipo == 'INGRESO' ? Colors.green : Colors.red,
-            size: 18,
-          ),
-        ),
-        DataCell(Text(entidadNombre)),
-        DataCell(Text(Format.money(montoDisplay))),
-        DataCell(Text(_modalidadLabel(modalidad))),
-        DataCell(Text('$cuotasConfirmadas / $cuotasTotal')),
-        DataCell(
-          Chip(
-            label: Text(activo ? 'Activo' : 'Finalizado',
-                style: const TextStyle(fontSize: 11)),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            visualDensity: VisualDensity.compact,
-            backgroundColor:
-                activo ? Colors.green.shade100 : Colors.grey.shade300,
-          ),
-        ),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.info_outline, size: 18),
-                tooltip: 'Ver detalle',
-                onPressed: () async {
-                  final resultado = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (ctx) => DetalleAcuerdoPage(acuerdoId: id),
-                    ),
-                  );
-                  if (resultado == true) {
-                    _cargarDatos();
-                  }
-                },
-              ),
-              if (activo)
-                IconButton(
-                  icon: const Icon(Icons.stop, size: 18),
-                  tooltip: 'Finalizar',
-                  onPressed: () => _finalizarAcuerdo(id, nombre),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   void _crearNuevoAcuerdo() async {
@@ -1026,6 +1327,23 @@ class _AcuerdosPageState extends State<AcuerdosPage> {
         return 'Recurrente';
       default:
         return modalidad;
+    }
+  }
+
+  String _frecuenciaLabel(String frecuencia) {
+    switch (frecuencia.toUpperCase()) {
+      case 'MENSUAL':
+        return 'Mensual';
+      case 'SEMANAL':
+        return 'Semanal';
+      case 'QUINCENAL':
+        return 'Quincenal';
+      case 'DIARIO':
+        return 'Diario';
+      case 'ANUAL':
+        return 'Anual';
+      default:
+        return frecuencia.isNotEmpty ? frecuencia : '—';
     }
   }
 }

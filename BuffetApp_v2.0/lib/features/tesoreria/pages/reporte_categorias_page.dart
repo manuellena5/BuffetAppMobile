@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
@@ -248,10 +248,9 @@ class _ReporteCategoriasPageState extends State<ReporteCategoriasPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Reporte por Categorías',
-      currentRouteName: '/reportes/categorias',
-      appBarColor: Colors.green,
+      currentRoute: '/reportes/categorias',
       actions: [
         IconButton(
           icon: const Icon(Icons.picture_as_pdf),

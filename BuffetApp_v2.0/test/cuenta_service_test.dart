@@ -31,7 +31,7 @@ void main() {
   setUp(() async {
     await AppDatabase.close();
     // Eliminar DB para empezar limpio en cada test
-    final dbFile = File(p.join(_tempDir, 'barcancha.db'));
+    final dbFile = File(p.join(_tempDir, 'cdm_gestion.db'));
     if (await dbFile.exists()) {
       await dbFile.delete();
     }

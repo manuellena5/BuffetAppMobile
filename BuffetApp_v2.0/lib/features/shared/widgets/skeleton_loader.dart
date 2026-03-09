@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Skeleton loader con efecto shimmer, sin dependencias externas.
 ///
 /// Uso básico:
@@ -80,10 +82,10 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
             return LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: const [
-                Color(0xFFE0E0E0),
-                Color(0xFFF5F5F5),
-                Color(0xFFE0E0E0),
+              colors: [
+                context.appColors.bgElevated,
+                context.appColors.bgOverlay,
+                context.appColors.bgElevated,
               ],
               stops: [
                 _animation.value - 0.3,
@@ -121,7 +123,7 @@ class SkeletonBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.grey.shade300,
+        color: context.appColors.border,
         borderRadius: BorderRadius.circular(borderRadius),
       ),
     );
@@ -140,7 +142,7 @@ class SkeletonCircle extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.grey.shade300,
+        color: context.appColors.border,
         shape: BoxShape.circle,
       ),
     );
@@ -241,7 +243,7 @@ class _SkeletonTable extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+              color: context.appColors.bgElevated,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
@@ -261,7 +263,7 @@ class _SkeletonTable extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                border: Border(bottom: BorderSide(color: context.appColors.border)),
               ),
               child: Row(
                 children: List.generate(columns, (_) {

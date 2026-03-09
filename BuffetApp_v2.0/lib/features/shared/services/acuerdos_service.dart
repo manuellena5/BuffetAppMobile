@@ -53,32 +53,54 @@ class AcuerdosService {
     bool origenGrupal = false,
     String? acuerdoGrupalRef,
     bool generaCompromisos = true,
+    bool esAdhesion = false,
+    String unidad = 'ARS',
+    int? subcategoriaId,
+    // Campos exclusivos de modalidad POR_EVENTO (v29+)
+    bool esPorEvento = false,
+    double? montoTitular,
+    double? montoSuplente,
+    double montoNoJugo = 0,
+    int partidosEsperadosMes = 4,
   }) async {
     try {
       // Validaciones previas
       if (!['INGRESO', 'EGRESO'].contains(tipo)) {
         throw ArgumentError('Tipo debe ser INGRESO o EGRESO');
       }
-      
-      if (!['MONTO_TOTAL_CUOTAS', 'RECURRENTE'].contains(modalidad)) {
-        throw ArgumentError('Modalidad debe ser MONTO_TOTAL_CUOTAS o RECURRENTE');
-      }
-      
-      if (modalidad == 'MONTO_TOTAL_CUOTAS') {
-        if (montoTotal == null || cuotas == null) {
-          throw ArgumentError('MONTO_TOTAL_CUOTAS requiere monto_total y cuotas');
+
+      // Acuerdos POR_EVENTO: se guardan con modalidad='RECURRENTE' + es_por_evento=1
+      // porque el CHECK de la DB no admite un tercer valor en modalidad (SQLite no
+      // permite ALTER TABLE para modificar CHECKs existentes).
+      if (esPorEvento) {
+        if (montoTitular == null || montoTitular <= 0) {
+          throw ArgumentError('Un acuerdo por partido requiere monto_titular > 0');
         }
-        if (montoTotal <= 0 || cuotas <= 0) {
-          throw ArgumentError('monto_total y cuotas deben ser mayores a 0');
+        if (montoSuplente == null || montoSuplente < 0) {
+          throw ArgumentError('Un acuerdo por partido requiere monto_suplente >= 0');
         }
-      }
-      
-      if (modalidad == 'RECURRENTE') {
-        if (montoPeriodico == null) {
-          throw ArgumentError('RECURRENTE requiere monto_periodico');
+        // Para POR_EVENTO no aplican validaciones de modalidad regular
+      } else {
+        if (!['MONTO_TOTAL_CUOTAS', 'RECURRENTE'].contains(modalidad)) {
+          throw ArgumentError('Modalidad debe ser MONTO_TOTAL_CUOTAS o RECURRENTE');
         }
-        if (montoPeriodico <= 0) {
-          throw ArgumentError('monto_periodico debe ser mayor a 0');
+
+        if (modalidad == 'MONTO_TOTAL_CUOTAS') {
+          if (montoTotal == null || cuotas == null) {
+            throw ArgumentError('MONTO_TOTAL_CUOTAS requiere monto_total y cuotas');
+          }
+          if (montoTotal <= 0 || cuotas <= 0) {
+            throw ArgumentError('monto_total y cuotas deben ser mayores a 0');
+          }
+        }
+
+        if (modalidad == 'RECURRENTE') {
+          if (montoPeriodico == null) {
+            throw ArgumentError('RECURRENTE requiere monto_periodico');
+          }
+          if (montoPeriodico <= 0) {
+            throw ArgumentError('monto_periodico debe ser mayor a 0');
+          }
         }
       }
       
@@ -126,15 +148,21 @@ class AcuerdosService {
       
       final now = DateTime.now().millisecondsSinceEpoch;
       
+      // Para POR_EVENTO: guardar como RECURRENTE en DB (check constraint),
+      // diferenciado por es_por_evento=1 y frecuencia='POR_EVENTO'.
+      final modalidadDb = esPorEvento ? 'RECURRENTE' : modalidad;
+      final frecuenciaDb = esPorEvento ? 'POR_EVENTO' : frecuencia;
+
       final id = await db.insert('acuerdos', {
         'unidad_gestion_id': unidadGestionId,
         'entidad_plantel_id': entidadPlantelId,
         'nombre': nombre,
         'tipo': tipo,
-        'modalidad': modalidad,
+        'modalidad': modalidadDb,
         'monto_total': montoTotal,
-        'monto_periodico': montoPeriodico,
-        'frecuencia': frecuencia,
+        // POR_EVENTO: usar monto_titular como monto_periodico para satisfacer el CHECK constraint
+        'monto_periodico': esPorEvento ? montoTitular : montoPeriodico,
+        'frecuencia': frecuenciaDb,
         'frecuencia_dias': frecuenciaDias,
         'cuotas': cuotas,
         'fecha_inicio': fechaInicio,
@@ -150,22 +178,31 @@ class AcuerdosService {
         'dispositivo_id': dispositivoId,
         'origen_grupal': origenGrupal ? 1 : 0,
         'acuerdo_grupal_ref': acuerdoGrupalRef,
+        'es_adhesion': esAdhesion ? 1 : 0,
+        'subcategoria_id': subcategoriaId,
+        'unidad': unidad,
         'version_actual': 1,
         'fecha_vigencia_desde': fechaInicio,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
         'created_ts': now,
         'updated_ts': now,
+        // Campos POR_EVENTO (v29+)
+        'es_por_evento': esPorEvento ? 1 : 0,
+        'monto_titular': esPorEvento ? montoTitular : null,
+        'monto_suplente': esPorEvento ? montoSuplente : null,
+        'monto_no_jugo': esPorEvento ? montoNoJugo : 0,
+        'partidos_esperados_mes': esPorEvento ? partidosEsperadosMes : null,
       });
       
       // Crear versión inicial en acuerdos_versiones
       await db.insert('acuerdos_versiones', {
         'acuerdo_id': id,
         'version': 1,
-        'modalidad': modalidad,
+        'modalidad': modalidadDb,
         'monto_total': montoTotal,
-        'monto_periodico': montoPeriodico,
-        'frecuencia': frecuencia,
+        'monto_periodico': esPorEvento ? montoTitular : montoPeriodico,
+        'frecuencia': frecuenciaDb,
         'frecuencia_dias': frecuenciaDias,
         'cuotas': cuotas,
         'fecha_vigencia_desde': fechaInicio,
@@ -315,6 +352,8 @@ class AcuerdosService {
     String? fechaFin,
     String? observaciones,
     String? motivoCambio, // Requerido si hay cambios que crean versión
+    String? categoria,
+    int? subcategoriaId,
     String? archivoLocalPath,
     String? archivoRemoteUrl,
     String? archivoNombre,
@@ -375,6 +414,8 @@ class AcuerdosService {
       final updates = <String, dynamic>{};
       
       if (nombre != null) updates['nombre'] = nombre;
+      if (categoria != null) updates['categoria'] = categoria;
+      if (subcategoriaId != null) updates['subcategoria_id'] = subcategoriaId;
       if (fechaFin != null) {
         // Validar fecha_fin >= fecha_inicio
         final fechaInicio = DateTime.parse(acuerdo.safeString('fecha_inicio'));
@@ -604,10 +645,12 @@ class AcuerdosService {
         throw ArgumentError('Acuerdo $id no existe');
       }
       
-      // Validar: contar compromisos confirmados asociados a este acuerdo
+      // Validar: contar compromisos que tienen cuotas confirmadas asociados a este acuerdo
       final compromisosConfirmados = await db.rawQuery(
-        'SELECT COUNT(*) as total FROM compromisos '
-        'WHERE acuerdo_id = ? AND estado = ? AND eliminado = 0',
+        'SELECT COUNT(DISTINCT cc.compromiso_id) as total '
+        'FROM compromiso_cuotas cc '
+        'JOIN compromisos c ON c.id = cc.compromiso_id '
+        'WHERE c.acuerdo_id = ? AND cc.estado = ? AND c.eliminado = 0',
         [id, 'CONFIRMADO'],
       );
       final totalConfirmados = (compromisosConfirmados.first['total'] as int?) ?? 0;
@@ -653,7 +696,7 @@ class AcuerdosService {
         whereArgs: [id],
       );
       
-      // También marcar como eliminados los compromisos ESPERADO asociados
+      // También marcar como eliminados los compromisos sin cuotas confirmadas asociados
       await db.update(
         'compromisos',
         {
@@ -661,8 +704,8 @@ class AcuerdosService {
           'updated_ts': DateTime.now().millisecondsSinceEpoch,
           'sync_estado': 'PENDIENTE',
         },
-        where: 'acuerdo_id = ? AND estado = ? AND eliminado = 0',
-        whereArgs: [id, 'ESPERADO'],
+        where: 'acuerdo_id = ? AND eliminado = 0',
+        whereArgs: [id],
       );
       
       return {
@@ -696,7 +739,13 @@ class AcuerdosService {
       if (acuerdo == null) {
         throw ArgumentError('Acuerdo $acuerdoId no existe');
       }
-      
+
+      // Acuerdos POR_EVENTO no generan cuotas predefinidas — los pagos se
+      // crean manualmente por cada partido real en evento_movimiento.
+      if ((acuerdo['es_por_evento'] as int? ?? 0) == 1) {
+        return [];
+      }
+
       final modalidad = acuerdo.safeString('modalidad');
       final fechaInicio = DateTime.parse(acuerdo.safeString('fecha_inicio'));
       final fechaFin = acuerdo.safeStringOrNull('fecha_fin') != null

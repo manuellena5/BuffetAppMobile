@@ -7,7 +7,7 @@ import '../services/categoria_import_export_service.dart';
 import 'categoria_movimiento_form_page.dart';
 import 'importar_categorias_page.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../layout/erp_layout.dart';
 import '../../../widgets/app_header.dart';
 import '../../shared/utils/category_icon_helper.dart';
@@ -117,7 +117,6 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
     
     return ErpLayout(
@@ -141,11 +140,6 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
       ),
       body: Column(
         children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Categorías',
-              subtitle: '${_categoriasFiltradas.length} categorías',
-            ),
           Expanded(
             child: ResponsiveContainer(
         maxWidth: 1000,
@@ -156,15 +150,9 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
             padding: const EdgeInsets.all(16),
             child: Container(
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A2E1F) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                color: context.appColors.bgSurface,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                boxShadow: AppShadows.cardFor(context),
               ),
               child: TextField(
                 onChanged: (value) {
@@ -173,14 +161,14 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                 },
                 decoration: InputDecoration(
                   hintText: 'Buscar por nombre o código',
-                  hintStyle: const TextStyle(color: Color(0xFF61896F)),
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF61896F)),
+                  hintStyle: TextStyle(color: context.appColors.textMuted),
+                  prefixIcon: Icon(Icons.search, color: context.appColors.textMuted),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: isDark ? const Color(0xFF1A2E1F) : Colors.white,
+                  fillColor: context.appColors.bgSurface,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
@@ -228,7 +216,8 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
 
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _filtroTipo == value;
-    
+    final cs = context.appColors;
+
     return InkWell(
       onTap: () {
         setState(() => _filtroTipo = value);
@@ -237,29 +226,17 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF2E7D32)
-              : Colors.white,
+          color: isSelected ? AppColors.accent : cs.bgSurface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected
-                ? const Color(0xFF2E7D32)
-                : const Color(0xFFE0E7E2),
+            color: isSelected ? AppColors.accent : cs.border,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF2E7D32).withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
+          boxShadow: isSelected ? AppShadows.glowFor(AppColors.accent) : null,
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
+            color: isSelected ? Colors.white : cs.textSecondary,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             fontSize: 14,
           ),
@@ -302,15 +279,15 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
             
             switch (tipo) {
               case 'INGRESO':
-                tipoColor = const Color(0xFF4CAF50);
+                tipoColor = AppColors.ingreso;
                 tipoText = 'Ingreso';
                 break;
               case 'EGRESO':
-                tipoColor = const Color(0xFFF44336);
+                tipoColor = AppColors.egreso;
                 tipoText = 'Egreso';
                 break;
               default:
-                tipoColor = const Color(0xFFFF9800);
+                tipoColor = AppColors.advertencia;
                 tipoText = 'Ambos';
             }
 
@@ -346,11 +323,28 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                   ),
                 ),
                 DataCell(
-                  Chip(
-                    label: Text(activa ? 'Activa' : 'Inactiva', style: const TextStyle(fontSize: 11)),
-                    backgroundColor: activa ? Colors.green.shade100 : Colors.grey.shade300,
-                    visualDensity: VisualDensity.compact,
-                  ),
+                  Builder(builder: (context) {
+                    final cs = context.appColors;
+                    return Chip(
+                      label: Text(
+                        activa ? 'Activa' : 'Inactiva',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: activa ? AppColors.ingreso : cs.textMuted,
+                        ),
+                      ),
+                      backgroundColor: activa
+                          ? AppColors.ingreso.withOpacity(0.12)
+                          : cs.bgElevated,
+                      side: BorderSide(
+                        color: activa
+                            ? AppColors.ingreso.withOpacity(0.4)
+                            : cs.border,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }),
                 ),
                 DataCell(
                   Row(
@@ -363,20 +357,23 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
                       ),
                       if (activa)
                         IconButton(
-                          icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                          icon: const Icon(Icons.delete, size: 18, color: AppColors.egreso),
                           tooltip: 'Eliminar',
                           onPressed: () => _eliminarCategoria(cat),
                         )
                       else
                         IconButton(
-                          icon: const Icon(Icons.restore, size: 18, color: Colors.green),
+                          icon: const Icon(Icons.restore, size: 18, color: AppColors.ingreso),
                           tooltip: 'Reactivar',
                           onPressed: () async {
                             await CategoriaMovimientoService.activarCategoria(cat['id'] as int);
                             _cargarCategorias();
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Categoría reactivada')),
+                                const SnackBar(
+                                  content: Text('Categoría reactivada'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
                               );
                             }
                           },
@@ -452,15 +449,19 @@ class _CategoriasMovimientoPageState extends State<CategoriasMovimientoPage> {
       _cargarCategorias();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Categoría eliminada correctamente')),
+          const SnackBar(
+            content: Text('Categoría eliminada correctamente'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Error al eliminar. Intente nuevamente.'),
+          const SnackBar(
+            content: Text('Error al eliminar. Intente nuevamente.'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }

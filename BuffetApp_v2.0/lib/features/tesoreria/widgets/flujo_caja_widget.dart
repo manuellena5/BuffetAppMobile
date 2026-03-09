@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/format.dart';
 import '../../../features/shared/services/compromisos_service.dart';
@@ -191,7 +192,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppColors.egreso),
             const SizedBox(height: 12),
             Text(_error!),
             const SizedBox(height: 12),
@@ -261,7 +262,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
           child: Center(
             child: Text(
               'Sin compromisos este mes',
-              style: TextStyle(color: Colors.grey.shade500),
+              style: TextStyle(color: AppColors.textMuted),
             ),
           ),
         ),
@@ -291,7 +292,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
           children: [
             Row(
               children: [
-                Icon(Icons.trending_up, color: Colors.teal.shade700),
+                Icon(Icons.trending_up, color: AppColors.accent),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -307,13 +308,13 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
             // Totales del mes
             Row(
               children: [
-                _buildTotalChip('Ingresos', totalIngMes, Colors.green),
+                _buildTotalChip('Ingresos', totalIngMes, AppColors.ingreso),
                 const SizedBox(width: 12),
-                _buildTotalChip('Egresos', totalEgrMes, Colors.red),
+                _buildTotalChip('Egresos', totalEgrMes, AppColors.egreso),
                 const SizedBox(width: 12),
                 _buildTotalChip(
                     'Neto', totalIngMes - totalEgrMes,
-                    totalIngMes >= totalEgrMes ? Colors.green : Colors.red),
+                    totalIngMes >= totalEgrMes ? AppColors.ingreso : AppColors.egreso),
               ],
             ),
             const SizedBox(height: 16),
@@ -333,11 +334,11 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: esSeleccionada
-                        ? Colors.teal.withValues(alpha: 0.08)
+                        ? AppColors.accent.withValues(alpha: 0.08)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     border: esSeleccionada
-                        ? Border.all(color: Colors.teal, width: 1.5)
+                        ? Border.all(color: AppColors.accent, width: 1.5)
                         : null,
                   ),
                   child: Column(
@@ -353,15 +354,15 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                               color: esSeleccionada
-                                  ? Colors.teal.shade800
-                                  : Colors.grey.shade800,
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
                             ),
                           ),
                           Text(
                             '${DateFormat('dd/MM').format(s.inicio)} - ${DateFormat('dd/MM').format(s.fin)}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.grey.shade600,
+                              color: AppColors.textMuted,
                             ),
                           ),
                           Text(
@@ -370,8 +371,8 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                               color: esSeleccionada
-                                  ? Colors.teal.shade800
-                                  : Colors.grey.shade800,
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
                             ),
                           ),
                         ],
@@ -391,7 +392,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                                       .round()
                                       .clamp(1, 100),
                                   child: Container(
-                                    color: Colors.green.shade400,
+                                    color: AppColors.ingresoLight,
                                   ),
                                 ),
                               if (s.totalEgresos > 0)
@@ -400,7 +401,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                                       .round()
                                       .clamp(1, 100),
                                   child: Container(
-                                    color: Colors.red.shade400,
+                                    color: AppColors.egresoLight,
                                   ),
                                 ),
                               // Relleno
@@ -411,7 +412,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                                           .round()
                                           .clamp(1, 100),
                                   child: Container(
-                                    color: Colors.grey.shade200,
+                                    color: AppColors.bgElevated,
                                   ),
                                 ),
                             ],
@@ -428,7 +429,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               width: 8,
                               height: 8,
                               decoration: BoxDecoration(
-                                color: Colors.green.shade400,
+                                color: AppColors.ingresoLight,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -437,7 +438,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               Format.moneyShort(s.totalIngresos),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.green.shade700,
+                                color: AppColors.ingreso,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -447,7 +448,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               width: 8,
                               height: 8,
                               decoration: BoxDecoration(
-                                color: Colors.red.shade400,
+                                color: AppColors.egresoLight,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -456,7 +457,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               Format.moneyShort(s.totalEgresos),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.red.shade700,
+                                color: AppColors.egreso,
                               ),
                             ),
                           ],
@@ -465,7 +466,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                             '${s.cuotas.length} compromiso${s.cuotas.length != 1 ? 's' : ''}',
                             style: TextStyle(
                               fontSize: 10,
-                              color: Colors.grey.shade600,
+                              color: AppColors.textMuted,
                             ),
                           ),
                         ],
@@ -551,7 +552,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
           children: [
             Row(
               children: [
-                Icon(Icons.view_week, color: Colors.teal.shade700),
+                Icon(Icons.view_week, color: AppColors.accent),
                 const SizedBox(width: 8),
                 Text(
                   'Semana ${semana.numero}: '
@@ -577,12 +578,12 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: esHoy
-                      ? Colors.teal.withValues(alpha: 0.06)
+                      ? AppColors.accent.withValues(alpha: 0.06)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   border: esHoy
-                      ? Border.all(color: Colors.teal, width: 1)
-                      : Border.all(color: Colors.grey.shade200),
+                      ? Border.all(color: AppColors.accent, width: 1)
+                      : Border.all(color: AppColors.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -595,8 +596,8 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                             color: esHoy
-                                ? Colors.teal.shade800
-                                : Colors.grey.shade800,
+                                ? AppColors.accent
+                                : AppColors.textSecondary,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -604,7 +605,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                           DateFormat('dd/MM').format(dia),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade500,
+                            color: AppColors.textMuted,
                           ),
                         ),
                         if (esHoy) ...[
@@ -615,7 +616,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.teal,
+                              color: AppColors.accent,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Text(
@@ -635,7 +636,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Colors.teal.shade700,
+                              color: AppColors.accent,
                             ),
                           ),
                       ],
@@ -647,7 +648,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
                         child: Text(
                           '—',
                           style: TextStyle(
-                            color: Colors.grey.shade400,
+                            color: AppColors.textMuted,
                             fontStyle: FontStyle.italic,
                           ),
                         ),
@@ -680,11 +681,11 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
     // Determinar color
     Color color;
     if (estado == 'CONFIRMADO') {
-      color = Colors.green;
+      color = AppColors.ingreso;
     } else if (fecha.compareTo(hoyStr) < 0) {
-      color = Colors.red;
+      color = AppColors.egreso;
     } else {
-      color = Colors.blue;
+      color = AppColors.info;
     }
 
     return InkWell(
@@ -725,7 +726,7 @@ class _FlujoCajaWidgetState extends State<FlujoCajaWidget> {
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
-                color: esIngreso ? Colors.green.shade700 : Colors.red.shade700,
+                color: esIngreso ? AppColors.ingreso : AppColors.egreso,
               ),
             ),
           ],

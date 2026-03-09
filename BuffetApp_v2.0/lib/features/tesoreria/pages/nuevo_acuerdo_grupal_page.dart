@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
 import '../../shared/utils/category_icon_helper.dart';
@@ -527,7 +528,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
   void _mostrarError(String msg) {
     setState(() => _errorMessage = msg);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      SnackBar(content: Text(msg), backgroundColor: AppColors.egreso),
     );
   }
 
@@ -551,7 +552,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         context: context,
         builder: (ctx) => AlertDialog(
           icon: Icon(Icons.warning_amber_rounded,
-              color: Colors.orange.shade700, size: 36),
+              color: AppColors.advertencia, size: 36),
           title: const Text('¿Desea salir?'),
           content: const Text(
             'Tiene datos ingresados en el formulario. '
@@ -563,7 +564,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
               child: const Text('Seguir editando'),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.egreso),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Salir y descartar'),
             ),
@@ -652,7 +653,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             _categoriasCache = null;
           }),
           icon: Icons.trending_down,
-          iconColor: Colors.red,
+          iconColor: AppColors.egreso,
           title: 'Egreso',
           subtitle: 'Sueldos, premios, viáticos, servicios',
         ),
@@ -666,7 +667,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             _categoriasCache = null;
           }),
           icon: Icons.trending_up,
-          iconColor: Colors.green,
+          iconColor: AppColors.ingreso,
           title: 'Ingreso',
           subtitle: 'Adhesiones, Sponsor, Colaboraciones',
         ),
@@ -706,13 +707,13 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
               return Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
+                  color: AppColors.advertenciaDim,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange),
+                  border: Border.all(color: AppColors.advertencia),
                 ),
                 child: const Text(
                   '⚠ No hay categorías configuradas para este tipo',
-                  style: TextStyle(color: Colors.orange),
+                  style: TextStyle(color: AppColors.advertencia),
                 ),
               );
             }
@@ -890,7 +891,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             final frecuencias = snap.data ?? [];
             if (frecuencias.isEmpty) {
               return const Text('No hay frecuencias disponibles',
-                  style: TextStyle(color: Colors.orange));
+                  style: TextStyle(color: AppColors.advertencia));
             }
             if (!frecuencias.any((f) => f['codigo'] == _frecuencia)) {
               WidgetsBinding.instance.addPostFrameCallback((_) => setState(
@@ -960,12 +961,12 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: seleccionados > 0
-                    ? Colors.green.shade50
-                    : Colors.grey.shade100,
+                    ? AppColors.ingresoDim
+                    : AppColors.bgElevated,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color:
-                      seleccionados > 0 ? Colors.green : Colors.grey.shade300,
+                      seleccionados > 0 ? AppColors.ingreso : AppColors.border,
                 ),
               ),
               child: Text(
@@ -973,8 +974,8 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: seleccionados > 0
-                      ? Colors.green.shade800
-                      : Colors.grey.shade600,
+                      ? AppColors.ingreso
+                      : AppColors.textMuted,
                   fontSize: 13,
                 ),
               ),
@@ -1069,10 +1070,10 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
               padding: const EdgeInsets.all(32),
               child: Column(
                 children: [
-                  Icon(Icons.person_off, size: 48, color: Colors.grey.shade400),
+                  Icon(Icons.person_off, size: 48, color: AppColors.textMuted),
                   const SizedBox(height: 8),
                   const Text('No se encontraron jugadores',
-                      style: TextStyle(color: Colors.grey)),
+                      style: TextStyle(color: AppColors.textMuted)),
                 ],
               ),
             ),
@@ -1098,12 +1099,12 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.shade50 : null,
+                      color: isSelected ? AppColors.infoDim : null,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected
-                            ? Colors.blue.shade300
-                            : Colors.grey.shade200,
+                            ? AppColors.info
+                            : AppColors.border,
                         width: isSelected ? 1.5 : 1,
                       ),
                     ),
@@ -1116,12 +1117,12 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                           height: 22,
                           decoration: BoxDecoration(
                             color:
-                                isSelected ? Colors.blue : Colors.transparent,
+                                isSelected ? AppColors.info : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: isSelected
-                                  ? Colors.blue
-                                  : Colors.grey.shade400,
+                                  ? AppColors.info
+                                  : AppColors.textMuted,
                               width: isSelected ? 0 : 2,
                             ),
                           ),
@@ -1157,7 +1158,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                                   ].join(' · '),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey.shade600,
+                                    color: AppColors.textMuted,
                                   ),
                                 ),
                             ],
@@ -1281,7 +1282,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                 label: 'Acuerdos',
                 value: '${_preview!.cantidadAcuerdos}',
                 icon: Icons.handshake_outlined,
-                color: Colors.blue,
+                color: AppColors.info,
               ),
             ),
             const SizedBox(width: 8),
@@ -1292,7 +1293,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                     ? '${_preview!.totalCompromisos}'
                     : 'Indef.',
                 icon: Icons.receipt_long,
-                color: Colors.purple,
+                color: AppColors.accentDim,
               ),
             ),
             const SizedBox(width: 8),
@@ -1301,7 +1302,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                 label: 'Total',
                 value: Format.money(_preview!.totalComprometido),
                 icon: Icons.attach_money,
-                color: Colors.green,
+                color: AppColors.ingreso,
               ),
             ),
           ],
@@ -1314,9 +1315,9 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.shade50,
+              color: AppColors.advertenciaDim,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.orange.shade200),
+              border: Border.all(color: AppColors.advertencia),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1324,13 +1325,13 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                 Row(
                   children: [
                     Icon(Icons.warning_amber,
-                        size: 18, color: Colors.orange.shade700),
+                        size: 18, color: AppColors.advertencia),
                     const SizedBox(width: 6),
                     Text(
                       'Advertencias',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.orange.shade800,
+                        color: AppColors.advertencia,
                       ),
                     ),
                   ],
@@ -1343,7 +1344,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                     child: Text(
                       '${jugador?.nombre ?? '#${entry.key}'}: ${entry.value.join(', ')}',
                       style: TextStyle(
-                          fontSize: 12, color: Colors.orange.shade900),
+                          fontSize: 12, color: AppColors.advertencia),
                     ),
                   );
                 }),
@@ -1357,36 +1358,36 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         const _SectionLabel('Detalle por jugador'),
         const SizedBox(height: 8),
         ...(_preview!.previewsIndividuales.map((p) {
-          return Card(
+          return Container(
             margin: const EdgeInsets.only(bottom: 4),
+            decoration: AppDecorations.cardOf(context),
             child: ListTile(
               dense: true,
               leading: CircleAvatar(
                 radius: 18,
-                backgroundColor: Colors.blue.shade100,
+                backgroundColor: AppColors.infoDim,
                 child: Text(
                   p.jugadorNombre.isNotEmpty
                       ? p.jugadorNombre[0].toUpperCase()
                       : '?',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
+                    color: AppColors.info,
                   ),
                 ),
               ),
               title: Text(p.jugadorNombre,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 14)),
+                  style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w500)),
               subtitle: Text(
                 '${p.compromisosEstimados >= 0 ? '${p.compromisosEstimados} cuotas' : 'Indefinido'} · ${Format.money(p.montoAjustado)}',
-                style: const TextStyle(fontSize: 12),
+                style: AppText.caption,
               ),
               trailing: p.compromisosEstimados > 0
                   ? Text(
                       Format.money(p.montoAjustado * p.compromisosEstimados),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.green.shade700,
+                        color: AppColors.ingreso,
                         fontSize: 13,
                       ),
                     )
@@ -1411,34 +1412,35 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: AppColors.ingresoDim,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.green.shade200),
+            border: Border.all(color: AppColors.ingresoLight),
           ),
           child: Column(
             children: [
               Icon(Icons.check_circle_outline,
-                  size: 48, color: Colors.green.shade600),
+                  size: 48, color: AppColors.ingreso),
               const SizedBox(height: 12),
               const Text(
                 'Todo listo para crear los acuerdos',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
                 'Se crearán ${_preview?.cantidadAcuerdos ?? _jugadoresSeleccionados.length} acuerdos individuales',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
               if (_generaCompromisos && _preview != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   'Se generarán ${_preview!.totalCompromisos} compromisos automáticamente',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 4),
@@ -1447,7 +1449,7 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green.shade800,
+                    color: AppColors.ingreso,
                   ),
                 ),
               ],
@@ -1457,13 +1459,15 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         const SizedBox(height: 20),
         Container(
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: AppColors.border),
             borderRadius: BorderRadius.circular(10),
           ),
           child: SwitchListTile(
-            title: const Text('Generar compromisos automáticamente'),
+            title: const Text('Generar compromisos automáticamente',
+                style: TextStyle(color: AppColors.textPrimary)),
             subtitle: const Text(
-                'Si se desactiva, deberá crearlos manualmente después'),
+                'Si se desactiva, deberá crearlos manualmente después',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
             value: _generaCompromisos,
             onChanged: (v) => setState(() => _generaCompromisos = v),
             shape:
@@ -1474,19 +1478,19 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.blue.shade50,
+            color: AppColors.infoDim,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+              Icon(Icons.info_outline, size: 18, color: AppColors.info),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Al confirmar se creará un registro histórico que agrupa todos los acuerdos. '
                   'Cada acuerdo individual se podrá gestionar de forma independiente.',
-                  style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
+                  style: TextStyle(fontSize: 13, color: AppColors.info),
                 ),
               ),
             ],
@@ -1506,18 +1510,18 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: AppColors.egresoDim,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.shade200),
+        border: Border.all(color: AppColors.egresoLight),
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+          Icon(Icons.error_outline, color: AppColors.egreso, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+              style: TextStyle(color: AppColors.egreso, fontSize: 13),
             ),
           ),
         ],
@@ -1532,12 +1536,12 @@ class _NuevoAcuerdoGrupalPageState extends State<NuevoAcuerdoGrupalPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+            Icon(Icons.error_outline, size: 48, color: AppColors.egresoLight),
             const SizedBox(height: 16),
             Text(
               message ?? _errorMessage ?? 'Ocurrió un error',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.red.shade700),
+              style: TextStyle(color: AppColors.egreso),
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
@@ -1639,9 +1643,9 @@ class _SummaryCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: AppColors.bgElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: items
@@ -1649,13 +1653,13 @@ class _SummaryCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      Icon(item.icon, size: 18, color: Colors.grey.shade600),
+                      Icon(item.icon, size: 18, color: AppColors.textMuted),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           item.label,
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: AppColors.textMuted,
                             fontSize: 13,
                           ),
                         ),
@@ -1725,7 +1729,7 @@ class _KpiCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),
         ],
       ),

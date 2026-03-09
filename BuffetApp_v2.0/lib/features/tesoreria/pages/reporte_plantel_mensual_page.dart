@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:open_filex/open_filex.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/services/plantel_service.dart';
 import '../../shared/services/export_service.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/widgets/progress_dialog.dart';
@@ -143,7 +144,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error al cargar datos. Por favor, intente nuevamente.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -211,7 +212,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                Icon(Icons.check_circle, color: AppColors.ingreso, size: 32),
                 SizedBox(width: 12),
                 Text('Excel Generado'),
               ],
@@ -267,7 +268,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Error al exportar. Intente nuevamente.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -289,10 +290,9 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Reporte Mensual de Plantel',
-      currentRouteName: '/reportes/plantel_mensual',
-      appBarColor: Colors.blue,
+      currentRoute: '/reportes/plantel_mensual',
       actions: [
         if (_entidadesConEstado.isNotEmpty)
           IconButton(
@@ -327,23 +327,25 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
       ],
       body: ResponsiveContainer(
         maxWidth: 1400,
-        child: RefreshIndicator(
-          onRefresh: _cargarDatos,
-          child: _cargando
-              ? SkeletonLoader.table(rows: 5, columns: 4)
-              : SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: Column(
-                    children: [
-                      _buildCarruselMes(),
-                      _buildResumenGeneral(),
-                      const Divider(),
-                      _entidadesConEstado.isEmpty
-                          ? _buildEmpty()
-                          : _buildTabla(),
-                    ],
-                  ),
-                ),
+        child: Column(
+          children: [
+            _buildCarruselMes(),
+            _buildResumenGeneral(),
+            const Divider(height: 1),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _cargarDatos,
+                child: _cargando
+                    ? SkeletonLoader.table(rows: 5, columns: 4)
+                    : SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: _entidadesConEstado.isEmpty
+                            ? _buildEmpty()
+                            : _buildTabla(),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: _entidadesConEstado.isNotEmpty
@@ -351,7 +353,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
               onPressed: _exportarExcel,
               icon: const Icon(Icons.table_chart),
               label: const Text('Exportar Excel'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.ingreso,
             )
           : null,
     );
@@ -360,7 +362,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
   Widget _buildCarruselMes() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      color: Colors.blue.shade50,
+      color: context.appColors.bgElevated,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -371,9 +373,10 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
           ),
           Text(
             '${_nombreMes(_mesActual)} $_anioActual',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           IconButton(
@@ -389,17 +392,17 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
   Widget _buildResumenGeneral() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Colors.grey.shade100,
+      color: context.appColors.bgSurface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.summarize, color: Colors.blue, size: 20),
+              Icon(Icons.summarize, color: AppColors.info, size: 20),
               SizedBox(width: 6),
               Text(
                 'Resumen General',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
               ),
             ],
           ),
@@ -411,7 +414,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   'Comprometido',
                   Format.money(_totalIngresosEsperados),
                   Icons.account_balance_wallet,
-                  Colors.blue,
+                  AppColors.info,
                 ),
               ),
               const SizedBox(width: 6),
@@ -420,7 +423,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   'Pagado',
                   Format.money(_totalPagado),
                   Icons.check_circle,
-                  Colors.green,
+                  AppColors.ingreso,
                 ),
               ),
               const SizedBox(width: 6),
@@ -429,7 +432,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   'Pendiente',
                   Format.money(_totalPendiente),
                   Icons.pending,
-                  Colors.orange,
+                  AppColors.advertencia,
                 ),
               ),
             ],
@@ -442,7 +445,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   'Entidades',
                   '${_entidadesConEstado.length}',
                   Icons.people,
-                  Colors.purple,
+                  AppColors.accent,
                 ),
               ),
               const SizedBox(width: 6),
@@ -451,7 +454,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   'Mov. (↓)',
                   Format.money(_totalMovimientosAsociadosIngresos),
                   Icons.arrow_downward,
-                  Colors.green,
+                  AppColors.ingreso,
                 ),
               ),
               const SizedBox(width: 6),
@@ -460,7 +463,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                   'Mov. (↑)',
                   Format.money(_totalMovimientosAsociadosEgresos),
                   Icons.arrow_upward,
-                  Colors.red,
+                  AppColors.egreso,
                 ),
               ),
             ],
@@ -471,39 +474,37 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
   }
 
   Widget _buildKpiCard(String label, String valor, IconData icono, Color color) {
-    return Card(
-      elevation: 1,
+    return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icono, size: 14, color: color),
-                const SizedBox(width: 3),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: AppDecorations.cardOf(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icono, size: 14, color: color),
+              const SizedBox(width: 3),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              valor,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: color,
               ),
-              overflow: TextOverflow.ellipsis,
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            valor,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
-          ],
-        ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -521,16 +522,16 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.all(8),
       child: DataTable(
-        headingRowColor: MaterialStateProperty.all(Colors.blue.shade100),
-        columns: const [
-          DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Total Mensual', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Pagado', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Pendiente', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Montos Asociados', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
+        headingRowColor: WidgetStateProperty.all(context.appColors.bgElevated),
+        columns: [
+          DataColumn(label: Text('Nombre', style: AppText.label)),
+          DataColumn(label: Text('Rol', style: AppText.label)),
+          DataColumn(label: Text('Total Mensual', style: AppText.label)),
+          DataColumn(label: Text('Pagado', style: AppText.label)),
+          DataColumn(label: Text('Pendiente', style: AppText.label)),
+          DataColumn(label: Text('Montos Asociados', style: AppText.label)),
+          DataColumn(label: Text('Total', style: AppText.label)),
+          DataColumn(label: Text('Acciones', style: AppText.label)),
         ],
         rows: _entidadesConEstado.map((entidad) {
           final id = entidad['id'] as int;
@@ -553,7 +554,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                 Text(
                   Format.money(pagado),
                   style: TextStyle(
-                    color: pagado > 0 ? Colors.green.shade700 : Colors.grey.shade600,
+                    color: pagado > 0 ? AppColors.ingreso : AppColors.textMuted,
                     fontWeight: pagado > 0 ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
@@ -562,7 +563,7 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                 Text(
                   Format.money(esperado),
                   style: TextStyle(
-                    color: esperado > 0 ? Colors.orange.shade700 : Colors.grey.shade600,
+                    color: esperado > 0 ? AppColors.advertencia : AppColors.textMuted,
                     fontWeight: esperado > 0 ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
@@ -575,12 +576,12 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                     if (movIngresos > 0)
                       Text(
                         '↓ ${Format.money(movIngresos)}',
-                        style: const TextStyle(color: Colors.green, fontSize: 11),
+                        style: const TextStyle(color: AppColors.ingreso, fontSize: 11),
                       ),
                     if (movEgresos > 0)
                       Text(
                         '↑ ${Format.money(movEgresos)}',
-                        style: const TextStyle(color: Colors.red, fontSize: 11),
+                        style: const TextStyle(color: AppColors.egreso, fontSize: 11),
                       ),
                     if (movNeto != 0)
                       Text(
@@ -588,13 +589,13 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
-                          color: movNeto > 0 ? Colors.green.shade700 : Colors.red.shade700,
+                          color: movNeto > 0 ? AppColors.ingreso : AppColors.egreso,
                         ),
                       ),
                     if (movIngresos == 0 && movEgresos == 0)
                       Text(
                         '-',
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: TextStyle(color: AppColors.textMuted),
                       ),
                   ],
                 ),
@@ -602,16 +603,18 @@ class _ReportePlantelMensualPageState extends State<ReportePlantelMensualPage> {
               DataCell(
                 Text(
                   Format.money(total),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: AppText.monoBold.copyWith(color: AppColors.textPrimary),
                 ),
               ),
               DataCell(
-                ElevatedButton.icon(
+                OutlinedButton.icon(
                   onPressed: () => _verDetalle(id),
                   icon: const Icon(Icons.visibility, size: 16),
                   label: const Text('Ver Detalle', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
+                  style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    foregroundColor: AppColors.accent,
+                    side: const BorderSide(color: AppColors.accent),
                   ),
                 ),
               ),

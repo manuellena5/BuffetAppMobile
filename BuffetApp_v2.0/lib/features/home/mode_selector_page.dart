@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../shared/state/app_mode.dart';
 import '../tesoreria/pages/tesoreria_home_page.dart';
 import 'home_page.dart';
@@ -103,7 +104,7 @@ class _ModeSelectorPageState extends State<ModeSelectorPage> {
                   title: 'Buffet',
                   subtitle: 'Ventas y caja del partido',
                   description: 'Gestiona el buffet durante eventos deportivos',
-                  color: Colors.blue,
+                  color: AppColors.info,
                   onTap: () => _selectMode(context, AppMode.buffet),
                 ),
                 
@@ -115,7 +116,7 @@ class _ModeSelectorPageState extends State<ModeSelectorPage> {
                   title: 'Tesorería',
                   subtitle: 'Movimientos financieros',
                   description: 'Registra ingresos y egresos de la subcomisión',
-                  color: Colors.green,
+                  color: AppColors.ingreso,
                   onTap: () => _selectMode(context, AppMode.tesoreria),
                 ),
                 

@@ -7,13 +7,13 @@
 
 import 'dart:io';
 
-import 'package:buffet_app/data/dao/db.dart';
-import 'package:buffet_app/features/buffet/services/caja_service.dart';
-import 'package:buffet_app/features/eventos/pages/eventos_page.dart';
-import 'package:buffet_app/features/home/home_page.dart';
-import 'package:buffet_app/features/shared/state/app_settings.dart';
-import 'package:buffet_app/features/buffet/state/cart_model.dart';
-import 'package:buffet_app/core/theme/app_theme.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
+import 'package:cdm_gestion/features/buffet/services/caja_service.dart';
+import 'package:cdm_gestion/features/eventos/pages/eventos_page.dart';
+import 'package:cdm_gestion/features/home/home_page.dart';
+import 'package:cdm_gestion/features/shared/state/app_settings.dart';
+import 'package:cdm_gestion/features/buffet/state/cart_model.dart';
+import 'package:cdm_gestion/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,7 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:buffet_app/main.dart';
+import 'package:cdm_gestion/main.dart';
 
 class _FakeCajaService extends CajaService {
   _FakeCajaService({this.cajaAbierta});
@@ -104,6 +104,7 @@ Widget _wrapHome({required AppSettings settings, CajaService? cajaService}) {
       ChangeNotifierProvider.value(value: settings),
     ],
     child: MaterialApp(
+      theme: AppTheme.dark,
       home: HomePage(
         enableUsbPolling: false,
         cajaServiceOverride: cajaService,

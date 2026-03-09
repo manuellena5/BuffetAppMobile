@@ -180,17 +180,6 @@ class CajaService {
       String? observacion,
       int? entradas}) async {
     try {
-      // Asegurar columna de efectivo declarado si la DB venía de una versión previa
-      await AppDatabase.ensureCajaDiariaColumn(
-          'conteo_efectivo_final', 'conteo_efectivo_final REAL');
-      // Transferencias declaradas al cierre
-      await AppDatabase.ensureCajaDiariaColumn(
-          'conteo_transferencias_final', 'conteo_transferencias_final REAL');
-      // Asegurar columnas de movimientos (para instalaciones viejas)
-      await AppDatabase.ensureCajaDiariaColumn(
-          'ingresos', 'ingresos REAL DEFAULT 0');
-      await AppDatabase.ensureCajaDiariaColumn(
-          'retiros', 'retiros REAL DEFAULT 0');
       final db = await AppDatabase.instance();
       final now = DateTime.now();
       final hora =
@@ -411,12 +400,6 @@ class CajaService {
       {bool incluirOcultas = false}) async {
     try {
       final db = await AppDatabase.instance();
-      // Asegurar columna visible si fuese una BD antigua
-      await AppDatabase.ensureCajaDiariaColumn(
-          'visible', 'visible INTEGER NOT NULL DEFAULT 1');
-      // Asegurar columna sync_estado para KPIs de Eventos
-      await AppDatabase.ensureCajaDiariaColumn(
-          'sync_estado', 'sync_estado TEXT DEFAULT "PENDIENTE"');
       final r = await db.query(
         'caja_diaria',
         columns: [
@@ -446,10 +429,6 @@ class CajaService {
       {required String fecha, required String disciplina}) async {
     try {
       final db = await AppDatabase.instance();
-      await AppDatabase.ensureCajaDiariaColumn(
-          'visible', 'visible INTEGER NOT NULL DEFAULT 1');
-      await AppDatabase.ensureCajaDiariaColumn(
-          'sync_estado', 'sync_estado TEXT DEFAULT "PENDIENTE"');
       final r = await db.query(
         'caja_diaria',
         where: 'fecha=? AND disciplina=? AND COALESCE(visible,1)=1',
@@ -545,8 +524,6 @@ class CajaService {
   Future<Map<String, dynamic>?> getCajaById(int id) async {
     try {
       final db = await AppDatabase.instance();
-      await AppDatabase.ensureCajaDiariaColumn(
-          'visible', 'visible INTEGER NOT NULL DEFAULT 1');
       final r = await db.query('caja_diaria',
           where: 'id=?', whereArgs: [id], limit: 1);
       return r.isNotEmpty ? r.first : null;
@@ -560,8 +537,6 @@ class CajaService {
   Future<void> setCajaVisible(int id, bool visible) async {
     try {
       final db = await AppDatabase.instance();
-      await AppDatabase.ensureCajaDiariaColumn(
-          'visible', 'visible INTEGER NOT NULL DEFAULT 1');
       await db.update(
           'caja_diaria',
           {

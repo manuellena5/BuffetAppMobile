@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Diálogo reutilizable para mostrar el resultado de una transacción.
 ///
 /// Sigue el patrón de las instrucciones del proyecto:
@@ -155,6 +157,7 @@ class _TransactionResultContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = context.appColors;
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -166,7 +169,7 @@ class _TransactionResultContent extends StatelessWidget {
           children: [
             const SizedBox(height: 8),
             // Icono grande
-            _buildIcon(),
+            _buildIcon(c),
             const SizedBox(height: 16),
 
             // Título
@@ -184,7 +187,7 @@ class _TransactionResultContent extends StatelessWidget {
               Text(
                 message!,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade700,
+                  color: c.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -193,13 +196,13 @@ class _TransactionResultContent extends StatelessWidget {
             // Detalles
             if (details != null && details!.isNotEmpty) ...[
               const SizedBox(height: 16),
-              _buildDetailsCard(theme),
+              _buildDetailsCard(theme, c),
             ],
 
             // Advertencias
             if (warnings != null && warnings!.isNotEmpty) ...[
               const SizedBox(height: 12),
-              _buildWarnings(theme),
+              _buildWarnings(theme, c),
             ],
 
             const SizedBox(height: 8),
@@ -222,7 +225,7 @@ class _TransactionResultContent extends StatelessWidget {
     );
   }
 
-  Widget _buildIcon() {
+  Widget _buildIcon(AppColorScheme c) {
     IconData iconData;
     Color color;
     Color bgColor;
@@ -230,18 +233,18 @@ class _TransactionResultContent extends StatelessWidget {
     switch (type) {
       case _ResultType.success:
         iconData = Icons.check_circle_outline;
-        color = Colors.green;
-        bgColor = Colors.green.shade50;
+        color = AppColors.ingreso;
+        bgColor = c.ingresoDim;
         break;
       case _ResultType.error:
         iconData = Icons.error_outline;
-        color = Colors.red;
-        bgColor = Colors.red.shade50;
+        color = AppColors.egreso;
+        bgColor = c.egresoDim;
         break;
       case _ResultType.warning:
         iconData = Icons.warning_amber_outlined;
-        color = Colors.orange;
-        bgColor = Colors.orange.shade50;
+        color = AppColors.advertencia;
+        bgColor = c.advertenciaDim;
         break;
     }
 
@@ -259,30 +262,30 @@ class _TransactionResultContent extends StatelessWidget {
   Color get _buttonColor {
     switch (type) {
       case _ResultType.success:
-        return Colors.green;
+        return AppColors.ingreso;
       case _ResultType.error:
-        return Colors.red;
+        return AppColors.egreso;
       case _ResultType.warning:
-        return Colors.orange;
+        return AppColors.advertencia;
     }
   }
 
-  Widget _buildDetailsCard(ThemeData theme) {
+  Widget _buildDetailsCard(ThemeData theme, AppColorScheme c) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: c.bgElevated,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: c.border),
       ),
       child: Column(
-        children: details!.map((d) => _buildDetailRow(d, theme)).toList(),
+        children: details!.map((d) => _buildDetailRow(d, theme, c)).toList(),
       ),
     );
   }
 
-  Widget _buildDetailRow(TransactionDetail detail, ThemeData theme) {
+  Widget _buildDetailRow(TransactionDetail detail, ThemeData theme, AppColorScheme c) {
     Color valueColor;
     FontWeight valueWeight;
 
@@ -296,15 +299,15 @@ class _TransactionResultContent extends StatelessWidget {
         valueWeight = FontWeight.bold;
         break;
       case TransactionDetailStyle.success:
-        valueColor = Colors.green.shade700;
+        valueColor = AppColors.ingreso;
         valueWeight = FontWeight.bold;
         break;
       case TransactionDetailStyle.error:
-        valueColor = Colors.red.shade700;
+        valueColor = AppColors.egreso;
         valueWeight = FontWeight.w500;
         break;
       case TransactionDetailStyle.muted:
-        valueColor = Colors.grey;
+        valueColor = c.textMuted;
         valueWeight = FontWeight.normal;
         break;
     }
@@ -320,7 +323,7 @@ class _TransactionResultContent extends StatelessWidget {
               detail.label,
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.grey.shade600,
+                color: c.textMuted,
               ),
             ),
           ),
@@ -341,27 +344,27 @@ class _TransactionResultContent extends StatelessWidget {
     );
   }
 
-  Widget _buildWarnings(ThemeData theme) {
+  Widget _buildWarnings(ThemeData theme, AppColorScheme c) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: c.advertenciaDim,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: AppColors.advertenciaLight),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 18),
+              Icon(Icons.warning_amber, color: AppColors.advertencia, size: 18),
               const SizedBox(width: 6),
               Text(
                 'Advertencias',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade800,
+                  color: AppColors.advertencia,
                   fontSize: 13,
                 ),
               ),
@@ -372,7 +375,7 @@ class _TransactionResultContent extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               '• ${w.message}',
-              style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+              style: TextStyle(fontSize: 12, color: AppColors.advertencia),
             ),
           )),
         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../services/categoria_movimiento_service.dart';
 import '../services/categoria_iconos.dart';
 import '../../shared/utils/category_icon_helper.dart';
@@ -92,7 +93,7 @@ class _CategoriaMovimientoFormPageState
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.egreso),
                 child: const Text('Continuar'),
               ),
             ],
@@ -155,12 +156,11 @@ class _CategoriaMovimientoFormPageState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    final c = context.appColors;
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF111813) : Colors.white,
+      backgroundColor: c.bgBase,
       appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF111813) : Colors.white,
+        backgroundColor: c.bgBase,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios),
@@ -175,9 +175,7 @@ class _CategoriaMovimientoFormPageState
           preferredSize: const Size.fromHeight(1),
           child: Container(
             height: 1,
-            color: isDark
-                ? Colors.white.withOpacity(0.1)
-                : const Color(0xFFF0F4F2),
+            color: c.border,
           ),
         ),
       ),
@@ -190,14 +188,14 @@ class _CategoriaMovimientoFormPageState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Sección: Información General
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                 child: Text(
                   'INFORMACIÓN GENERAL',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF61896F),
+                    color: c.textMuted,
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -221,23 +219,21 @@ class _CategoriaMovimientoFormPageState
                       controller: _nombreController,
                       decoration: InputDecoration(
                         hintText: 'Ej. Cuotas Sociales',
-                        hintStyle: const TextStyle(color: Color(0xFF61896F)),
+                        hintStyle: TextStyle(color: c.textMuted),
                         filled: true,
-                        fillColor: isDark
-                            ? const Color(0xFF1A2E20)
-                            : const Color(0xFFFAFAFA),
+                        fillColor: c.bgElevated,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                           borderSide:
-                              const BorderSide(color: Color(0xFF2E7D32), width: 2),
+                              const BorderSide(color: AppColors.accent, width: 2),
                         ),
                       ),
                       validator: (v) =>
@@ -267,23 +263,21 @@ class _CategoriaMovimientoFormPageState
                       maxLength: 10,
                       decoration: InputDecoration(
                         hintText: 'Ej. CUOT',
-                        hintStyle: const TextStyle(color: Color(0xFF61896F)),
+                        hintStyle: TextStyle(color: c.textMuted),
                         filled: true,
-                        fillColor: isDark
-                            ? const Color(0xFF1A2E20)
-                            : const Color(0xFFFAFAFA),
+                        fillColor: c.bgElevated,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                           borderSide:
-                              const BorderSide(color: Color(0xFF2E7D32), width: 2),
+                              const BorderSide(color: AppColors.accent, width: 2),
                         ),
                       ),
                       onChanged: (_) {
@@ -318,23 +312,21 @@ class _CategoriaMovimientoFormPageState
                       maxLines: 3,
                       decoration: InputDecoration(
                         hintText: 'Descripción de qué movimientos van en esta categoría (opcional)',
-                        hintStyle: const TextStyle(color: Color(0xFF61896F)),
+                        hintStyle: TextStyle(color: c.textMuted),
                         filled: true,
-                        fillColor: isDark
-                            ? const Color(0xFF1A2E20)
-                            : const Color(0xFFFAFAFA),
+                        fillColor: c.bgElevated,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                           borderSide:
-                              const BorderSide(color: Color(0xFF2E7D32), width: 2),
+                              const BorderSide(color: AppColors.accent, width: 2),
                         ),
                       ),
                     ),
@@ -360,10 +352,8 @@ class _CategoriaMovimientoFormPageState
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF1A2E20)
-                        : const Color(0xFFF0F4F2),
-                    borderRadius: BorderRadius.circular(12),
+                    color: c.bgElevated,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   ),
                   child: Row(
                     children: [
@@ -378,14 +368,14 @@ class _CategoriaMovimientoFormPageState
               ),
 
               // Sección: Icono
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                 child: Text(
                   'ICONO',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF61896F),
+                    color: c.textMuted,
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -398,20 +388,18 @@ class _CategoriaMovimientoFormPageState
                   decoration: InputDecoration(
                     labelText: 'Seleccionar Icono',
                     filled: true,
-                    fillColor: isDark
-                        ? const Color(0xFF1A2E20)
-                        : const Color(0xFFFAFAFA),
+                    fillColor: c.bgElevated,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      borderSide: BorderSide(color: c.border),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFDBE6DF)),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      borderSide: BorderSide(color: c.border),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF2E7D32), width: 2),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      borderSide: const BorderSide(color: AppColors.accent, width: 2),
                     ),
                   ),
                   items: CategoriaIconos.iconos.map((icono) {
@@ -421,7 +409,7 @@ class _CategoriaMovimientoFormPageState
                       value: code,
                       child: Row(
                         children: [
-                          Icon(CategoryIconHelper.fromName(code), size: 20, color: const Color(0xFF2E7D32)),
+                          Icon(CategoryIconHelper.fromName(code), size: 20, color: AppColors.accent),
                           const SizedBox(width: 12),
                           Text(label),
                         ],
@@ -431,11 +419,11 @@ class _CategoriaMovimientoFormPageState
                   onChanged: (value) {
                     setState(() => _iconoSeleccionado = value);
                   },
-                  hint: const Row(
+                  hint: Row(
                     children: [
-                      Icon(Icons.category, size: 20, color: Color(0xFF61896F)),
-                      SizedBox(width: 12),
-                      Text('Seleccionar icono'),
+                      Icon(Icons.category, size: 20, color: c.textMuted),
+                      const SizedBox(width: 12),
+                      const Text('Seleccionar icono'),
                     ],
                   ),
                   selectedItemBuilder: (context) {
@@ -444,7 +432,7 @@ class _CategoriaMovimientoFormPageState
                       final label = icono['label']!;
                       return Row(
                         children: [
-                          Icon(CategoryIconHelper.fromName(code), size: 20, color: const Color(0xFF2E7D32)),
+                          Icon(CategoryIconHelper.fromName(code), size: 20, color: AppColors.accent),
                           const SizedBox(width: 12),
                           Text(label),
                         ],
@@ -455,14 +443,14 @@ class _CategoriaMovimientoFormPageState
               ),
 
               // Sección: Configuración
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Text(
                   'CONFIGURACIÓN',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF61896F),
+                    color: c.textMuted,
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -475,31 +463,29 @@ class _CategoriaMovimientoFormPageState
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.1)
-                          : const Color(0xFFF0F4F2),
+                      color: c.border,
                     ),
                   ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Estado',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
                           'Activa / Inactiva',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Color(0xFF61896F),
+                            color: c.textMuted,
                           ),
                         ),
                       ],
@@ -507,7 +493,19 @@ class _CategoriaMovimientoFormPageState
                     Switch(
                       value: _activa,
                       onChanged: (value) => setState(() => _activa = value),
-                      activeColor: const Color(0xFF2E7D32),
+                      activeColor: AppColors.accent,
+                      thumbColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) return Colors.white;
+                        return c.textMuted;
+                      }),
+                      trackColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) return AppColors.accent;
+                        return c.bgElevated;
+                      }),
+                      trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) return Colors.transparent;
+                        return c.border;
+                      }),
                     ),
                   ],
                 ),
@@ -568,16 +566,8 @@ class _CategoriaMovimientoFormPageState
       bottomSheet: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF111813).withOpacity(0.9)
-              : Colors.white.withOpacity(0.9),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
+          color: context.appColors.bgBase.withValues(alpha: 0.95),
+          boxShadow: AppShadows.cardFor(context),
         ),
         child: SafeArea(
           child: SizedBox(
@@ -586,13 +576,13 @@ class _CategoriaMovimientoFormPageState
             child: ElevatedButton(
               onPressed: _guardando ? null : _guardar,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2E7D32),
+                backgroundColor: AppColors.accent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                 ),
                 elevation: 4,
-                shadowColor: const Color(0xFF2E7D32).withOpacity(0.3),
+                shadowColor: AppColors.accent.withValues(alpha: 0.3),
               ),
               child: _guardando
                   ? const SizedBox(
@@ -617,6 +607,7 @@ class _CategoriaMovimientoFormPageState
 
   Widget _buildSegmentButton(String label, String value) {
     final isSelected = _tipo == value;
+    final c = context.appColors;
 
     return Expanded(
       child: GestureDetector(
@@ -624,24 +615,15 @@ class _CategoriaMovimientoFormPageState
         child: Container(
           height: 44,
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? c.bgSurface : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                    ),
-                  ]
-                : null,
+            boxShadow: isSelected ? AppShadows.card : null,
           ),
           alignment: Alignment.center,
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected
-                  ? const Color(0xFF111813)
-                  : const Color(0xFF61896F),
+              color: isSelected ? c.textPrimary : c.textMuted,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),

@@ -1,45 +1,33 @@
+/// Re-exporta AppSpacing desde app_theme.dart (fuente única del Design System).
+export 'app_theme.dart' show AppSpacing;
+
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
-/// Sistema de espaciado consistente para todo el Design System ERP.
-class AppSpacing {
-  AppSpacing._();
+/// Aliases de compatibilidad — usar AppSpacing directamente en código nuevo.
+/// DEPRECADO: se eliminará cuando se complete la migración.
+class AppSpacingLegacy {
+  AppSpacingLegacy._();
 
-  // ─── Escala base (multiplos de 4) ───
-  static const double xs = 4;
-  static const double sm = 8;
-  static const double md = 12;
-  static const double base = 16;
-  static const double lg = 24;
-  static const double xl = 32;
-  static const double xxl = 40;
-  static const double xxxl = 48;
+  // Valores renombrados (old scale → new scale)
+  static const double base = AppSpacing.lg; // 16
+  static const double sectionGap = AppSpacing.xxl; // 24
 
-  // ─── Semánticos ───
-  static const double cardPadding = 16;
-  static const double sectionGap = 24;
-  static const double widgetGap = 12;
-  static const double inputFieldGap = 16;
-
-  // ─── Sidebar ───
-  static const double sidebarExpandedWidth = 240;
+  // Sidebar (valores legacy → nuevos)
+  static const double sidebarExpandedWidth = AppSpacing.sidebarWidth;
   static const double sidebarCollapsedWidth = 72;
   static const double sidebarItemHeight = 44;
-  static const double sidebarItemPaddingH = 16;
+  static const double sidebarItemPaddingH = AppSpacing.lg;
 
-  // ─── Header ───
-  static const double headerHeight = 72;
+  // Header
+  static const double headerHeight = AppSpacing.topbarHeight;
 
-  // ─── Tabla ERP ───
+  // Tabla
   static const double tableRowHeight = 44;
 
-  // ─── Breakpoints ───
-  static const double breakpointMobile = 600;
-  static const double breakpointTablet = 900;
-  static const double breakpointDesktop = 1200;
-
-  // ─── Helpers de EdgeInsets ───
-  static const EdgeInsets paddingCard = EdgeInsets.all(cardPadding);
-  static const EdgeInsets paddingSection = EdgeInsets.all(sectionGap);
-  static const EdgeInsets paddingHorizontalBase = EdgeInsets.symmetric(horizontal: base);
-  static const EdgeInsets paddingVerticalSm = EdgeInsets.symmetric(vertical: sm);
+  // EdgeInsets helpers
+  static const EdgeInsets paddingCard = EdgeInsets.all(AppSpacing.cardPadding);
+  static const EdgeInsets paddingSection = EdgeInsets.all(AppSpacing.xxl);
+  static const EdgeInsets paddingHorizontalBase = EdgeInsets.symmetric(horizontal: AppSpacing.lg);
+  static const EdgeInsets paddingVerticalSm = EdgeInsets.symmetric(vertical: AppSpacing.sm);
 }

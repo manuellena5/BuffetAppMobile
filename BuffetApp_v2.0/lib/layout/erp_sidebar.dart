@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
+import '../core/theme/app_theme.dart';
 
 /// Item de menú del sidebar ERP.
 class ErpMenuItem {
@@ -58,8 +56,8 @@ class _ErpSidebarState extends State<ErpSidebar> {
   String? _hoveredRoute;
 
   double get _width => widget.isExpanded
-      ? AppSpacing.sidebarExpandedWidth
-      : AppSpacing.sidebarCollapsedWidth;
+      ? AppSpacing.sidebarWidth
+      : 72;
 
   @override
   Widget build(BuildContext context) {
@@ -68,8 +66,7 @@ class _ErpSidebarState extends State<ErpSidebar> {
       curve: Curves.easeInOut,
       width: _width,
       decoration: const BoxDecoration(
-        color: AppColors.sidebarBg,
-        // No border-right aquí; lo pone el layout padre si lo necesita
+        color: AppColors.bgSurface,
       ),
       child: Column(
         children: [
@@ -97,9 +94,9 @@ class _ErpSidebarState extends State<ErpSidebar> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + AppSpacing.base,
-        left: AppSpacing.sidebarItemPaddingH,
-        right: AppSpacing.sidebarItemPaddingH,
+        top: MediaQuery.of(context).padding.top + AppSpacing.lg,
+        left: AppSpacing.lg,
+        right: AppSpacing.lg,
         bottom: AppSpacing.md,
       ),
       child: Row(
@@ -108,8 +105,8 @@ class _ErpSidebarState extends State<ErpSidebar> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             ),
             child: const Icon(Icons.account_balance, color: Colors.white, size: 20),
           ),
@@ -117,12 +114,8 @@ class _ErpSidebarState extends State<ErpSidebar> {
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Text(
-                'BuffetApp',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
+                'CDM Gestión',
+                style: AppText.titleLg.copyWith(color: AppColors.textPrimary),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -140,17 +133,15 @@ class _ErpSidebarState extends State<ErpSidebar> {
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(
-              left: AppSpacing.sidebarItemPaddingH,
-              right: AppSpacing.sidebarItemPaddingH,
-              top: AppSpacing.base,
+              left: AppSpacing.lg,
+              right: AppSpacing.lg,
+              top: AppSpacing.lg,
               bottom: AppSpacing.xs,
             ),
             child: Text(
               section.title!.toUpperCase(),
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.sidebarItemText.withValues(alpha: 0.5),
+              style: AppText.label.copyWith(
+                color: AppColors.textMuted,
                 letterSpacing: 0.8,
               ),
             ),
@@ -160,10 +151,10 @@ class _ErpSidebarState extends State<ErpSidebar> {
         widgets.add(
           const Padding(
             padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.sidebarItemPaddingH,
+              horizontal: AppSpacing.lg,
               vertical: AppSpacing.sm,
             ),
-            child: Divider(color: AppColors.sidebarItemHover, height: 1),
+            child: Divider(color: AppColors.bgElevated, height: 1),
           ),
         );
       }
@@ -184,22 +175,22 @@ class _ErpSidebarState extends State<ErpSidebar> {
     Color textColor;
 
     if (isSelected) {
-      bgColor = AppColors.sidebarItemSelected;
-      iconColor = AppColors.sidebarItemSelectedText;
-      textColor = AppColors.sidebarItemSelectedText;
+      bgColor = AppColors.accent;
+      iconColor = AppColors.textPrimary;
+      textColor = AppColors.textPrimary;
     } else if (isHovered) {
-      bgColor = AppColors.sidebarItemHover;
-      iconColor = Colors.white;
-      textColor = Colors.white;
+      bgColor = AppColors.bgElevated;
+      iconColor = AppColors.textPrimary;
+      textColor = AppColors.textPrimary;
     } else {
       bgColor = Colors.transparent;
-      iconColor = AppColors.sidebarItemText;
-      textColor = AppColors.sidebarItemText;
+      iconColor = AppColors.textSecondary;
+      textColor = AppColors.textSecondary;
     }
 
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 150),
-      height: AppSpacing.sidebarItemHeight,
+      height: 44,
       margin: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
         vertical: 2,
@@ -209,7 +200,7 @@ class _ErpSidebarState extends State<ErpSidebar> {
       ),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       ),
       child: widget.isExpanded
           ? Row(
@@ -219,8 +210,7 @@ class _ErpSidebarState extends State<ErpSidebar> {
                 Expanded(
                   child: Text(
                     item.label,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
+                    style: AppText.bodyMd.copyWith(
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                       color: textColor,
                     ),
@@ -257,10 +247,10 @@ class _ErpSidebarState extends State<ErpSidebar> {
       child: GestureDetector(
         onTap: widget.onToggleExpanded,
         child: Container(
-          height: AppSpacing.sidebarItemHeight,
+          height: 44,
           margin: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
           child: Row(
             mainAxisAlignment:
@@ -270,16 +260,13 @@ class _ErpSidebarState extends State<ErpSidebar> {
               Icon(
                 widget.isExpanded ? Icons.chevron_left : Icons.chevron_right,
                 size: 20,
-                color: AppColors.sidebarItemText,
+                color: AppColors.textMuted,
               ),
               if (widget.isExpanded) ...[
                 const SizedBox(width: AppSpacing.md),
                 Text(
                   'Colapsar',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: AppColors.sidebarItemText,
-                  ),
+                  style: AppText.bodySm.copyWith(color: AppColors.textMuted),
                 ),
               ],
             ],

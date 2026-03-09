@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../shared/widgets/responsive_container.dart';
 import '../../shared/widgets/breadcrumb.dart';
 import '../../shared/widgets/empty_state.dart';
@@ -185,7 +186,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DESACTIVAR', style: TextStyle(color: Colors.red)),
+            child: const Text('DESACTIVAR', style: TextStyle(color: AppColors.egreso)),
           ),
         ],
       ),
@@ -271,7 +272,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                 ),
                 const PopupMenuItem(
                   value: 'desactivar',
-                  child: Text('Desactivar', style: TextStyle(color: Colors.red)),
+                  child: Text('Desactivar', style: TextStyle(color: AppColors.egreso)),
                 ),
               ],
             ),
@@ -292,7 +293,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const Icon(Icons.error_outline, size: 64, color: AppColors.egreso),
             const SizedBox(height: 16),
             Text(_error!, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 16),
@@ -363,19 +364,19 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                 if (eliminado)
                   const Chip(
                     label: Text('DESACTIVADO', style: TextStyle(fontSize: 10)),
-                    backgroundColor: Colors.red,
+                    backgroundColor: AppColors.egreso,
                     labelStyle: TextStyle(color: Colors.white),
                   )
                 else if (!activo)
                   const Chip(
                     label: Text('PAUSADO', style: TextStyle(fontSize: 10)),
-                    backgroundColor: Colors.orange,
+                    backgroundColor: AppColors.advertencia,
                     labelStyle: TextStyle(color: Colors.white),
                   )
                 else
                   const Chip(
                     label: Text('ACTIVO', style: TextStyle(fontSize: 10)),
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.ingreso,
                     labelStyle: TextStyle(color: Colors.white),
                   ),
               ],
@@ -402,9 +403,9 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Observaciones:',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: context.appColors.textMuted),
                     ),
                     const SizedBox(height: 4),
                     Text(comp['observaciones'] as String),
@@ -427,7 +428,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     final eliminado = comp['eliminado'] == 1;
     
     return Card(
-      color: Colors.blue.shade50,
+      color: context.appColors.infoDim,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -481,18 +482,18 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                     comp['tipo'] == 'INGRESO' ? 'Registrar cobro' : 'Registrar pago',
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.ingreso,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 40),
                   ),
                 ),
               ],
             ] else if (activo && !eliminado)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'No hay próximos vencimientos calculados',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(color: context.appColors.textMuted, fontSize: 12),
                 ),
               ),
           ],
@@ -529,12 +530,12 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                     children: [
                       Text(
                         '${_cuotas.length} total',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: context.appColors.textMuted),
                       ),
                       const SizedBox(width: 8),
                       Icon(
                         _cuotasExpanded ? Icons.expand_less : Icons.expand_more,
-                        color: Colors.grey,
+                        color: context.appColors.textMuted,
                       ),
                     ],
                   ),
@@ -546,7 +547,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
               SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
+                headingRowColor: WidgetStateProperty.all(context.appColors.bgElevated),
                 columnSpacing: 24,
                 columns: const [
                   DataColumn(label: Text('Nro', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -614,16 +615,16 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     
     switch (estado) {
       case 'CONFIRMADO':
-        color = Colors.green;
+        color = AppColors.ingreso;
         icon = Icons.check_circle;
         break;
       case 'CANCELADO':
-        color = Colors.red;
+        color = AppColors.egreso;
         icon = Icons.cancel;
         break;
       case 'ESPERADO':
       default:
-        color = Colors.orange;
+        color = AppColors.advertencia;
         icon = Icons.schedule;
         break;
     }
@@ -631,7 +632,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color, width: 1),
       ),
@@ -669,18 +670,18 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                 ),
                 Text(
                   '${_movimientos.length} total',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: context.appColors.textMuted),
                 ),
               ],
             ),
             const Divider(),
             if (_movimientos.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
                   child: Text(
                     'No hay movimientos registrados',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: context.appColors.textMuted),
                   ),
                 ),
               )
@@ -696,15 +697,15 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                     contentPadding: const EdgeInsets.symmetric(vertical: 4),
                     leading: CircleAvatar(
                       backgroundColor: mov['tipo'] == 'INGRESO'
-                          ? Colors.green.shade100
-                          : Colors.red.shade100,
+                          ? context.appColors.ingresoDim
+                          : context.appColors.egresoDim,
                       child: Icon(
                         mov['tipo'] == 'INGRESO'
                             ? Icons.arrow_downward
                             : Icons.arrow_upward,
                         color: mov['tipo'] == 'INGRESO'
-                            ? Colors.green
-                            : Colors.red,
+                            ? AppColors.ingreso
+                            : AppColors.egreso,
                         size: 20,
                       ),
                     ),
@@ -718,7 +719,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                         Text(_movimientosCategoriasNombres[mov['id'] as int] ?? (mov['categoria'] as String? ?? 'Sin categoría')),
                         Text(
                           _formatFechaTs(mov['created_ts'] as int?),
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          style: TextStyle(fontSize: 11, color: context.appColors.textMuted),
                         ),
                       ],
                     ),
@@ -728,8 +729,8 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                         style: const TextStyle(fontSize: 10),
                       ),
                       backgroundColor: mov['estado'] == 'CONFIRMADO'
-                          ? Colors.green.shade100
-                          : Colors.orange.shade100,
+                          ? context.appColors.ingresoDim
+                          : context.appColors.advertenciaDim,
                     ),
                     onTap: () {
                       Navigator.push(
@@ -760,7 +761,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
             width: 120,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: context.appColors.textMuted),
             ),
           ),
           Expanded(
@@ -819,7 +820,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
         final total = pagado + remanente;
 
         return Card(
-          color: Colors.blue.shade50,
+          color: context.appColors.infoDim,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -840,7 +841,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                             'Pagado',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: context.appColors.textMuted,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -850,7 +851,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green[700],
+                              color: AppColors.ingreso,
                             ),
                           ),
                         ],
@@ -859,7 +860,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                     Container(
                       width: 1,
                       height: 40,
-                      color: Colors.grey[300],
+                      color: context.appColors.border,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -870,7 +871,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                             'Remanente',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: context.appColors.textMuted,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -880,7 +881,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.orange[700],
+                              color: AppColors.advertencia,
                             ),
                           ),
                         ],
@@ -933,7 +934,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
     final activo = acuerdo['activo'] == 1;
     
     return Card(
-      color: Colors.purple.shade50,
+      color: context.appColors.accentDim,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -941,7 +942,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
           children: [
             Row(
               children: [
-                Icon(Icons.handshake, color: Colors.purple.shade700),
+                Icon(Icons.handshake, color: context.appColors.accentLight),
                 const SizedBox(width: 8),
                 const Text(
                   'Origen: Acuerdo',
@@ -951,8 +952,8 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                 if (!activo)
                   Chip(
                     label: const Text('FINALIZADO', style: TextStyle(fontSize: 10)),
-                    backgroundColor: Colors.grey.shade300,
-                    labelStyle: const TextStyle(color: Colors.black87),
+                    backgroundColor: context.appColors.bgElevated,
+                    labelStyle: TextStyle(color: context.appColors.textSecondary),
                   ),
               ],
             ),
@@ -976,10 +977,10 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
                 children: [
                   Text(
                     'Cuota ${_compromiso!['numero_cuota'] ?? '?'} de ${acuerdo['cuotas']}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.purple,
+                      color: context.appColors.accentLight,
                     ),
                   ),
                 ],
@@ -1003,7 +1004,7 @@ class _DetalleCompromisoPageState extends State<DetalleCompromisoPage> {
               icon: const Icon(Icons.open_in_new, size: 18),
               label: const Text('Ver Acuerdo Completo'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
+                backgroundColor: context.appColors.accentDim,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 36),
               ),

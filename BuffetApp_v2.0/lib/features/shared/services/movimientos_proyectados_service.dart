@@ -1,4 +1,5 @@
 import '../../../data/dao/db.dart';
+import '../../../data/dao/evento_dao.dart';
 import 'compromisos_service.dart';
 
 /// FASE 13.5: Servicio para calcular movimientos esperados dinámicamente.
@@ -158,13 +159,9 @@ class MovimientosProyectadosService {
 
   /// Calcula movimientos esperados para un mes específico.
   ///
-  /// Parámetros:
-  /// - [year]: año
-  /// - [month]: mes (1-12)
-  /// - [unidadGestionId]: filtrar por unidad (opcional)
-  /// - [tipo]: filtrar por INGRESO/EGRESO (opcional)
-  ///
-  /// Retorna movimientos esperados del mes.
+  /// Incluye automáticamente los esperados POR_EVENTO: un item esperado por
+  /// cada (acuerdo POR_EVENTO × partido del mes) que no tenga aún un
+  /// movimiento confirmado.
   Future<List<MovimientoProyectado>> calcularMovimientosEsperadosMes({
     required int year,
     required int month,
@@ -175,12 +172,26 @@ class MovimientosProyectadosService {
       final fechaDesde = DateTime(year, month, 1);
       final fechaHasta = DateTime(year, month + 1, 1).subtract(const Duration(days: 1));
 
-      return await calcularMovimientosEsperadosGlobal(
+      final regulares = await calcularMovimientosEsperadosGlobal(
         fechaDesde: fechaDesde,
         fechaHasta: fechaHasta,
         unidadGestionId: unidadGestionId,
         tipo: tipo,
       );
+
+      // Agregar esperados POR_EVENTO si hay una unidad de gestión activa
+      final porEvento = unidadGestionId != null
+          ? await calcularMovimientosPorEventoMes(
+              year: year,
+              month: month,
+              unidadGestionId: unidadGestionId,
+              tipo: tipo,
+            )
+          : <MovimientoProyectado>[];
+
+      final resultado = [...regulares, ...porEvento];
+      resultado.sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
+      return resultado;
     } catch (e, st) {
       await AppDatabase.logLocalError(
         scope: 'mov_proyectados.calcular_mes',
@@ -191,6 +202,87 @@ class MovimientosProyectadosService {
       rethrow;
     }
   }
+
+  /// Calcula movimientos esperados para acuerdos POR_EVENTO en un mes.
+  ///
+  /// Genera un [MovimientoProyectado] por cada combinación
+  /// (acuerdo POR_EVENTO activo × partido del mes) que no tenga aún un
+  /// movimiento confirmado (`evento_movimiento` con acuerdo_id + evento_cdm_id).
+  Future<List<MovimientoProyectado>> calcularMovimientosPorEventoMes({
+    required int year,
+    required int month,
+    required int unidadGestionId,
+    String? tipo,
+  }) async {
+    try {
+      final db = await AppDatabase.instance();
+      final anioMes = '$year-${month.toString().padLeft(2, '0')}';
+
+      // 1. Acuerdos POR_EVENTO activos de la unidad
+      final acuerdos = await EventoDao.getAcuerdosPorPartido(unidadGestionId);
+      if (acuerdos.isEmpty) return [];
+
+      // 2. Partidos del mes para esa unidad
+      final partidos = await EventoDao.getEventosByMes(unidadGestionId, anioMes);
+      final partidosDelMes = partidos.where((e) => e['tipo'] == 'PARTIDO').toList();
+      if (partidosDelMes.isEmpty) return [];
+
+      final resultado = <MovimientoProyectado>[];
+
+      for (final acuerdo in acuerdos) {
+        final acuerdoId = acuerdo['id'] as int;
+        final acuerdoTipo = acuerdo['tipo'] as String? ?? 'EGRESO';
+        final acuerdoCategoria = acuerdo['categoria'] as String? ?? 'OTROS';
+        final acuerdoNombre = acuerdo['nombre'] as String? ?? 'Acuerdo #$acuerdoId';
+        final montoTitular = (acuerdo['monto_titular'] as num?)?.toDouble() ?? 0.0;
+        final unidadGestionIdAcuerdo = acuerdo['unidad_gestion_id'] as int;
+        final entidadNombre = acuerdo['entidad_nombre'] as String?;
+
+        // Filtrar por tipo si se especificó
+        if (tipo != null && acuerdoTipo != tipo) continue;
+
+        for (final partido in partidosDelMes) {
+          final eventoId = partido['id'] as int;
+          final eventoFecha = partido['fecha'] as String? ?? anioMes;
+          final eventoTitulo = partido['titulo'] as String? ?? 'Partido';
+
+          // Verificar si ya existe un movimiento confirmado para este par
+          final existentes = await db.rawQuery('''
+            SELECT COUNT(*) as cnt FROM evento_movimiento
+            WHERE acuerdo_id = ? AND evento_cdm_id = ?
+              AND eliminado = 0 AND estado = 'CONFIRMADO'
+          ''', [acuerdoId, eventoId]);
+          final yaConfirmado = (existentes.first['cnt'] as int? ?? 0) > 0;
+          if (yaConfirmado) continue;
+
+          resultado.add(MovimientoProyectado(
+            compromisoId: 0, // No hay compromiso real
+            acuerdoId: acuerdoId,
+            eventoCdmId: eventoId,
+            fechaVencimiento: DateTime.tryParse(eventoFecha) ?? DateTime(year, month, 1),
+            monto: montoTitular,
+            numeroCuota: null,
+            tipo: acuerdoTipo,
+            categoria: acuerdoCategoria,
+            nombre: '$acuerdoNombre — $eventoTitulo',
+            unidadGestionId: unidadGestionIdAcuerdo,
+            entidadNombre: entidadNombre,
+          ));
+        }
+      }
+
+      return resultado;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'mov_proyectados.calcular_por_evento_mes',
+        error: e,
+        stackTrace: st,
+        payload: {'year': year, 'month': month, 'unidad': unidadGestionId},
+      );
+      return []; // Error no crítico: devolver lista vacía
+    }
+  }
+
 
   /// Calcula movimientos cancelados para un mes específico.
   ///
@@ -362,6 +454,13 @@ class MovimientoProyectado {
   final int unidadGestionId;
   final String estado; // 'ESPERADO' | 'CANCELADO'
   final String? entidadNombre; // Nombre del jugador/staff asociado
+  // Campos exclusivos de movimientos POR_EVENTO (compromisoId = 0)
+  final int? acuerdoId;
+  final int? eventoCdmId;
+
+  /// Un MovimientoProyectado es POR_EVENTO cuando compromisoId = 0 y
+  /// acuerdoId != null. La acción de confirmar abre CrearMovimientoPage.
+  bool get esPorEvento => compromisoId == 0 && acuerdoId != null;
 
   const MovimientoProyectado({
     required this.compromisoId,
@@ -376,6 +475,8 @@ class MovimientoProyectado {
     required this.unidadGestionId,
     this.estado = 'ESPERADO',
     this.entidadNombre,
+    this.acuerdoId,
+    this.eventoCdmId,
   });
 
   /// Convierte a Map para fácil integración con UI.
@@ -393,6 +494,8 @@ class MovimientoProyectado {
       'unidad_gestion_id': unidadGestionId,
       'estado': estado,
       'entidad_nombre': entidadNombre,
+      'acuerdo_id': acuerdoId,
+      'evento_cdm_id': eventoCdmId,
     };
   }
 

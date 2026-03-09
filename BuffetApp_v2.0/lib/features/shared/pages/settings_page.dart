@@ -42,7 +42,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   ProductosLayout _layout = ProductosLayout.grid;
   bool _loading = true;
-  AppThemeMode _theme = AppThemeMode.system;
   bool _advanced = false;
   double _uiScale = 1.0;
   bool _cashChangeHelper = true;
@@ -52,7 +51,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool _dirty = false;
   ProductosLayout _initialLayout = ProductosLayout.grid;
-  AppThemeMode _initialTheme = AppThemeMode.system;
   bool _initialAdvanced = false;
   String? _initialWinPrinterName;
   double _initialUiScale = 1.0;
@@ -144,12 +142,8 @@ class _SettingsPageState extends State<SettingsPage> {
           .toDouble();
       _loading = false;
     });
-    // cargar tema actual desde provider (ya capturado antes del await)
-    if (settings != null && mounted) setState(() => _theme = settings.theme);
-
     _initialLayout = _layout;
     _initialAdvanced = _advanced;
-    _initialTheme = _theme;
     _initialWinPrinterName = _winPrinterName;
     _initialUiScale = _uiScale;
     _initialCashChangeHelper = _cashChangeHelper;
@@ -159,7 +153,6 @@ class _SettingsPageState extends State<SettingsPage> {
   void _recomputeDirty() {
     final next = _layout != _initialLayout ||
         _advanced != _initialAdvanced ||
-        _theme != _initialTheme ||
         _uiScale != _initialUiScale ||
         _cashChangeHelper != _initialCashChangeHelper ||
         (Platform.isWindows && _winPrinterName != _initialWinPrinterName);
@@ -208,13 +201,10 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setString(
         'productos_layout', _layout == ProductosLayout.list ? 'list' : 'grid');
     await prefs.setBool('show_advanced_options', _advanced);
-    // persistir tema
     if (settings != null) {
-      await settings.setTheme(_theme);
       await settings.setUiScale(_uiScale);
       await settings.setCashChangeHelper(_cashChangeHelper);
     } else {
-      await prefs.setString('theme_mode', _theme.name);
       await prefs.setDouble('ui_scale', _uiScale);
       await prefs.setBool('cash_change_helper', _cashChangeHelper);
     }
@@ -231,7 +221,6 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     _initialLayout = _layout;
     _initialAdvanced = _advanced;
-    _initialTheme = _theme;
     _initialWinPrinterName = _winPrinterName;
     _initialUiScale = _uiScale;
     _initialCashChangeHelper = _cashChangeHelper;
@@ -241,63 +230,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final drawerState = context.read<DrawerState?>();
     if (drawerState == null || !drawerState.isFixed) {
       nav.pop(true);
-    }
-  }
-
-  String _themeLabel(AppThemeMode mode) {
-    switch (mode) {
-      case AppThemeMode.system:
-        return 'Usar ajustes del dispositivo';
-      case AppThemeMode.light:
-        return 'Desactivado';
-      case AppThemeMode.dark:
-        return 'Activado';
-    }
-  }
-
-  Future<void> _pickTheme() async {
-    var temp = _theme;
-    final picked = await showDialog<AppThemeMode>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setLocal) {
-          return AlertDialog(
-            title: const Text('Modo oscuro'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SegmentedButton<AppThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                        value: AppThemeMode.system, icon: Icon(Icons.phone)),
-                    ButtonSegment(
-                        value: AppThemeMode.light,
-                        icon: Icon(Icons.light_mode)),
-                    ButtonSegment(
-                        value: AppThemeMode.dark, icon: Icon(Icons.dark_mode)),
-                  ],
-                  selected: {temp},
-                  onSelectionChanged: (v) {
-                    final sel = v.first;
-                    setLocal(() => temp = sel);
-                  },
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, temp),
-                  child: const Text('Aplicar'),
-                )
-              ],
-            ),
-          );
-        });
-      },
-    );
-    if (picked != null && mounted) {
-      setState(() {
-        _theme = picked;
-      });
-      _recomputeDirty();
     }
   }
 
@@ -597,6 +529,44 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const Divider(),
+          // ── Apariencia ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Builder(builder: (ctx) {
+              final as_ = ctx.watch<AppSettings?>();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Apariencia'),
+                  const SizedBox(height: 8),
+                  SegmentedButton<AppThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: AppThemeMode.light,
+                        icon: Icon(Icons.light_mode),
+                        label: Text('Claro'),
+                      ),
+                      ButtonSegment(
+                        value: AppThemeMode.dark,
+                        icon: Icon(Icons.dark_mode),
+                        label: Text('Oscuro'),
+                      ),
+                      ButtonSegment(
+                        value: AppThemeMode.system,
+                        icon: Icon(Icons.settings_brightness),
+                        label: Text('Sistema'),
+                      ),
+                    ],
+                    selected: {as_?.theme ?? AppThemeMode.light},
+                    onSelectionChanged: (sel) {
+                      as_?.setTheme(sel.first);
+                    },
+                  ),
+                ],
+              );
+            }),
+          ),
+          const Divider(),
           ListTile(
             title: const Text('Punto de venta (Caja) y dispositivo'),
             subtitle: Text(
@@ -725,12 +695,6 @@ class _SettingsPageState extends State<SettingsPage> {
             }),
           ),
           const Divider(),
-          ListTile(
-            title: const Text('Modo oscuro'),
-            subtitle: Text(_themeLabel(_theme)),
-            onTap: _pickTheme,
-          ),
-          const Divider(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -838,7 +802,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _mostrarDialogoPurgar() async {
-    final cantidadCajas = await AppDatabase.countCajas();
+    final cantidadCajas = await BuffetDao.countCajas();
     int segundos = 5;
     bool ejecutando = false;
     Timer? timer;
@@ -879,7 +843,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         setLocal(() => ejecutando = true);
                         try {
                           final counts =
-                              await AppDatabase.purgeCajasYAsociados();
+                              await BuffetDao.purgeCajasYAsociados();
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(

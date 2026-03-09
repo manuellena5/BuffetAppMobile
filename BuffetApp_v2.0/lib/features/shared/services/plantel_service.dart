@@ -817,4 +817,69 @@ class PlantelService {
       rethrow;
     }
   }
+
+  /// Obtiene compromisos activos con su estado mensual en batch para múltiples
+  /// entidades. Retorna un mapa: entidadId → lista de compromisos con
+  /// esperado/pagado del mes indicado.
+  Future<Map<int, List<Map<String, dynamic>>>> obtenerAcuerdosMensualesBatch(
+    List<int> entidadIds,
+    int year,
+    int month,
+  ) async {
+    if (entidadIds.isEmpty) return {};
+    try {
+      final db = await AppDatabase.instance();
+      final primerDia = DateTime(year, month, 1);
+      final ultimoDia = DateTime(year, month + 1, 0);
+      final fechaDesde =
+          '${primerDia.year}-${primerDia.month.toString().padLeft(2, '0')}-01';
+      final fechaHasta =
+          '${ultimoDia.year}-${ultimoDia.month.toString().padLeft(2, '0')}-${ultimoDia.day.toString().padLeft(2, '0')}';
+
+      final placeholders = entidadIds.map((_) => '?').join(',');
+      final rows = await db.rawQuery('''
+        SELECT
+          c.id,
+          c.entidad_plantel_id,
+          c.nombre,
+          c.modalidad,
+          COALESCE(
+            (SELECT SUM(cc.monto_esperado) FROM compromiso_cuotas cc
+             WHERE cc.compromiso_id = c.id
+               AND cc.estado = 'ESPERADO'
+               AND cc.fecha_programada BETWEEN ? AND ?), 0) AS esperado_mes,
+          COALESCE(
+            (SELECT SUM(cc.monto_real) FROM compromiso_cuotas cc
+             WHERE cc.compromiso_id = c.id
+               AND cc.estado = 'CONFIRMADO'
+               AND cc.fecha_programada BETWEEN ? AND ?), 0) AS pagado_mes
+        FROM compromisos c
+        WHERE c.entidad_plantel_id IN ($placeholders)
+          AND c.activo = 1
+          AND c.eliminado = 0
+        ORDER BY c.entidad_plantel_id, c.nombre
+      ''', [fechaDesde, fechaHasta, fechaDesde, fechaHasta, ...entidadIds]);
+
+      final result = <int, List<Map<String, dynamic>>>{};
+      for (final row in rows) {
+        final entidadId = row['entidad_plantel_id'] as int;
+        result.putIfAbsent(entidadId, () => []);
+        result[entidadId]!.add({
+          'nombre': row['nombre']?.toString() ?? '',
+          'modalidad': row['modalidad']?.toString() ?? 'RECURRENTE',
+          'esperado': (row['esperado_mes'] as num?)?.toDouble() ?? 0.0,
+          'pagado': (row['pagado_mes'] as num?)?.toDouble() ?? 0.0,
+        });
+      }
+      return result;
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'plantel.acuerdos_batch',
+        error: e,
+        stackTrace: st,
+        payload: {'entidades': entidadIds.length, 'year': year, 'month': month},
+      );
+      return {};
+    }
+  }
 }

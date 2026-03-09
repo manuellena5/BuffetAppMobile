@@ -274,10 +274,15 @@ class PlantelImportExportService {
   /// Importa jugadores validando duplicados.
   /// Retorna un Map con:
   /// - 'creados': int cantidad de jugadores creados
-  /// - 'duplicados': List<String> nombres de jugadores duplicados
+  /// - 'actualizados': int cantidad de jugadores actualizados
+  /// - 'duplicados': List<String> nombres de jugadores ignorados (no seleccionados para actualizar)
   /// - 'errores': List<String> errores durante la importación
-  Future<Map<String, dynamic>> importarJugadores(List<Map<String, dynamic>> jugadores) async {
+  Future<Map<String, dynamic>> importarJugadores(
+    List<Map<String, dynamic>> jugadores, {
+    Set<String> nombresAActualizar = const {},
+  }) async {
     int creados = 0;
+    int actualizados = 0;
     final duplicados = <String>[];
     final errores = <String>[];
 
@@ -297,7 +302,44 @@ class PlantelImportExportService {
         creados++;
       } catch (e) {
         if (e.toString().contains('Ya existe')) {
-          duplicados.add(jugador['nombre']);
+          final nombre = jugador['nombre']?.toString() ?? '';
+          if (nombresAActualizar.contains(nombre)) {
+            try {
+              final db = await AppDatabase.instance();
+              final rows = await db.query(
+                'entidades_plantel',
+                where: 'LOWER(nombre) = ?',
+                whereArgs: [nombre.toLowerCase().trim()],
+              );
+              if (rows.isNotEmpty) {
+                final id = rows.first['id'] as int;
+                await _plantelSvc.actualizarEntidad(id, {
+                  'nombre': jugador['nombre'],
+                  'rol': jugador['rol'],
+                  'contacto': jugador['contacto'],
+                  'dni': jugador['dni'],
+                  'fecha_nacimiento': jugador['fecha_nacimiento'],
+                  'alias': jugador['alias'],
+                  'tipo_contratacion': jugador['tipo_contratacion'],
+                  'posicion': jugador['posicion'],
+                  'observaciones': jugador['observaciones'],
+                });
+                actualizados++;
+              } else {
+                duplicados.add(nombre);
+              }
+            } catch (updateError, updateStack) {
+              errores.add('$nombre: ${updateError.toString()}');
+              await AppDatabase.logLocalError(
+                scope: 'plantel_import_export.actualizar_jugador',
+                error: updateError.toString(),
+                stackTrace: updateStack,
+                payload: {'jugador': jugador},
+              );
+            }
+          } else {
+            duplicados.add(nombre.isNotEmpty ? nombre : jugador['nombre']?.toString() ?? '?');
+          }
         } else {
           errores.add('${jugador['nombre']}: ${e.toString()}');
           await AppDatabase.logLocalError(
@@ -311,6 +353,7 @@ class PlantelImportExportService {
 
     return {
       'creados': creados,
+      'actualizados': actualizados,
       'duplicados': duplicados,
       'errores': errores,
     };

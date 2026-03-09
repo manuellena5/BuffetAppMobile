@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Dialog de ayuda que explica las diferencias entre Acuerdo, Compromiso y Movimiento.
 ///
@@ -20,7 +21,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.school, color: Colors.blue.shade700),
+          Icon(Icons.school, color: AppColors.info),
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
@@ -37,7 +38,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
           children: [
             _buildConcepto(
               icon: Icons.handshake,
-              color: Colors.purple,
+              color: AppColors.accentDim,
               titulo: 'Acuerdo',
               descripcion:
                   'Una regla o contrato que se repite o tiene cuotas.\n'
@@ -53,7 +54,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
             const Divider(height: 24),
             _buildConcepto(
               icon: Icons.event_note,
-              color: Colors.blue,
+              color: AppColors.info,
               titulo: 'Compromiso',
               descripcion:
                   'Un pago o cobro puntual que se espera en una fecha específica.',
@@ -68,7 +69,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
             const Divider(height: 24),
             _buildConcepto(
               icon: Icons.receipt_long,
-              color: Colors.green,
+              color: AppColors.ingreso,
               titulo: 'Movimiento',
               descripcion:
                   'Un hecho real confirmado: dinero que ya entró o salió.\n'
@@ -85,7 +86,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: AppColors.bgElevated,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -99,19 +100,19 @@ class AyudaTesoreriaDialog extends StatelessWidget {
                   _buildRegla(
                     '¿Se repite cada mes o tiene cuotas?',
                     '→ Crear ACUERDO',
-                    Colors.purple,
+                    AppColors.accentDim,
                   ),
                   const SizedBox(height: 6),
                   _buildRegla(
                     '¿Es un pago/cobro puntual que no se repite?',
                     '→ Crear COMPROMISO',
-                    Colors.blue,
+                    AppColors.info,
                   ),
                   const SizedBox(height: 6),
                   _buildRegla(
                     '¿Ya se pagó o cobró?',
                     '→ Confirmar el COMPROMISO',
-                    Colors.green,
+                    AppColors.ingreso,
                   ),
                 ],
               ),
@@ -120,15 +121,15 @@ class AyudaTesoreriaDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: AppColors.advertenciaDim,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(Icons.lightbulb,
-                      color: Colors.orange.shade700, size: 20),
+                      color: AppColors.advertencia, size: 20),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
@@ -196,7 +197,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
           resultado,
           style: TextStyle(
             fontStyle: FontStyle.italic,
-            color: Colors.grey.shade700,
+            color: AppColors.textSecondary,
             fontSize: 13,
           ),
         ),
@@ -211,7 +212,7 @@ class AyudaTesoreriaDialog extends StatelessWidget {
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: const TextStyle(color: Colors.black87, fontSize: 13),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
               children: [
                 TextSpan(text: pregunta),
                 const TextSpan(text: '\n'),

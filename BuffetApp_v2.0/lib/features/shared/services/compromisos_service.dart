@@ -1661,15 +1661,34 @@ class CompromisosService {
           'es_transferencia': 0,
         });
 
-        // 2) Marcar cuota como CONFIRMADO (si existe en compromiso_cuotas)
-        await txn.rawUpdate(
+        // 2) Marcar cuota como CONFIRMADO (por numero_cuota si es válido, o por mes/año)
+        final anioMes =
+            '${fechaVencimiento.year.toString().padLeft(4, '0')}-'
+            '${fechaVencimiento.month.toString().padLeft(2, '0')}';
+        final updated = await txn.rawUpdate(
           '''UPDATE compromiso_cuotas
              SET estado = 'CONFIRMADO',
                  monto_real = ?,
                  updated_ts = ?
-             WHERE compromiso_id = ? AND numero_cuota = ?''',
-          [monto, now, compromisoId, numeroCuota],
+             WHERE compromiso_id = ?
+               AND estado != 'CONFIRMADO'
+               AND (numero_cuota = ? AND ? > 0
+                    OR strftime('%Y-%m', fecha_programada) = ?)''',
+          [monto, now, compromisoId, numeroCuota, numeroCuota, anioMes],
         );
+        // Si no hubo coincidencia intentar solo por mes (para cuotas creadas sin numero)
+        if (updated == 0) {
+          await txn.rawUpdate(
+            '''UPDATE compromiso_cuotas
+               SET estado = 'CONFIRMADO',
+                   monto_real = ?,
+                   updated_ts = ?
+               WHERE compromiso_id = ?
+                 AND estado != 'CONFIRMADO'
+                 AND strftime('%Y-%m', fecha_programada) = ?''',
+            [monto, now, compromisoId, anioMes],
+          );
+        }
 
         // 3) Incrementar contador de cuotas confirmadas en el compromiso
         await txn.rawUpdate(

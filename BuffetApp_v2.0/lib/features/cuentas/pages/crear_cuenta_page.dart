@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/format.dart';
@@ -28,6 +30,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
   String _tipo = 'CAJA';
   bool _tieneComision = false;
   bool _guardando = false;
+  DateTime? _fechaFinPlazo;
 
   @override
   void dispose() {
@@ -64,6 +67,10 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
           ? double.tryParse(_comisionCtrl.text.trim().replaceAll(',', '.'))
           : null;
 
+      final fechaFinPlazoStr = (_tipo == 'INVERSION' && _fechaFinPlazo != null)
+          ? DateFormat('yyyy-MM-dd').format(_fechaFinPlazo!)
+          : null;
+
       final cuentaId = await _cuentaService.crear(
         nombre: _nombreCtrl.text.trim(),
         tipo: _tipo,
@@ -80,6 +87,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
         cbuAlias: _cbuAliasCtrl.text.trim().isEmpty
             ? null
             : _cbuAliasCtrl.text.trim(),
+        fechaFinPlazo: fechaFinPlazoStr,
       );
 
       if (!mounted) return;
@@ -91,7 +99,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
         builder: (context) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              Icon(Icons.check_circle, color: AppColors.ingreso, size: 32),
               SizedBox(width: 12),
               Text('Cuenta Creada'),
             ],
@@ -115,6 +123,8 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
                 _buildInfoRow('Banco', _bancoNombreCtrl.text.trim()),
               if (_cbuAliasCtrl.text.trim().isNotEmpty)
                 _buildInfoRow('CBU/Alias', _cbuAliasCtrl.text.trim()),
+              if (fechaFinPlazoStr != null)
+                _buildInfoRow('Vencimiento', DateFormat('dd/MM/yyyy').format(_fechaFinPlazo!)),
             ],
           ),
           actions: [
@@ -143,7 +153,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
         builder: (context) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.error, color: Colors.red, size: 32),
+              Icon(Icons.error, color: AppColors.egreso, size: 32),
               SizedBox(width: 12),
               Text('Error al Crear Cuenta'),
             ],
@@ -237,6 +247,42 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
               const SizedBox(height: 16),
             ],
 
+            // Campos específicos para INVERSION / Plazo Fijo
+            if (_tipo == 'INVERSION') ...[
+              // Fecha de vencimiento
+              InkWell(
+                onTap: () async {
+                  final fecha = await showDatePicker(
+                    context: context,
+                    initialDate: _fechaFinPlazo ?? DateTime.now().add(const Duration(days: 30)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                    locale: const Locale('es', 'AR'),
+                    helpText: 'Fecha de vencimiento del plazo fijo',
+                  );
+                  if (fecha != null) {
+                    setState(() => _fechaFinPlazo = fecha);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Fecha de vencimiento',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
+                  child: Text(
+                    _fechaFinPlazo != null
+                        ? DateFormat('dd/MM/yyyy').format(_fechaFinPlazo!)
+                        : 'Seleccionar fecha (opcional)',
+                    style: TextStyle(
+                      color: _fechaFinPlazo != null ? null : Theme.of(context).hintColor,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // Saldo inicial
             TextFormField(
               controller: _saldoInicialCtrl,
@@ -312,7 +358,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
 
             // Información
             const Card(
-              color: Colors.blue,
+              color: AppColors.infoDim,
               child: Padding(
                 padding: EdgeInsets.all(12.0),
                 child: Column(
@@ -320,13 +366,13 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.info_outline, color: Colors.white),
+                        Icon(Icons.info_outline, color: AppColors.infoLight),
                         SizedBox(width: 8),
                         Text(
                           'Información',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.infoLight,
                           ),
                         ),
                       ],
@@ -336,7 +382,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
                       '• El saldo se calculará automáticamente sumando los ingresos y restando los egresos.\n'
                       '• El saldo inicial es el punto de partida.\n'
                       '• Si la cuenta cobra comisión, se sugerirá registrarla automáticamente.',
-                      style: TextStyle(fontSize: 13, color: Colors.white),
+                      style: TextStyle(fontSize: 13, color: AppColors.infoLight),
                     ),
                   ],
                 ),
@@ -387,7 +433,7 @@ class _CrearCuentaPageState extends State<CrearCuentaPage> {
               '$label:',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
+                color: AppColors.textSecondary,
               ),
             ),
           ),

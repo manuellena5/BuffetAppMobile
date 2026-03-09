@@ -8,11 +8,11 @@ import '../../shared/services/error_handler.dart';
 import '../../shared/services/plantel_service.dart';
 import '../../shared/utils/category_icon_helper.dart';
 import '../../shared/format.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../layout/erp_layout.dart';
 import '../../../widgets/app_header.dart';
 import '../../../data/dao/db.dart';
+import '../../../data/dao/evento_dao.dart';
 import '../../../domain/models.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/widgets/responsive_container.dart';
@@ -24,6 +24,11 @@ class CrearMovimientoPage extends StatefulWidget {
   final int? unidadGestionIdInicial;
   final String? eventoIdInicial;
   final int? cuentaIdInicial;
+  final String? tipoInicial;
+  final String? categoriaInicial;
+  final double? montoInicial;
+  final String? descripcionInicial;
+  final int? eventoCdmIdInicial;
   
   const CrearMovimientoPage({
     super.key,
@@ -31,6 +36,11 @@ class CrearMovimientoPage extends StatefulWidget {
     this.unidadGestionIdInicial,
     this.eventoIdInicial,
     this.cuentaIdInicial,
+    this.tipoInicial,
+    this.categoriaInicial,
+    this.montoInicial,
+    this.descripcionInicial,
+    this.eventoCdmIdInicial,
   });
 
   @override
@@ -47,12 +57,14 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   int? _medioPagoId;
   int? _cuentaId;
   int? _entidadPlantelId;
+  int? _eventoCdmId;
   File? _attachmentFile;
   
   List<Map<String, dynamic>> _metodosPago = [];
   List<Map<String, dynamic>> _categorias = [];
   List<CuentaFondos> _cuentas = [];
   List<Map<String, dynamic>> _entidadesPlantel = [];
+  List<Map<String, dynamic>> _eventosCdmMes = [];
   
   bool _cargando = true;
   bool _guardando = false;
@@ -65,6 +77,21 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
     if (widget.cuentaIdInicial != null) {
       _cuentaId = widget.cuentaIdInicial;
     }
+    if (widget.tipoInicial != null) {
+      _tipo = widget.tipoInicial!;
+    }
+    if (widget.categoriaInicial != null) {
+      _codigoCategoria = widget.categoriaInicial;
+    }
+    if (widget.montoInicial != null) {
+      _montoCtrl.text = widget.montoInicial!.toStringAsFixed(2);
+    }
+    if (widget.descripcionInicial != null) {
+      _obsCtrl.text = widget.descripcionInicial!;
+    }
+    if (widget.eventoCdmIdInicial != null) {
+      _eventoCdmId = widget.eventoCdmIdInicial;
+    }
     
     // Si es edición, pre-cargar los datos
     if (widget.movimientoExistente != null) {
@@ -74,6 +101,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       _medioPagoId = mov['medio_pago_id'] as int?;
       _cuentaId = mov['cuenta_id'] as int?;
       _entidadPlantelId = mov['entidad_plantel_id'] as int?;
+      _eventoCdmId = mov['evento_cdm_id'] as int?;
       _montoCtrl.text = (mov['monto'] as num?)?.toString() ?? '';
       _obsCtrl.text = mov['observacion'] as String? ?? '';
     }
@@ -108,6 +136,11 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       // Cargar entidades del plantel (jugadores y staff)
       final entidades = await PlantelService.instance.listarEntidades(soloActivos: true);
       
+      // Cargar eventos CDM de la unidad (para asociar al movimiento)
+      final eventosCdm = unidadId != null
+          ? await EventoDao.getEventosByUnidad(unidadId)
+          : <Map<String, dynamic>>[];
+      
       if (!mounted) return;
       
       setState(() {
@@ -115,6 +148,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         _categorias = cats;
         _cuentas = cuentas;
         _entidadesPlantel = entidades;
+        _eventosCdmMes = eventosCdm;
         _medioPagoId = metodos.isNotEmpty ? metodos.first['id'] as int? : null;
         // FASE 22.2: Mantener cuentaId inicial si se pasó, sino usar primera cuenta
         if (_cuentaId == null || !cuentas.any((c) => c.id == _cuentaId)) {
@@ -232,6 +266,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           archivoTipo: archivoTipo,
           archivoSize: archivoSize,
           entidadPlantelId: _entidadPlantelId,
+          eventoCdmId: _eventoCdmId,
         );
       } else {
         // Crear nuevo movimiento
@@ -250,6 +285,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           archivoTipo: archivoTipo,
           archivoSize: archivoSize,
           entidadPlantelId: _entidadPlantelId,
+          eventoCdmId: _eventoCdmId,
         );
         
         // Lógica de comisión semiautomática (solo para movimientos nuevos)
@@ -257,8 +293,8 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       }
       
       if (!mounted) return;
-      
-      // Construir datos para el modal de confirmación
+
+      // Construir datos del modal de confirmación
       final categoriaNombre = _categorias
           .where((c) => c['codigo'] == _codigoCategoria)
           .map((c) => c['nombre'] as String?)
@@ -273,14 +309,18 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           .firstOrNull ?? '–';
       final observacion = _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim();
       final esEdicion = widget.movimientoExistente != null;
-      
+
+      // Guardar el Navigator antes del showDialog para poder popear
+      // la página desde dentro del callback del botón sin problemas de contexto.
+      final nav = Navigator.of(context);
+
       await showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              Icon(Icons.check_circle, color: AppColors.ingreso, size: 32),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -294,27 +334,29 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetalleFila('Tipo', _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso',
-                  color: _tipo == 'INGRESO' ? Colors.green : Colors.red),
+              _buildDetalleFila(
+                'Tipo',
+                _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso',
+                color: _tipo == 'INGRESO' ? AppColors.ingreso : AppColors.egreso,
+              ),
               _buildDetalleFila('Monto', Format.money(monto)),
               _buildDetalleFila('Categoría', categoriaNombre),
               _buildDetalleFila('Medio de Pago', medioPagoNombre),
               _buildDetalleFila('Cuenta', cuentaNombre),
-              if (observacion != null)
-                _buildDetalleFila('Observación', observacion),
+              if (observacion != null) _buildDetalleFila('Observación', observacion),
             ],
           ),
           actions: [
             FilledButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () {
+                Navigator.pop(ctx); // cierra el diálogo
+                nav.pop(true);      // cierra la página y devuelve true al caller
+              },
               child: const Text('Aceptar'),
             ),
           ],
         ),
       );
-      
-      if (!mounted) return;
-      Navigator.pop(context, true);
     } catch (e, st) {
       await ErrorHandler.instance.handle(
         scope: 'tesoreria.crear_movimiento',
@@ -374,7 +416,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             ),
             if (_attachmentFile != null)
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
+                leading: const Icon(Icons.delete, color: AppColors.egreso),
                 title: const Text('Eliminar'),
                 onTap: () => Navigator.pop(context, 'remove'),
               ),
@@ -403,7 +445,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al guardar movimiento. Intente nuevamente.'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Error al guardar movimiento. Intente nuevamente.'), backgroundColor: AppColors.egreso),
       );
     }
   }
@@ -427,8 +469,6 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
       title: pageTitle,
       body: Column(
         children: [
-          if (isDesktop)
-            AppHeader(title: pageTitle),
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator())
@@ -448,7 +488,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.warning_amber, size: 64, color: Colors.orange.shade700),
+            Icon(Icons.warning_amber, size: 64, color: AppColors.advertencia),
             const SizedBox(height: 24),
             const Text(
               'Seleccioná una Unidad de Gestión',
@@ -468,12 +508,11 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
   }
   
   Widget _buildFormulario() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    final colors = context.appColors;
     return ResponsiveContainer(
       maxWidth: 800,
       child: Container(
-        color: isDark ? AppColors.formSurfaceDark : AppColors.formSurfaceLight,
+        color: colors.bgElevated,
         child: Form(
           key: _formKey,
           child: ListView(
@@ -494,7 +533,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
                     title: const Text('💰 Ingreso'),
                     value: 'INGRESO',
                     groupValue: _tipo,
-                    activeColor: Colors.green,
+                    activeColor: AppColors.ingreso,
                     onChanged: (v) {
                       setState(() => _tipo = v!);
                       _cargarCategorias();
@@ -504,7 +543,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
                     title: const Text('💸 Egreso'),
                     value: 'EGRESO',
                     groupValue: _tipo,
-                    activeColor: Colors.red,
+                    activeColor: AppColors.egreso,
                     onChanged: (v) {
                       setState(() => _tipo = v!);
                       _cargarCategorias();
@@ -591,7 +630,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
                                 title: Text(cat['nombre'].toString()),
                                 subtitle: Text(
                                   cat['codigo'].toString(),
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                  style: AppText.caption,
                                 ),
                                 onTap: () => onSelected(cat),
                               );
@@ -608,13 +647,13 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
+                color: colors.advertenciaDim,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: const Text(
                 '⚠ No hay categorías configuradas para este tipo',
-                style: TextStyle(color: Colors.orange),
+                style: TextStyle(color: AppColors.advertencia),
               ),
             ),
           
@@ -683,13 +722,13 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
+                color: colors.advertenciaDim,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(color: AppColors.advertencia),
               ),
               child: const Text(
                 '⚠ No hay cuentas disponibles. Creá una cuenta primero.',
-                style: TextStyle(color: Colors.orange),
+                style: TextStyle(color: AppColors.advertencia),
               ),
             ),
           
@@ -724,6 +763,62 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           
           const SizedBox(height: 16),
           
+          // Evento CDM asociado
+          // Si viene preseleccionado desde detalle de evento → mostrar como chip de solo lectura
+          // (evita assertion de DropdownButtonFormField cuando el valor no está aún en la lista)
+          if (widget.eventoCdmIdInicial != null)
+            InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Evento asociado',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.sports_soccer_outlined),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.link, size: 16, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _eventosCdmMes
+                              .where((e) => e['id'] == _eventoCdmId)
+                              .map((e) => '${e['titulo'] ?? 'Evento'} (${e['fecha'] ?? ''})')
+                              .firstOrNull ??
+                          'Evento #$_eventoCdmId',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (_eventosCdmMes.isNotEmpty)
+            DropdownButtonFormField<int?>(
+              value: _eventosCdmMes.any((e) => e['id'] == _eventoCdmId) ? _eventoCdmId : null,
+              decoration: const InputDecoration(
+                labelText: 'Evento asociado (opcional)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.sports_soccer_outlined),
+                helperText: 'Asociá este movimiento a un evento del club',
+              ),
+              items: [
+                const DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('Sin evento'),
+                ),
+                ..._eventosCdmMes.map((ev) {
+                  final id = ev['id'] as int;
+                  final titulo = ev['titulo'] as String? ?? 'Evento #$id';
+                  final fecha = ev['fecha'] as String? ?? '';
+                  return DropdownMenuItem<int?>(
+                    value: id,
+                    child: Text('$titulo${fecha.isNotEmpty ? ' ($fecha)' : ''}'),
+                  );
+                }),
+              ],
+              onChanged: (v) => setState(() => _eventoCdmId = v),
+            ),
+          
+          const SizedBox(height: 16),
+          
           // Observación
           TextFormField(
             controller: _obsCtrl,
@@ -745,7 +840,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.all(16),
               side: BorderSide(
-                color: _attachmentFile != null ? Colors.green : Colors.grey,
+                color: _attachmentFile != null ? AppColors.ingreso : colors.textMuted,
               ),
             ),
           ),
@@ -756,9 +851,9 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
+                color: colors.bgElevated,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(color: colors.border),
               ),
               child: Row(
                 children: [
@@ -766,13 +861,13 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
                     _attachmentFile!.path.toLowerCase().endsWith('.pdf')
                         ? Icons.picture_as_pdf
                         : Icons.image,
-                    color: Colors.green,
+                    color: AppColors.ingreso,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       p.basename(_attachmentFile!.path),
-                      style: const TextStyle(fontSize: 14),
+                      style: AppText.bodyMd,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -799,7 +894,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
           FilledButton.icon(
             onPressed: _guardando ? null : _guardar,
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.ingreso,
               padding: const EdgeInsets.all(16),
             ),
             icon: _guardando
@@ -874,7 +969,7 @@ class _CrearMovimientoPageState extends State<CrearMovimientoPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✓ Comisión de ${Format.money(comision)} registrada'),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.advertencia,
           ),
         );
       }
@@ -933,9 +1028,10 @@ class _DialogComisionState extends State<_DialogComision> {
   @override
   Widget build(BuildContext context) {
     final porcentaje = widget.cuenta.comisionPorcentaje ?? 0.0;
+    final colors = context.appColors;
     
     return AlertDialog(
-      icon: const Icon(Icons.account_balance, size: 48, color: Colors.orange),
+      icon: const Icon(Icons.account_balance, size: 48, color: AppColors.advertencia),
       title: const Text('Comisión Bancaria'),
       content: SingleChildScrollView(
         child: Column(
@@ -952,9 +1048,9 @@ class _DialogComisionState extends State<_DialogComision> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
+                color: colors.infoDim,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(color: AppColors.info),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -989,7 +1085,7 @@ class _DialogComisionState extends State<_DialogComision> {
                         Format.money(widget.comision),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.orange,
+                          color: AppColors.advertencia,
                         ),
                       ),
                     ],
@@ -1013,7 +1109,7 @@ class _DialogComisionState extends State<_DialogComision> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: colors.bgElevated,
               ),
             ),
             
@@ -1032,7 +1128,7 @@ class _DialogComisionState extends State<_DialogComision> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: colors.bgElevated,
               ),
             ),
           ],
@@ -1054,7 +1150,7 @@ class _DialogComisionState extends State<_DialogComision> {
             });
           },
           style: FilledButton.styleFrom(
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.advertencia,
           ),
           child: const Text('Confirmar'),
         ),

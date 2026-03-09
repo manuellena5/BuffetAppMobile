@@ -214,11 +214,6 @@ class _SaldosInicialesListPageState extends State<SaldosInicialesListPage> {
       ),
       body: Column(
         children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Saldos Iniciales',
-              subtitle: '${_saldos.length} registros',
-            ),
           Expanded(
             child: _loading
           ? SkeletonLoader.list(count: 5)

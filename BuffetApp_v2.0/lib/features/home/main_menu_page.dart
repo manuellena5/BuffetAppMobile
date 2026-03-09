@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../shared/state/app_mode.dart';
 import '../shared/state/app_settings.dart';
 import '../shared/pages/update_page.dart';
@@ -122,7 +123,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                       subtitle: 'Ventas y caja del partido',
                       description:
                           'Gestión de ventas, caja, tickets e impresión',
-                      color: Colors.orange.shade700,
+                      color: AppColors.advertencia,
                       badgeText:
                           widget.hasCajaAbierta ? 'Caja abierta' : null,
                       onTap: () => _goToBuffet(context),
@@ -137,7 +138,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                         subtitle: 'Movimientos financieros',
                         description:
                             'Ingresos, egresos, compromisos y reportes',
-                        color: Colors.teal.shade700,
+                        color: AppColors.accent,
                         onTap: () => _goToTesoreria(context),
                       ),
                     ],
@@ -300,7 +301,7 @@ class _ModuleCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade600,
+                              color: AppColors.ingreso,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(

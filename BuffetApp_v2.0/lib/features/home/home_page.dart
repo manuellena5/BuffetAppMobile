@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../buffet/services/caja_service.dart';
 import '../shared/services/usb_printer_service.dart';
 import '../shared/format.dart';
@@ -350,7 +351,7 @@ class _HomePageState extends State<HomePage> {
               // Menú Principal
               ListTile(
                 leading:
-                    const Icon(Icons.home_outlined, color: Colors.deepPurple),
+                    const Icon(Icons.home_outlined, color: AppColors.accentDim),
                 title: const Text('Menú Principal'),
                 subtitle: const Text('Volver al selector de módulos'),
                 onTap: () {
@@ -709,13 +710,13 @@ class _HomePageState extends State<HomePage> {
                                 horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
                               color: _usbConnected
-                                  ? Colors.green.withValues(alpha: 0.10)
-                                  : Colors.red.withValues(alpha: 0.10),
+                                  ? AppColors.ingresoDim
+                                  : AppColors.egresoDim,
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                 color: _usbConnected
-                                    ? Colors.green.withValues(alpha: 0.25)
-                                    : Colors.red.withValues(alpha: 0.25),
+                                    ? AppColors.ingresoLight
+                                    : AppColors.egresoLight,
                               ),
                             ),
                             child: Row(
@@ -726,8 +727,8 @@ class _HomePageState extends State<HomePage> {
                                   height: 10,
                                   decoration: BoxDecoration(
                                     color: _usbConnected
-                                        ? Colors.green
-                                        : Colors.red,
+                                        ? AppColors.ingreso
+                                        : AppColors.egreso,
                                     shape: BoxShape.circle,
                                   ),
                                 ),

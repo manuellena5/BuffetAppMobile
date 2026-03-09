@@ -1,17 +1,19 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
+import '../core/theme/app_theme.dart';
 import '../features/shared/state/drawer_state.dart';
+import '../features/shared/state/app_settings.dart';
 import 'erp_sidebar.dart';
 
 // Imports para navegación
 import '../features/tesoreria/pages/tesoreria_home_page.dart';
 import '../features/tesoreria/pages/crear_movimiento_page.dart';
 import '../features/tesoreria/pages/movimientos_list_page.dart';
-import '../features/tesoreria/pages/compromisos_erp_screen.dart';
+import '../features/tesoreria/pages/compromisos_page.dart';
 import '../features/tesoreria/pages/acuerdos_page.dart';
+import '../features/tesoreria/pages/adhesiones_page.dart';
+import '../features/eventos_cdm/pages/eventos_cdm_page.dart';
 import '../features/tesoreria/pages/plantel_page.dart';
 import '../features/tesoreria/pages/categorias_movimiento_page.dart';
 import '../features/tesoreria/pages/reportes_index_page.dart';
@@ -107,25 +109,35 @@ class _DesktopLayout extends StatelessWidget {
     return Consumer<DrawerState>(
       builder: (context, drawerState, _) {
         return Scaffold(
-          floatingActionButton: floatingActionButton,
           body: Row(
             children: [
-              // Sidebar
-              ErpSidebar(
-                sections: _buildSections(context),
-                currentRoute: currentRoute,
-                isExpanded: drawerState.isExpanded,
-                onToggleExpanded: drawerState.toggleExpanded,
+              // Sidebar — siempre dark
+              Theme(
+                data: AppTheme.dark,
+                child: ErpSidebar(
+                  sections: _buildSections(context),
+                  currentRoute: currentRoute,
+                  isExpanded: drawerState.isExpanded,
+                  onToggleExpanded: drawerState.toggleExpanded,
+                ),
               ),
               // Separador visual
               Container(
                 width: 1,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? AppColors.borderDark
-                    : AppColors.borderLight,
+                color: context.appColors.border,
               ),
               // Contenido
-              Expanded(child: body),
+              Expanded(
+                child: Scaffold(
+                  appBar: AppBar(
+                    title: Text(title),
+                    automaticallyImplyLeading: false,
+                    actions: actions,
+                  ),
+                  floatingActionButton: floatingActionButton,
+                  body: body,
+                ),
+              ),
             ],
           ),
         );
@@ -168,20 +180,23 @@ class _MobileLayout extends StatelessWidget {
         title: Text(title),
         actions: actions,
       ),
-      drawer: SizedBox(
-        width: AppSpacing.sidebarExpandedWidth,
-        child: Drawer(
-          backgroundColor: AppColors.sidebarBg,
-          child: SafeArea(
-            child: ErpSidebar(
-              sections: _buildErpMenuSections(
-                context: context,
+      drawer: Theme(
+        data: AppTheme.dark,
+        child: SizedBox(
+          width: AppSpacing.sidebarWidth,
+          child: Drawer(
+            backgroundColor: AppColors.bgSurface,
+            child: SafeArea(
+              child: ErpSidebar(
+                sections: _buildErpMenuSections(
+                  context: context,
+                  currentRoute: currentRoute,
+                  showAdvanced: showAdvanced,
+                  closeDrawer: true,
+                ),
                 currentRoute: currentRoute,
-                showAdvanced: showAdvanced,
-                closeDrawer: true,
+                isExpanded: true,
               ),
-              currentRoute: currentRoute,
-              isExpanded: true,
             ),
           ),
         ),
@@ -200,6 +215,9 @@ List<ErpMenuSection> _buildErpMenuSections({
   bool showAdvanced = false,
   bool closeDrawer = false,
 }) {
+  // Leer showAdvanced desde AppSettings (fuente de verdad única)
+  final advancedEffective =
+      showAdvanced || context.read<AppSettings>().showAdvanced;
   void navigate(Widget page) {
     final nav = Navigator.of(context);
     if (closeDrawer) Navigator.pop(context); // cierra drawer
@@ -262,13 +280,25 @@ List<ErpMenuSection> _buildErpMenuSections({
           icon: Icons.event_note_outlined,
           label: 'Compromisos',
           routeName: '/compromisos',
-          onTap: () => navigatePush(const CompromisosErpScreen()),
+          onTap: () => navigatePush(const CompromisosPage()),
         ),
         ErpMenuItem(
           icon: Icons.handshake_outlined,
           label: 'Acuerdos',
           routeName: '/acuerdos',
           onTap: () => navigatePush(const AcuerdosPage()),
+        ),
+        ErpMenuItem(
+          icon: Icons.volunteer_activism_outlined,
+          label: 'Adhesiones',
+          routeName: '/adhesiones',
+          onTap: () => navigatePush(const AdhesionesPage()),
+        ),
+        ErpMenuItem(
+          icon: Icons.sports_soccer_outlined,
+          label: 'Eventos',
+          routeName: '/eventos_cdm',
+          onTap: () => navigatePush(const EventosCdmPage()),
         ),
       ],
     ),
@@ -315,7 +345,7 @@ List<ErpMenuSection> _buildErpMenuSections({
     ErpMenuSection(
       title: 'Sistema',
       items: [
-        if (showAdvanced)
+        if (advancedEffective)
           ErpMenuItem(
             icon: Icons.bug_report_outlined,
             label: 'Logs de Errores',

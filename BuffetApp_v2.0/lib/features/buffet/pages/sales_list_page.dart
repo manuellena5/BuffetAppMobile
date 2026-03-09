@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
 import 'sale_detail_page.dart';
@@ -191,7 +192,7 @@ class _SalesListPageState extends State<SalesListPage> {
                     _isVentasView
                         ? '${ventasGrouped.length} venta${ventasGrouped.length == 1 ? '' : 's'}'
                         : '${filtered.length} ticket${filtered.length == 1 ? '' : 's'}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -249,18 +250,18 @@ class _SalesListPageState extends State<SalesListPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Total vendido', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                Text('Total vendido', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                 const SizedBox(height: 2),
                 Text(formatCurrencyNoDecimals(totalVendido), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
               ],
             ),
           ),
-          _ResumenChip(label: 'Efectivo', value: formatCurrencyNoDecimals(totalEfectivo), color: Colors.green.shade700),
+          _ResumenChip(label: 'Efectivo', value: formatCurrencyNoDecimals(totalEfectivo), color: AppColors.ingreso),
           const SizedBox(width: 10),
-          _ResumenChip(label: 'Transf.', value: formatCurrencyNoDecimals(totalTransferencia), color: Colors.blue.shade700),
+          _ResumenChip(label: 'Transf.', value: formatCurrencyNoDecimals(totalTransferencia), color: AppColors.info),
           if (cantAnulados > 0) ...[
             const SizedBox(width: 10),
-            _ResumenChip(label: 'Anulados', value: '$cantAnulados', color: Colors.red.shade600),
+            _ResumenChip(label: 'Anulados', value: '$cantAnulados', color: AppColors.egreso),
           ],
         ],
       ),
@@ -330,7 +331,7 @@ class _SalesListPageState extends State<SalesListPage> {
           );
           return Card(
             child: ListTile(
-              leading: const Icon(Icons.warning, color: Colors.orange),
+              leading: const Icon(Icons.warning, color: AppColors.advertencia),
               title: const Text('Error al mostrar ticket'),
             ),
           );
@@ -416,7 +417,7 @@ class _SalesListPageState extends State<SalesListPage> {
           );
           return Card(
             child: ListTile(
-              leading: const Icon(Icons.warning, color: Colors.orange),
+              leading: const Icon(Icons.warning, color: AppColors.advertencia),
               title: const Text('Error al mostrar venta'),
             ),
           );
@@ -440,7 +441,7 @@ class _ResumenChip extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+        Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
         const SizedBox(height: 2),
         Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
       ],
@@ -486,10 +487,10 @@ class _TicketCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: isAnulado
-            ? BorderSide(color: Colors.red.shade200, width: 1)
+            ? BorderSide(color: AppColors.egresoLight, width: 1)
             : BorderSide.none,
       ),
-      color: isAnulado ? Colors.red.shade50 : null,
+      color: isAnulado ? AppColors.egresoDim : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
@@ -508,9 +509,9 @@ class _TicketCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w800,
-                        color: isAnulado ? Colors.red.shade400 : null,
+                        color: isAnulado ? AppColors.egresoLight : null,
                         decoration: isAnulado ? TextDecoration.lineThrough : null,
-                        decorationColor: Colors.red.shade400,
+                        decorationColor: AppColors.egresoLight,
                       ),
                     ),
                   ),
@@ -524,7 +525,7 @@ class _TicketCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: isAnulado ? Colors.grey.shade500 : Colors.grey.shade800,
+                  color: isAnulado ? AppColors.textMuted : AppColors.textSecondary,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -533,7 +534,7 @@ class _TicketCard extends StatelessWidget {
               // ── LÍNEA 3: Hora · Código ──
               Text(
                 '$hora · $codigo',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -542,14 +543,14 @@ class _TicketCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.cancel, size: 15, color: Colors.red.shade600),
+                    Icon(Icons.cancel, size: 15, color: AppColors.egreso),
                     const SizedBox(width: 4),
                     Text(
                       'ANULADO',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: Colors.red.shade700,
+                        color: AppColors.egreso,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -560,14 +561,14 @@ class _TicketCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.print_disabled, size: 15, color: Colors.orange.shade700),
+                    Icon(Icons.print_disabled, size: 15, color: AppColors.advertencia),
                     const SizedBox(width: 4),
                     Text(
                       'NO IMPRESO',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.orange.shade700,
+                        color: AppColors.advertencia,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -608,14 +609,14 @@ class _MedioPagoBadge extends StatelessWidget {
     final Color fg;
 
     if (mp.contains('efectivo')) {
-      bg = Colors.green.shade50;
-      fg = Colors.green.shade700;
+      bg = AppColors.ingresoDim;
+      fg = AppColors.ingreso;
     } else if (mp.contains('transfer')) {
-      bg = Colors.blue.shade50;
-      fg = Colors.blue.shade700;
+      bg = AppColors.infoDim;
+      fg = AppColors.info;
     } else {
-      bg = Colors.grey.shade100;
-      fg = Colors.grey.shade700;
+      bg = AppColors.bgElevated;
+      fg = AppColors.textSecondary;
     }
 
     return Container(
@@ -667,10 +668,10 @@ class _VentaCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: isAnulado
-            ? BorderSide(color: Colors.red.shade200, width: 1)
+            ? BorderSide(color: AppColors.egresoLight, width: 1)
             : BorderSide.none,
       ),
-      color: isAnulado ? Colors.red.shade50 : null,
+      color: isAnulado ? AppColors.egresoDim : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Column(
@@ -686,9 +687,9 @@ class _VentaCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 19,
                       fontWeight: FontWeight.w800,
-                      color: isAnulado ? Colors.red.shade400 : null,
+                      color: isAnulado ? AppColors.egresoLight : null,
                       decoration: isAnulado ? TextDecoration.lineThrough : null,
-                      decorationColor: Colors.red.shade400,
+                      decorationColor: AppColors.egresoLight,
                     ),
                   ),
                 ),
@@ -702,7 +703,7 @@ class _VentaCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: isAnulado ? Colors.grey.shade500 : Colors.grey.shade800,
+                color: isAnulado ? AppColors.textMuted : AppColors.textSecondary,
               ),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
@@ -713,14 +714,14 @@ class _VentaCard extends StatelessWidget {
               children: [
                 Text(
                   hora,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
                 const SizedBox(width: 8),
-                Icon(Icons.receipt_long, size: 13, color: Colors.grey.shade400),
+                Icon(Icons.receipt_long, size: 13, color: AppColors.textMuted),
                 const SizedBox(width: 3),
                 Text(
                   '$cantTickets ticket${cantTickets == 1 ? '' : 's'}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -729,14 +730,14 @@ class _VentaCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Icon(Icons.cancel, size: 15, color: Colors.red.shade600),
+                  Icon(Icons.cancel, size: 15, color: AppColors.egreso),
                   const SizedBox(width: 4),
                   Text(
                     'ANULADO',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Colors.red.shade700,
+                      color: AppColors.egreso,
                       letterSpacing: 0.5,
                     ),
                   ),

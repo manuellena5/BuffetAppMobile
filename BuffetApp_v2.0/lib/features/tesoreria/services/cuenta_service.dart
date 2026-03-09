@@ -99,6 +99,7 @@ class CuentaService {
     String? bancoNombre,
     String? cbuAlias,
     String? dispositivoId,
+    String? fechaFinPlazo,
   }) async {
     try {
       // Validaciones
@@ -125,11 +126,13 @@ class CuentaService {
         'tiene_comision': tieneComision ? 1 : 0,
         'comision_porcentaje': comisionPorcentaje,
         'activa': 1,
+        'estado_cuenta': 'ACTIVA',
         'observaciones': observaciones?.trim(),
         'moneda': moneda ?? 'ARS',
         'banco_nombre': bancoNombre?.trim(),
         'cbu_alias': cbuAlias?.trim(),
         'dispositivo_id': dispositivoId,
+        'fecha_fin_plazo': fechaFinPlazo,
         'eliminado': 0,
         'sync_estado': 'PENDIENTE',
         'created_ts': now,
@@ -163,6 +166,7 @@ class CuentaService {
     String? observaciones,
     String? bancoNombre,
     String? cbuAlias,
+    String? fechaFinPlazo,
   }) async {
     try {
       // Validaciones
@@ -192,6 +196,7 @@ class CuentaService {
           'observaciones': observaciones?.trim(),
           'banco_nombre': bancoNombre?.trim(),
           'cbu_alias': cbuAlias?.trim(),
+          'fecha_fin_plazo': fechaFinPlazo,
           'sync_estado': 'PENDIENTE',
           'updated_ts': now,
         },
@@ -219,6 +224,7 @@ class CuentaService {
         'cuentas_fondos',
         {
           'activa': 0,
+          'estado_cuenta': 'INACTIVA',
           'sync_estado': 'PENDIENTE',
           'updated_ts': now,
         },
@@ -246,6 +252,7 @@ class CuentaService {
         'cuentas_fondos',
         {
           'activa': 1,
+          'estado_cuenta': 'ACTIVA',
           'sync_estado': 'PENDIENTE',
           'updated_ts': now,
         },
@@ -255,6 +262,34 @@ class CuentaService {
     } catch (e, st) {
       await AppDatabase.logLocalError(
         scope: 'cuenta_service.reactivar',
+        error: e,
+        stackTrace: st,
+        payload: {'id': id},
+      );
+      rethrow;
+    }
+  }
+
+  /// Liquidar plazo fijo — marca la cuenta como LIQUIDADA (activa=0)
+  Future<void> liquidar(int id) async {
+    try {
+      final db = await AppDatabase.instance();
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.update(
+        'cuentas_fondos',
+        {
+          'activa': 0,
+          'estado_cuenta': 'LIQUIDADA',
+          'sync_estado': 'PENDIENTE',
+          'updated_ts': now,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'cuenta_service.liquidar',
         error: e,
         stackTrace: st,
         payload: {'id': id},

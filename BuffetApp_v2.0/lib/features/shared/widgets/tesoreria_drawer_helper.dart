@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../state/drawer_state.dart';
 import '../pages/settings_page.dart';
 import '../pages/help_page.dart';
@@ -55,7 +56,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/tesoreria',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Unidad de Gestión activa
@@ -74,7 +75,7 @@ class TesoreriaDrawerHelper {
               );
             });
           },
-          activeColor: Colors.orange,
+          activeColor: AppColors.advertencia,
         ),
         
         // Menú Principal
@@ -91,7 +92,7 @@ class TesoreriaDrawerHelper {
               (route) => false,
             );
           },
-          activeColor: Colors.deepPurple,
+          activeColor: AppColors.accentDim,
         ),
         
         // Crear Movimiento
@@ -106,7 +107,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/crear_movimiento',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Ver Movimientos
@@ -121,7 +122,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/movimientos',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Compromisos
@@ -136,7 +137,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/compromisos',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Acuerdos
@@ -151,7 +152,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/acuerdos',
-          activeColor: Colors.purple,
+          activeColor: AppColors.accentLight,
         ),
         
         // Cuentas de Fondos
@@ -166,7 +167,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/cuentas',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Plantel
@@ -181,7 +182,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/plantel',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Reportes
@@ -196,7 +197,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/reportes',
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
         
         // Dashboard
@@ -211,7 +212,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/dashboard' || currentRouteName == '/reportes/dashboard',
-          activeColor: Colors.indigo,
+          activeColor: AppColors.accentDim,
         ),
         
         // Categorías
@@ -226,7 +227,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/categorias',
-          activeColor: Colors.orange,
+          activeColor: AppColors.advertencia,
         ),
         
         // Saldos Iniciales
@@ -241,7 +242,7 @@ class TesoreriaDrawerHelper {
             );
           },
           isActive: currentRouteName == '/saldos_iniciales',
-          activeColor: Colors.teal,
+          activeColor: AppColors.accent,
         ),
         
         // Logs de errores (solo si funciones avanzadas están activadas)
@@ -256,7 +257,7 @@ class TesoreriaDrawerHelper {
                 MaterialPageRoute(builder: (_) => const ErrorLogsPage()),
               );
             },
-            activeColor: Colors.red,
+            activeColor: AppColors.egreso,
           ),
         
         // Configuración
@@ -271,7 +272,7 @@ class TesoreriaDrawerHelper {
             );
             onLoadVersion?.call();
           },
-          activeColor: Colors.grey,
+          activeColor: AppColors.textMuted,
         ),
         
         // Ayuda
@@ -285,7 +286,7 @@ class TesoreriaDrawerHelper {
               MaterialPageRoute(builder: (_) => const HelpPage()),
             );
           },
-          activeColor: Colors.blue,
+          activeColor: AppColors.info,
         ),
       ],
     );

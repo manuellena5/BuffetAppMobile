@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../domain/models.dart';
 import '../../shared/format.dart';
@@ -7,6 +8,7 @@ import '../../shared/widgets/responsive_container.dart';
 import '../../tesoreria/services/cuenta_service.dart';
 import '../../tesoreria/services/categoria_movimiento_service.dart';
 import '../../tesoreria/pages/detalle_movimiento_page.dart';
+import '../../tesoreria/pages/crear_movimiento_page.dart';
 import 'transferencia_page.dart';
 
 /// Pantalla de detalle de una cuenta de fondos
@@ -23,6 +25,7 @@ class DetalleCuentaPage extends StatefulWidget {
 class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
   final _cuentaService = CuentaService();
   
+  late CuentaFondos _cuenta;
   double _saldoActual = 0.0;
   List<Map<String, dynamic>> _movimientos = [];
   bool _cargando = true;
@@ -31,12 +34,19 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
   @override
   void initState() {
     super.initState();
+    _cuenta = widget.cuenta;
     _cargarDatos();
   }
 
   Future<void> _cargarDatos() async {
     try {
       setState(() => _cargando = true);
+
+      // Recargar datos de la cuenta (estado puede haber cambiado)
+      final cuentaActualizada = await _cuentaService.obtenerPorId(widget.cuenta.id);
+      if (cuentaActualizada != null && mounted) {
+        setState(() => _cuenta = cuentaActualizada);
+      }
       
       // Cargar saldo actual
       final saldo = await _cuentaService.obtenerSaldo(widget.cuenta.id);
@@ -52,7 +62,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
         'evento_movimiento',
         where: 'cuenta_id = ? AND eliminado = 0 AND created_ts >= ? AND created_ts <= ?',
         whereArgs: [
-          widget.cuenta.id,
+          _cuenta.id,
           primerDia.millisecondsSinceEpoch,
           ultimoDia.millisecondsSinceEpoch,
         ],
@@ -79,7 +89,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al cargar datos: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -90,7 +100,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
     final resultado = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => TransferenciaPage(cuentaOrigenId: widget.cuenta.id),
+        builder: (context) => TransferenciaPage(cuentaOrigenId: _cuenta.id),
       ),
     );
     
@@ -103,7 +113,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.cuenta.nombre),
+        title: Text(_cuenta.nombre),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -149,7 +159,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: _saldoActual >= 0 ? Colors.green : Colors.red,
+                    color: _saldoActual >= 0 ? AppColors.ingreso : AppColors.egreso,
                   ),
                 ),
               ],
@@ -157,26 +167,46 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
             const SizedBox(height: 16),
             
             // Información de la cuenta
-            _buildInfoRow('Tipo', widget.cuenta.tipo),
-            _buildInfoRow('Saldo inicial', formatCurrency(widget.cuenta.saldoInicial)),
-            if (widget.cuenta.tieneComision && widget.cuenta.comisionPorcentaje != null)
+            _buildInfoRow('Tipo', _cuenta.tipo),
+            _buildInfoRow(
+              'Estado',
+              _cuenta.estadoCuenta == 'ACTIVA'
+                  ? 'Activa'
+                  : _cuenta.estadoCuenta == 'LIQUIDADA'
+                      ? 'Liquidada'
+                      : 'Inactiva',
+              color: _cuenta.estadoCuenta == 'ACTIVA'
+                  ? AppColors.ingreso
+                  : _cuenta.estadoCuenta == 'LIQUIDADA'
+                      ? AppColors.advertencia
+                      : AppColors.textMuted,
+            ),
+            _buildInfoRow('Saldo inicial', formatCurrency(_cuenta.saldoInicial)),
+            if (_cuenta.tieneComision && _cuenta.comisionPorcentaje != null)
               _buildInfoRow(
                 'Comisión',
-                '${widget.cuenta.comisionPorcentaje}%',
-                color: Colors.orange,
+                '${_cuenta.comisionPorcentaje}%',
+                color: AppColors.advertencia,
               ),
-            if (widget.cuenta.bancoNombre != null)
-              _buildInfoRow('Banco', widget.cuenta.bancoNombre!),
-            if (widget.cuenta.cbuAlias != null)
-              _buildInfoRow('CBU/Alias', widget.cuenta.cbuAlias!),
-            if (widget.cuenta.observaciones != null)
-              _buildInfoRow('Observaciones', widget.cuenta.observaciones!),
+            if (_cuenta.bancoNombre != null)
+              _buildInfoRow('Banco', _cuenta.bancoNombre!),
+            if (_cuenta.cbuAlias != null)
+              _buildInfoRow('CBU/Alias', _cuenta.cbuAlias!),
+            if (_cuenta.observaciones != null)
+              _buildInfoRow('Observaciones', _cuenta.observaciones!),
+            if (_cuenta.fechaFinPlazo != null)
+              _buildInfoRow(
+                'Vencimiento',
+                (() {
+                  final fecha = DateTime.tryParse(_cuenta.fechaFinPlazo!);
+                  return fecha != null ? DateFormat('dd/MM/yyyy').format(fecha) : _cuenta.fechaFinPlazo!;
+                })(),
+              ),
           ],
         ),
       ),
     );
   }
-
   Widget _buildInfoRow(String label, String value, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
@@ -185,7 +215,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 14, color: Colors.grey),
+            style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
           ),
           Text(
             value,
@@ -254,20 +284,238 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
   }
 
   Widget _buildAcciones() {
+    final esInversion = _cuenta.tipo == 'INVERSION';
+    final estaActiva = _cuenta.estadoCuenta == 'ACTIVA';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Info de plazo fijo
+          if (esInversion && _cuenta.fechaFinPlazo != null)
+            _buildPlazoFijoInfo(),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _navegarATransferencia,
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('Transferir'),
+                ),
+              ),
+              if (esInversion) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: estaActiva ? _mostrarDialogoLiquidarIntereses : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.ingreso,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.savings),
+                    label: const Text('Liquidar intereses'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          // Botón desactivar / reactivar (no mostrar para LIQUIDADA)
+          if (_cuenta.estadoCuenta == 'ACTIVA') ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _desactivarCuenta,
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.advertencia),
+              icon: const Icon(Icons.block),
+              label: const Text('Desactivar cuenta'),
+            ),
+          ] else if (_cuenta.estadoCuenta == 'INACTIVA') ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _reactivarCuenta,
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.ingreso),
+              icon: const Icon(Icons.check_circle),
+              label: const Text('Reactivar cuenta'),
+            ),
+          ] else if (_cuenta.estadoCuenta == 'LIQUIDADA') ...[
+            const SizedBox(height: 8),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock, size: 16, color: AppColors.textMuted),
+                SizedBox(width: 6),
+                Text('Plazo fijo liquidado', style: TextStyle(color: AppColors.textMuted)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlazoFijoInfo() {
+    final fechaVenc = DateTime.tryParse(_cuenta.fechaFinPlazo!);
+    if (fechaVenc == null) return const SizedBox.shrink();
+    
+    final hoy = DateTime.now();
+    final diasRestantes = fechaVenc.difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+    final vencido = diasRestantes < 0;
+    final proximo = !vencido && diasRestantes <= 7;
+    final color = vencido
+        ? AppColors.egreso
+        : proximo
+            ? AppColors.advertencia
+            : AppColors.ingreso;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
       child: Row(
         children: [
+          Icon(
+            vencido ? Icons.warning_amber : Icons.event,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
           Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _navegarATransferencia,
-              icon: const Icon(Icons.swap_horiz),
-              label: const Text('Transferir'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vencido
+                      ? 'Plazo fijo vencido'
+                      : proximo
+                          ? 'Plazo fijo próximo a vencer'
+                          : 'Plazo fijo vigente',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  vencido
+                      ? 'Venció el ${DateFormat('dd/MM/yyyy').format(fechaVenc)}'
+                      : 'Vence: ${DateFormat('dd/MM/yyyy').format(fechaVenc)} ($diasRestantes días)',
+                  style: TextStyle(fontSize: 13, color: color),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _mostrarDialogoLiquidarIntereses() {
+    final cuenta = _cuenta;
+    final montoCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.savings, color: AppColors.ingreso, size: 28),
+            SizedBox(width: 8),
+            Text('Liquidar Plazo Fijo'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Cuenta: ${cuenta.nombre}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: montoCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Intereses obtenidos *',
+                prefixText: '\$ ',
+                border: OutlineInputBorder(),
+                hintText: 'Ingresá el monto de intereses recibidos',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final monto = double.tryParse(
+                montoCtrl.text.trim().replaceAll(',', '.'),
+              );
+              if (monto == null || monto <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Ingresá un monto válido')),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              _confirmarRegistrarIntereses(monto);
+            },
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmarRegistrarIntereses(double monto) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.add_circle, color: AppColors.ingreso, size: 28),
+            SizedBox(width: 8),
+            Text('Registrar intereses'),
+          ],
+        ),
+        content: Text(
+          '¿Querés registrar \$${Format.money(monto)} como ingreso por intereses?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('No, cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _liquidarYRegistrar(monto);
+            },
+            child: const Text('Sí, registrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navegarACrearMovimientoIntereses(double monto) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CrearMovimientoPage(
+          cuentaIdInicial: _cuenta.id,
+          tipoInicial: 'INGRESO',
+          categoriaInicial: 'INTE',
+          montoInicial: monto,
+          descripcionInicial: 'Intereses - ${_cuenta.nombre}',
+        ),
+      ),
+    );
+    
+    if (mounted) {
+      _cargarDatos();
+    }
   }
 
   Widget _buildMovimientos() {
@@ -276,11 +524,11 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long, size: 64, color: Colors.grey),
+            Icon(Icons.receipt_long, size: 64, color: AppColors.textMuted),
             SizedBox(height: 16),
             Text(
               'No hay movimientos en este mes',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: AppColors.textMuted),
             ),
           ],
         ),
@@ -337,7 +585,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
+                      color: AppColors.infoDim,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -350,7 +598,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                           formatCurrency(saldoInicial),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: saldoInicial >= 0 ? Colors.green : Colors.red,
+                            color: saldoInicial >= 0 ? AppColors.ingreso : AppColors.egreso,
                           ),
                         ),
                       ],
@@ -360,7 +608,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                   
                   // Tabla de movimientos
                   DataTable(
-                    headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
+                    headingRowColor: WidgetStateProperty.all(AppColors.bgElevated),
                     columns: const [
                       DataColumn(label: Text('Fecha', style: TextStyle(fontWeight: FontWeight.bold))),
                       DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -385,13 +633,13 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: tipo == 'INGRESO' ? Colors.green.shade100 : Colors.red.shade100,
+                                color: tipo == 'INGRESO' ? AppColors.ingresoDim : AppColors.egresoDim,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 tipo,
                                 style: TextStyle(
-                                  color: tipo == 'INGRESO' ? Colors.green.shade900 : Colors.red.shade900,
+                                  color: tipo == 'INGRESO' ? AppColors.ingreso : AppColors.egreso,
                                   fontSize: 12,
                                 ),
                               ),
@@ -410,7 +658,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                               '${tipo == 'INGRESO' ? '+' : '-'} ${formatCurrency(monto)}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: tipo == 'INGRESO' ? Colors.green : Colors.red,
+                                color: tipo == 'INGRESO' ? AppColors.ingreso : AppColors.egreso,
                               ),
                             ),
                           ),
@@ -419,7 +667,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                               formatCurrency(saldoEnEsteFila),
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: saldoEnEsteFila >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                color: saldoEnEsteFila >= 0 ? AppColors.ingreso : AppColors.egreso,
                               ),
                             ),
                           ),
@@ -451,7 +699,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: AppColors.ingresoDim,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -465,7 +713,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            color: (filasConSaldo.isNotEmpty ? filasConSaldo.first['_saldo_acumulado'] as double : saldoInicial) >= 0 ? Colors.green : Colors.red,
+                            color: (filasConSaldo.isNotEmpty ? filasConSaldo.first['_saldo_acumulado'] as double : saldoInicial) >= 0 ? AppColors.ingreso : AppColors.egreso,
                           ),
                         ),
                       ],
@@ -485,7 +733,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
       final db = await AppDatabase.instance();
       
       // Saldo inicial de la cuenta
-      double saldo = widget.cuenta.saldoInicial;
+      double saldo = _cuenta.saldoInicial;
       
       // Sumar/restar todos los movimientos anteriores al mes seleccionado
       final primerDiaMes = DateTime(_mesSeleccionado.year, _mesSeleccionado.month, 1);
@@ -493,7 +741,7 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
       final movimientosAnteriores = await db.query(
         'evento_movimiento',
         where: 'cuenta_id = ? AND eliminado = 0 AND created_ts < ?',
-        whereArgs: [widget.cuenta.id, primerDiaMes.millisecondsSinceEpoch],
+        whereArgs: [_cuenta.id, primerDiaMes.millisecondsSinceEpoch],
       );
       
       for (final mov in movimientosAnteriores) {
@@ -514,7 +762,106 @@ class _DetalleCuentaPageState extends State<DetalleCuentaPage> {
         error: e,
         stackTrace: st,
       );
-      return widget.cuenta.saldoInicial;
+      return _cuenta.saldoInicial;
+    }
+  }
+
+  /// Liquida el plazo fijo y navega a crear el movimiento de intereses
+  Future<void> _liquidarYRegistrar(double monto) async {
+    try {
+      await _cuentaService.liquidar(_cuenta.id);
+      if (!mounted) return;
+      _navegarACrearMovimientoIntereses(monto);
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'detalle_cuenta_page.liquidar',
+        error: e,
+        stackTrace: st,
+        payload: {'cuenta_id': _cuenta.id},
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al liquidar el plazo fijo. Intentá nuevamente.'),
+            backgroundColor: AppColors.egreso,
+          ),
+        );
+      }
+    }
+  }
+
+  void _desactivarCuenta() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Desactivar cuenta'),
+        content: Text('¿Desactivar "${_cuenta.nombre}"? La cuenta dejará de aparecer en el listado principal.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.advertencia),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Desactivar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
+    try {
+      await _cuentaService.desactivar(_cuenta.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cuenta desactivada')),
+        );
+        _cargarDatos();
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'detalle_cuenta_page.desactivar',
+        error: e,
+        stackTrace: st,
+        payload: {'cuenta_id': _cuenta.id},
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo desactivar la cuenta. Intentá nuevamente.'),
+            backgroundColor: AppColors.egreso,
+          ),
+        );
+      }
+    }
+  }
+
+  void _reactivarCuenta() async {
+    try {
+      await _cuentaService.reactivar(_cuenta.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cuenta reactivada')),
+        );
+        _cargarDatos();
+      }
+    } catch (e, st) {
+      await AppDatabase.logLocalError(
+        scope: 'detalle_cuenta_page.reactivar',
+        error: e,
+        stackTrace: st,
+        payload: {'cuenta_id': _cuenta.id},
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo reactivar la cuenta. Intentá nuevamente.'),
+            backgroundColor: AppColors.egreso,
+          ),
+        );
+      }
     }
   }
 }

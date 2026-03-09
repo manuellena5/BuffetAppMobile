@@ -177,7 +177,7 @@ class ProyeccionFlujoService {
       WHERE created_ts >= ? AND created_ts <= ?
         AND eliminado = 0
         AND estado = 'CONFIRMADO'
-        AND disciplina_id = ?
+        AND unidad_gestion_id = ?
     ''', [inicioAnio, hastaMs, unidadGestionId]);
 
     final ingresos = (rows.first['ingresos'] as num?)?.toDouble() ?? 0.0;
@@ -199,16 +199,17 @@ class ProyeccionFlujoService {
 
     final rows = await db.rawQuery('''
       SELECT 
-        substr(fecha_vencimiento, 1, 7) as mes_key,
-        tipo,
-        SUM(monto) as total
-      FROM compromisos
-      WHERE unidad_gestion_id = ?
-        AND estado = 'ESPERADO'
-        AND eliminado = 0
-        AND fecha_vencimiento >= ?
-        AND fecha_vencimiento <= ?
-      GROUP BY substr(fecha_vencimiento, 1, 7), tipo
+        substr(cc.fecha_programada, 1, 7) as mes_key,
+        c.tipo,
+        SUM(cc.monto_esperado) as total
+      FROM compromiso_cuotas cc
+      JOIN compromisos c ON c.id = cc.compromiso_id
+      WHERE c.unidad_gestion_id = ?
+        AND cc.estado = 'ESPERADO'
+        AND c.eliminado = 0
+        AND cc.fecha_programada >= ?
+        AND cc.fecha_programada <= ?
+      GROUP BY substr(cc.fecha_programada, 1, 7), c.tipo
     ''', [unidadGestionId, desdeFechaStr, hastaFechaStr]);
 
     final resultado = <String, Map<String, double>>{};

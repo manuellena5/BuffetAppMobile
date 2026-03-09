@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
-import '../../../core/theme/app_spacing.dart';
 import '../../../layout/erp_layout.dart';
 import '../../../widgets/app_header.dart';
+import '../../../widgets/summary_card.dart';
+import '../../../widgets/status_badge.dart';
+import '../../shared/format.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import 'detalle_jugador_page.dart';
@@ -24,7 +27,7 @@ class _PlantelPageState extends State<PlantelPage> {
   bool _cargando = true;
   String _filtroRol = 'TODOS';
   String _filtroEstado = 'ACTIVOS';
-  bool _vistaTabla = false;
+  bool _vistaTabla = true; // tabla por defecto
 
   // Resumen general
   Map<String, dynamic> _resumenGeneral = {};
@@ -32,9 +35,30 @@ class _PlantelPageState extends State<PlantelPage> {
   // Entidades con su estado económico
   List<Map<String, dynamic>> _entidadesConEstado = [];
 
+  // Compromisos activos del mes por entidad (batch)
+  Map<int, List<Map<String, dynamic>>> _acuerdosPorEntidad = {};
+
   // Mes actual
   late int _mesActual;
   late int _anioActual;
+
+  // ── Getters de conteo por estado ────────────────────────────────────────────
+  int get _cantAlDia => _entidadesConEstado.where((e) {
+    final esp = (e['esperado'] as num?)?.toDouble() ?? 0;
+    return esp == 0;
+  }).length;
+
+  int get _cantSinPago => _entidadesConEstado.where((e) {
+    final pag = (e['pagado'] as num?)?.toDouble() ?? 0;
+    final tot = (e['totalComprometido'] as num?)?.toDouble() ?? 0;
+    return pag == 0 && tot > 0;
+  }).length;
+
+  int get _cantParcial => _entidadesConEstado.where((e) {
+    final esp = (e['esperado'] as num?)?.toDouble() ?? 0;
+    final pag = (e['pagado'] as num?)?.toDouble() ?? 0;
+    return esp > 0 && pag > 0;
+  }).length;
 
   @override
   void initState() {
@@ -91,9 +115,15 @@ class _PlantelPageState extends State<PlantelPage> {
         }
       }
 
+      // Cargar acuerdos (compromisos) activos del mes para todas las entidades
+      final entidadIds = entidades.map((e) => e['id'] as int).toList();
+      final acuerdosBatch = await _plantelSvc.obtenerAcuerdosMensualesBatch(
+        entidadIds, _anioActual, _mesActual);
+
       setState(() {
         _resumenGeneral = resumen;
         _entidadesConEstado = entidadesConEstado;
+        _acuerdosPorEntidad = acuerdosBatch;
       });
     } catch (e, stack) {
       await AppDatabase.logLocalError(
@@ -107,7 +137,7 @@ class _PlantelPageState extends State<PlantelPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error al cargar datos del plantel. Por favor, intente nuevamente.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -147,65 +177,47 @@ class _PlantelPageState extends State<PlantelPage> {
         ),
       ],
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _irAGestionar,
-        icon: const Icon(Icons.settings),
-        label: const Text('Gestionar'),
-      ),
-      body: Column(
-        children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Plantel - ${_nombreMes(_mesActual)} $_anioActual',
-              subtitle: '${_entidadesConEstado.length} entidades',
+              onPressed: _irAGestionar,
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.textPrimary,
+              icon: const Icon(Icons.settings),
+              label: const Text('Gestionar'),
             ),
-          Expanded(
-            child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          child: RefreshIndicator(
-            onRefresh: _cargarDatos,
-            child: _cargando
-                ? SkeletonLoader.cards(count: 4)
-                : SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  child: Column(
-                    children: [
-                      // BLOQUE 1: Resumen General
-                      _buildResumenGeneral(),
-
-                      const Divider(height: 1),
-
-                      // Filtros
-                      _buildFiltros(),
-
-                      const Divider(height: 1),
-
-                      // BLOQUE 2: Lista de jugadores
-                      if (_entidadesConEstado.isEmpty)
-                        EmptyState(
-                          icon: Icons.people_outline,
-                          title: 'No hay entidades para mostrar',
-                          action: ElevatedButton.icon(
-                            onPressed: _irAGestionar,
-                            icon: const Icon(Icons.settings),
-                            label: const Text('Gestionar jugadores'),
-                          ),
-                        )
-                      else if (_vistaTabla)
-                        _buildTabla()
-                      else
-                        _buildTarjetas(),
-                    ],
-                  ),
-                ),
-          ),
-        ),
-      ),
-          ),
-        ],
-      ),
+      body: _cargando
+          ? SkeletonLoader.cards(count: 4)
+          : RefreshIndicator(
+              onRefresh: _cargarDatos,
+              child: ListView(
+                padding: const EdgeInsets.all(AppSpacing.contentPadding),
+                children: [
+                  if (isDesktop)
+                    const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.lg),
+                  _buildResumenGeneral(),
+                  const SizedBox(height: AppSpacing.lg),
+                  _buildFiltros(),
+                  const SizedBox(height: AppSpacing.lg),
+                  if (_entidadesConEstado.isEmpty)
+                    EmptyState(
+                      icon: Icons.people_outline,
+                      title: 'No hay entidades para mostrar',
+                      action: FilledButton.icon(
+                        onPressed: _irAGestionar,
+                        icon: const Icon(Icons.settings, size: 18),
+                        label: const Text('Gestionar jugadores'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: AppColors.textPrimary,
+                        ),
+                      ),
+                    )
+                  else if (_vistaTabla)
+                    _buildTabla()
+                  else
+                    _buildTarjetas(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -213,156 +225,203 @@ class _PlantelPageState extends State<PlantelPage> {
     final totalComprometido = _resumenGeneral['totalMensualComprometido'] as double? ?? 0.0;
     final pagado = _resumenGeneral['pagadoEsteMes'] as double? ?? 0.0;
     final pendiente = _resumenGeneral['pendienteEsteMes'] as double? ?? 0.0;
-    final cantidadJugadores = _resumenGeneral['cantidadJugadores'] as int? ?? 0;
-    final jugadoresAlDia = _resumenGeneral['jugadoresAlDia'] as int? ?? 0;
+    final progreso = totalComprometido == 0 ? 0.0 : (pagado / totalComprometido).clamp(0.0, 1.0);
+    final totalEntidades = _resumenGeneral['totalEntidades'] as int? ?? 0;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.blue.shade50,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.groups, color: Colors.blue.shade700, size: 28),
-              const SizedBox(width: 12),
-              Text(
-                'Resumen General',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+    final kpis = [
+      (
+        title: 'TOTAL COMPROMETIDO',
+        value: Format.moneyNoDecimals(totalComprometido),
+        icon: Icons.attach_money,
+        color: AppColors.info,
+      ),
+      (
+        title: 'PAGADO ESTE MES',
+        value: Format.moneyNoDecimals(pagado),
+        icon: Icons.check_circle_outline,
+        color: AppColors.ingreso,
+      ),
+      (
+        title: 'PENDIENTE',
+        value: Format.moneyNoDecimals(pendiente),
+        icon: Icons.pending_outlined,
+        color: pendiente > 0 ? AppColors.egreso : AppColors.ingreso,
+      ),
+      (
+        title: 'AL DÍA',
+        value: '$_cantAlDia personas',
+        icon: Icons.radio_button_checked,
+        color: AppColors.ingreso,
+      ),
+      (
+        title: 'PAGO PARCIAL',
+        value: '$_cantParcial personas',
+        icon: Icons.timelapse,
+        color: AppColors.advertencia,
+      ),
+      (
+        title: 'SIN PAGO',
+        value: '$_cantSinPago personas',
+        icon: Icons.cancel_outlined,
+        color: AppColors.egreso,
+      ),
+    ];
 
-          // Totales
-          Row(
-            children: [
-              Expanded(
-                child: _buildKpiCard(
-                  'Total mensual',
-                  '\$ ${_formatMonto(totalComprometido)}',
-                  Icons.attach_money,
-                  Colors.blue,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildKpiCard(
-                  'Pagado',
-                  '\$ ${_formatMonto(pagado)}',
-                  Icons.check_circle,
-                  Colors.green,
-                ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 6 KPIs en 2 filas de 3
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.contentPadding),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 700;
+              if (isWide) {
+                return Row(
+                  children: kpis.map((k) => Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: SummaryCard(
+                        title: k.title,
+                        value: k.value,
+                        icon: k.icon,
+                        color: k.color,
+                      ),
+                    ),
+                  )).toList(),
+                );
+              }
+              // Layout para pantallas más angostas: 2 columnas
+              return Column(
+                children: [
+                  for (int i = 0; i < kpis.length; i += 2)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SummaryCard(
+                              title: kpis[i].title,
+                              value: kpis[i].value,
+                              icon: kpis[i].icon,
+                              color: kpis[i].color,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          if (i + 1 < kpis.length)
+                            Expanded(
+                              child: SummaryCard(
+                                title: kpis[i + 1].title,
+                                value: kpis[i + 1].value,
+                                icon: kpis[i + 1].icon,
+                                color: kpis[i + 1].color,
+                              ),
+                            )
+                          else
+                            const Expanded(child: SizedBox()),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildKpiCard(
-                  'Pendiente',
-                  '\$ ${_formatMonto(pendiente)}',
-                  Icons.pending,
-                  Colors.orange,
-                ),
+        ),
+        // Barra de progreso global
+        if (totalComprometido > 0) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.contentPadding),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+              decoration: AppDecorations.cardOf(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Progreso de pagos del mes', style: AppText.caption),
+                      Text(
+                        '${(progreso * 100).round()}% completado',
+                        style: AppText.label.copyWith(
+                          color: progreso == 1.0
+                              ? AppColors.ingreso
+                              : context.appColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progreso,
+                      backgroundColor: context.appColors.bgElevated,
+                      valueColor: AlwaysStoppedAnimation(
+                          progreso == 1.0 ? AppColors.ingreso : AppColors.advertencia),
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${Format.moneyNoDecimals(pagado)} pagado',
+                        style: AppText.caption.copyWith(color: AppColors.ingreso),
+                      ),
+                      Text(
+                        '${Format.moneyNoDecimals(pendiente)} pendiente · $totalEntidades personas',
+                        style: AppText.caption.copyWith(color: AppColors.egreso),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildKpiCard(
-                  'Jugadores al día',
-                  '$jugadoresAlDia / $cantidadJugadores',
-                  Icons.people_alt,
-                  jugadoresAlDia == cantidadJugadores ? Colors.green : Colors.orange,
-                ),
-              ),
-            ],
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildKpiCard(String label, String valor, IconData icono, Color color) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icono, size: 16, color: color),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              valor,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
   Widget _buildFiltros() {
     return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.grey.shade100,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: AppDecorations.cardOf(context),
       child: Column(
         children: [
           Row(
             children: [
-              const Text('Rol:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(width: 8),
+              Text('Rol:', style: AppText.label),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Wrap(
-                  spacing: 4,
-                  children: [
-                    _buildChipFiltro('TODOS', _filtroRol == 'TODOS', esRol: true),
-                    _buildChipFiltro('JUGADOR', _filtroRol == 'JUGADOR', esRol: true),
-                    _buildChipFiltro('DT', _filtroRol == 'DT', esRol: true),
-                    _buildChipFiltro('AYUDANTE', _filtroRol == 'AYUDANTE', esRol: true),
-                    _buildChipFiltro('PF', _filtroRol == 'PF', esRol: true),
-                    _buildChipFiltro('OTRO', _filtroRol == 'OTRO', esRol: true),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildTabBtn('Todos', 'TODOS', isRol: true),
+                      _buildTabBtn('Jugador', 'JUGADOR', isRol: true),
+                      _buildTabBtn('DT', 'DT', isRol: true),
+                      _buildTabBtn('Ayudante', 'AYUDANTE', isRol: true),
+                      _buildTabBtn('PF', 'PF', isRol: true),
+                      _buildTabBtn('Otro', 'OTRO', isRol: true),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              const Text('Estado:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Wrap(
-                  spacing: 4,
-                  children: [
-                    _buildChipFiltro('ACTIVOS', _filtroEstado == 'ACTIVOS', esRol: false),
-                    _buildChipFiltro('BAJA', _filtroEstado == 'BAJA', esRol: false),
-                    _buildChipFiltro('TODOS', _filtroEstado == 'TODOS', esRol: false),
-                  ],
-                ),
-              ),
+              Text('Estado:', style: AppText.label),
+              const SizedBox(width: AppSpacing.sm),
+              _buildTabBtn('Activos', 'ACTIVOS', isRol: false),
+              _buildTabBtn('Baja', 'BAJA', isRol: false),
+              _buildTabBtn('Todos', 'TODOS', isRol: false),
             ],
           ),
         ],
@@ -370,34 +429,45 @@ class _PlantelPageState extends State<PlantelPage> {
     );
   }
 
-  Widget _buildChipFiltro(String label, bool selected, {required bool esRol}) {
-    return FilterChip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
-      selected: selected,
-      onSelected: (value) {
+  Widget _buildTabBtn(String label, String value, {required bool isRol}) {
+    final active = isRol ? _filtroRol == value : _filtroEstado == value;
+    return GestureDetector(
+      onTap: () {
         setState(() {
-          if (esRol) {
-            _filtroRol = label;
+          if (isRol) {
+            _filtroRol = value;
           } else {
-            _filtroEstado = label;
+            _filtroEstado = value;
           }
         });
         _cargarDatos();
       },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+        margin: const EdgeInsets.only(right: AppSpacing.xs),
+        decoration: BoxDecoration(
+          color: active ? context.appColors.bgElevated : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
+        child: Text(
+          label,
+          style: AppText.titleSm.copyWith(
+            fontSize: 12,
+            color: active ? context.appColors.textPrimary : context.appColors.textMuted,
+          ),
+        ),
+      ),
     );
   }
 
 
   Widget _buildTarjetas() {
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(8),
-      itemCount: _entidadesConEstado.length,
-      itemBuilder: (context, index) {
-        final entidad = _entidadesConEstado[index];
+    return Column(
+      children: _entidadesConEstado.map((entidad) {
         return _buildTarjetaEntidad(entidad);
-      },
+      }).toList(),
     );
   }
 
@@ -412,177 +482,515 @@ class _PlantelPageState extends State<PlantelPage> {
       final esperado = (entidad['esperado'] as num?)?.toDouble() ?? 0.0;
 
       final estadoPago = esperado == 0 ? 'Al día' : pagado == 0 ? 'Sin pagos' : 'Pendiente';
-      final colorEstado = esperado == 0
-          ? Colors.green
+      final statusType = esperado == 0
+          ? StatusType.success
           : pagado == 0
-              ? Colors.red
-              : Colors.orange;
+              ? StatusType.danger
+              : StatusType.warning;
 
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        color: activo ? null : Colors.grey.shade200,
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: _colorPorRol(rol),
-            child: Text(
-              _inicialesRol(rol),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      final rolColor = _colorPorRol(rol);
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: InkWell(
+          onTap: () => _irADetalle(id),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          child: Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: AppDecorations.cardOf(context).copyWith(
+              color: activo ? context.appColors.bgSurface : context.appColors.bgElevated,
+              boxShadow: AppShadows.cardFor(context),
             ),
-          ),
-          title: Text(
-            nombre,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              decoration: activo ? null : TextDecoration.lineThrough,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(_nombreRol(rol), style: const TextStyle(fontSize: 12)),
-                  // Mostrar alias si existe
-                  if (entidad['alias'] != null && (entidad['alias'] as String).isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      '"${entidad['alias']}"',
-                      style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: rolColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _inicialesRol(rol),
+                    style: AppText.label.copyWith(
+                      color: rolColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
-                ],
-              ),
-              // Mostrar tipo_contratacion y posicion para JUGADOR
-              if (rol == 'JUGADOR') ...[
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (entidad['tipo_contratacion'] != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: entidad['tipo_contratacion'] == 'LOCAL'
-                              ? Colors.blue.shade50
-                              : entidad['tipo_contratacion'] == 'REFUERZO'
-                                  ? Colors.purple.shade50
-                                  : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: entidad['tipo_contratacion'] == 'LOCAL'
-                                ? Colors.blue.shade300
-                                : entidad['tipo_contratacion'] == 'REFUERZO'
-                                    ? Colors.purple.shade300
-                                    : Colors.grey.shade400,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              nombre,
+                              style: AppText.titleSm.copyWith(
+                                decoration: activo ? null : TextDecoration.lineThrough,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          entidad['tipo_contratacion'].toString(),
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
-                        ),
+                          StatusBadge(label: estadoPago, type: statusType),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (entidad['posicion'] != null) ...[
-                      Icon(_iconPosicion(entidad['posicion'].toString()), size: 12, color: Colors.grey.shade600),
-                      const SizedBox(width: 4),
-                      Text(
-                        _nombrePosicion(entidad['posicion'].toString()),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(_nombreRol(rol), style: AppText.caption),
+                          if (entidad['alias'] != null && (entidad['alias'] as String).isNotEmpty) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              '"${entidad['alias']}"',
+                              style: AppText.caption.copyWith(fontStyle: FontStyle.italic),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (rol == 'JUGADOR') ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (entidad['tipo_contratacion'] != null) ...[
+                              StatusBadge(
+                                label: entidad['tipo_contratacion'].toString(),
+                                type: entidad['tipo_contratacion'] == 'LOCAL'
+                                    ? StatusType.info
+                                    : StatusType.neutral,
+                                fontSize: 10,
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                            ],
+                            if (entidad['posicion'] != null) ...[
+                              Icon(_iconPosicion(entidad['posicion'].toString()),
+                                  size: 12, color: context.appColors.textMuted),
+                              const SizedBox(width: 4),
+                              Text(
+                                _nombrePosicion(entidad['posicion'].toString()),
+                                style: AppText.caption,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        children: [
+                          Text(
+                            'Total: \$${_formatMonto(totalComprometido)}',
+                            style: AppText.monoSm.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: AppSpacing.lg),
+                          Text(
+                            'Pagado: \$${_formatMonto(pagado)}',
+                            style: AppText.monoSm.copyWith(color: AppColors.ingreso),
+                          ),
+                          const SizedBox(width: AppSpacing.lg),
+                          Text(
+                            'Pendiente: \$${_formatMonto(esperado)}',
+                            style: AppText.monoSm.copyWith(color: AppColors.advertencia),
+                          ),
+                        ],
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ],
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.attach_money, size: 14, color: Colors.grey.shade700),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Total: \$${_formatMonto(totalComprometido)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Icon(Icons.check_circle, size: 14, color: Colors.green.shade700),
-                  const SizedBox(width: 4),
-                  Text('Pagado: \$${_formatMonto(pagado)}', style: const TextStyle(fontSize: 11)),
-                  const SizedBox(width: 12),
-                  Icon(Icons.pending, size: 14, color: Colors.orange.shade700),
-                  const SizedBox(width: 4),
-                  Text('Pendiente: \$${_formatMonto(esperado)}', style: const TextStyle(fontSize: 11)),
-                ],
-              ),
-            ],
+            ),
           ),
-          trailing: Chip(
-            label: Text(estadoPago, style: const TextStyle(fontSize: 10)),
-            backgroundColor: colorEstado.withOpacity(0.2),
-            side: BorderSide(color: colorEstado),
-          ),
-          onTap: () => _irADetalle(id),
         ),
       );
     } catch (e, stack) {
-      // Loguear error y mostrar tarjeta de error
       AppDatabase.logLocalError(
         scope: 'plantel_page.render_tarjeta',
         error: e.toString(),
         stackTrace: stack,
         payload: {'entidad': entidad},
       );
-      
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        color: Colors.orange.shade50,
-        child: ListTile(
-          leading: Icon(Icons.warning, color: Colors.orange.shade700),
-          title: const Text('Error al mostrar entidad'),
-          subtitle: const Text('Algunos datos no están disponibles', style: TextStyle(fontSize: 11)),
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: AppDecorations.cardOf(context).copyWith(
+            border: Border.all(color: AppColors.advertencia.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning, color: AppColors.advertencia, size: 20),
+              const SizedBox(width: AppSpacing.md),
+              const Expanded(
+                child: Text('Error al mostrar entidad'),
+              ),
+            ],
+          ),
         ),
       );
     }
   }
 
   Widget _buildTabla() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        headingRowColor: MaterialStateProperty.all(Colors.grey.shade200),
-        columns: const [
-          DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Rol', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Total Mensual', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Pagado', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Pendiente', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Estado', style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        rows: _entidadesConEstado.map((entidad) {
-          final id = entidad['id'] as int;
-          final nombre = entidad['nombre'] as String;
-          final rol = entidad['rol'] as String;
-          final activo = (entidad['estado_activo'] as int) == 1;
-          final totalComprometido = entidad['totalComprometido'] as double;
-          final pagado = entidad['pagado'] as double;
-          final esperado = entidad['esperado'] as double;
+    // Ancho fijo total de las columnas (para que el scroll horizontal funcione)
+    const double totalWidth = 200 + 190 + 110 + 110 + 110 + 130 + 100 + 90 + 32.0; // cols + padding lateral
 
-          final estadoPago = esperado == 0 ? '✅ Al día' : pagado == 0 ? '⚠ Sin pagos' : '⏳ Pendiente';
-
-          return DataRow(
-            color: MaterialStateProperty.all(activo ? null : Colors.grey.shade100),
-            cells: [
-              DataCell(Text(nombre, style: TextStyle(decoration: activo ? null : TextDecoration.lineThrough))),
-              DataCell(Text(_nombreRol(rol))),
-              DataCell(Text('\$ ${_formatMonto(totalComprometido)}')),
-              DataCell(Text('\$ ${_formatMonto(pagado)}', style: TextStyle(color: Colors.green.shade700))),
-              DataCell(Text('\$ ${_formatMonto(esperado)}', style: TextStyle(color: Colors.orange.shade700))),
-              DataCell(Text(estadoPago)),
+    return Container(
+      decoration: AppDecorations.cardOf(context),
+      clipBehavior: Clip.antiAlias,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: totalWidth,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ────────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(color: context.appColors.border)),
+                ),
+                child: Row(
+                  children: [
+                    _th('NOMBRE', w: 200),
+                    _th('ACUERDOS', w: 190),
+                    _th('ESPERADO', w: 110, align: TextAlign.right),
+                    _th('PAGADO', w: 110, align: TextAlign.right),
+                    _th('PENDIENTE', w: 110, align: TextAlign.right),
+                    _th('PROGRESO', w: 130),
+                    _th('ESTADO', w: 100),
+                    _th('', w: 90),
+                  ],
+                ),
+              ),
+              // ── Filas ──────────────────────────────────────────────────────
+              ..._entidadesConEstado.map((entidad) {
+                try {
+                  return _buildTablaRow(entidad);
+                } catch (e, stack) {
+                  AppDatabase.logLocalError(
+                    scope: 'plantel_page.render_tabla_row',
+                    error: e.toString(),
+                    stackTrace: stack,
+                    payload: {'id': entidad['id']},
+                  );
+                  return Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md),
+                    decoration: BoxDecoration(
+                      border: Border(
+                          bottom: BorderSide(
+                              color: context.appColors.border
+                                  .withValues(alpha: 0.5))),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning,
+                            size: 16, color: AppColors.advertencia),
+                        const SizedBox(width: AppSpacing.sm),
+                        const Text('Error al mostrar fila'),
+                      ],
+                    ),
+                  );
+                }
+              }),
+              // ── Fila total ─────────────────────────────────────────────────
+              _buildTablaTotal(),
             ],
-            onSelectChanged: (_) => _irADetalle(id),
-          );
-        }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTablaRow(Map<String, dynamic> entidad) {
+    final id = entidad['id'] as int;
+    final nombre = entidad['nombre']?.toString() ?? '';
+    final rol = entidad['rol']?.toString() ?? '';
+    final activo = (entidad['estado_activo'] as int?) == 1;
+    final totalComprometido =
+        (entidad['totalComprometido'] as num?)?.toDouble() ?? 0.0;
+    final pagado = (entidad['pagado'] as num?)?.toDouble() ?? 0.0;
+    final esperado = (entidad['esperado'] as num?)?.toDouble() ?? 0.0;
+    final progreso = totalComprometido == 0
+        ? 1.0
+        : (pagado / totalComprometido).clamp(0.0, 1.0);
+
+    final estadoPago = _estadoLabel(esperado, pagado, totalComprometido);
+    final statusType = _estadoType(esperado, pagado, totalComprometido);
+    final progresoColor = _estadoColor(esperado, pagado, totalComprometido);
+
+    final acuerdos = _acuerdosPorEntidad[id] ?? [];
+
+    return InkWell(
+      onTap: () => _irADetalle(id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: activo ? null : context.appColors.bgElevated,
+          border: Border(
+            bottom: BorderSide(
+                color: context.appColors.border.withValues(alpha: 0.5)),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Nombre + rol
+            SizedBox(
+              width: 200,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    nombre,
+                    style: AppText.bodyMd.copyWith(
+                      decoration:
+                          activo ? null : TextDecoration.lineThrough,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(_nombreRol(rol),
+                      style: AppText.caption,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            // Acuerdos chips
+            SizedBox(
+              width: 190,
+              child: acuerdos.isEmpty
+                  ? Text('—', style: AppText.caption)
+                  : Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: acuerdos.take(3).map((a) {
+                        final nombre = (a['nombre'] as String?) ?? '';
+                        final label = nombre.length > 12
+                            ? '${nombre.substring(0, 11)}…'
+                            : nombre;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: context.appColors.bgElevated,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                                color: context.appColors.border),
+                          ),
+                          child: Text(label,
+                              style: AppText.caption
+                                  .copyWith(fontSize: 10)),
+                        );
+                      }).toList()
+                        ..addAll(acuerdos.length > 3
+                            ? [
+                                Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        context.appColors.bgElevated,
+                                    borderRadius:
+                                        BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '+${acuerdos.length - 3}',
+                                    style: AppText.caption
+                                        .copyWith(fontSize: 10),
+                                  ),
+                                )
+                              ]
+                            : []),
+                    ),
+            ),
+            // Esperado (total comprometido)
+            SizedBox(
+              width: 110,
+              child: Text(
+                '\$ ${_formatMonto(totalComprometido)}',
+                style: AppText.monoSm,
+                textAlign: TextAlign.right,
+              ),
+            ),
+            // Pagado
+            SizedBox(
+              width: 110,
+              child: Text(
+                '\$ ${_formatMonto(pagado)}',
+                style:
+                    AppText.monoSm.copyWith(color: AppColors.ingreso),
+                textAlign: TextAlign.right,
+              ),
+            ),
+            // Pendiente
+            SizedBox(
+              width: 110,
+              child: Text(
+                esperado > 0
+                    ? '\$ ${_formatMonto(esperado)}'
+                    : '✓',
+                style: AppText.monoSm.copyWith(
+                  color: esperado > 0
+                      ? AppColors.egreso
+                      : AppColors.ingreso,
+                ),
+                textAlign: TextAlign.right,
+              ),
+            ),
+            // Barra de progreso
+            SizedBox(
+              width: 130,
+              child: Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.md),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: progreso,
+                        backgroundColor:
+                            context.appColors.bgElevated,
+                        valueColor:
+                            AlwaysStoppedAnimation(progresoColor),
+                        minHeight: 6,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${(progreso * 100).round()}%',
+                      style: AppText.caption
+                          .copyWith(color: progresoColor, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Estado badge
+            SizedBox(
+              width: 100,
+              child: StatusBadge(label: estadoPago, type: statusType),
+            ),
+            // Botón Detalle
+            SizedBox(
+              width: 90,
+              child: TextButton(
+                onPressed: () => _irADetalle(id),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('Detalle',
+                    style: AppText.caption
+                        .copyWith(color: AppColors.accent)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTablaTotal() {
+    final totalEsperado = _entidadesConEstado.fold<double>(
+        0, (s, e) => s + ((e['totalComprometido'] as num?)?.toDouble() ?? 0));
+    final totalPagado = _entidadesConEstado.fold<double>(
+        0, (s, e) => s + ((e['pagado'] as num?)?.toDouble() ?? 0));
+    final totalPendiente = _entidadesConEstado.fold<double>(
+        0, (s, e) => s + ((e['esperado'] as num?)?.toDouble() ?? 0));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: context.appColors.bgElevated,
+        border: Border(top: BorderSide(color: context.appColors.border)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 200,
+            child: Text('TOTAL',
+                style: AppText.label
+                    .copyWith(color: context.appColors.textPrimary)),
+          ),
+          const SizedBox(width: 190),
+          SizedBox(
+            width: 110,
+            child: Text('\$ ${_formatMonto(totalEsperado)}',
+                style:
+                    AppText.monoSm.copyWith(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 110,
+            child: Text('\$ ${_formatMonto(totalPagado)}',
+                style: AppText.monoSm.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.ingreso),
+                textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 110,
+            child: Text(
+                totalPendiente > 0
+                    ? '\$ ${_formatMonto(totalPendiente)}'
+                    : '✓',
+                style: AppText.monoSm.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: totalPendiente > 0
+                        ? AppColors.egreso
+                        : AppColors.ingreso),
+                textAlign: TextAlign.right),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Helpers de estado ──────────────────────────────────────────────────────
+
+  String _estadoLabel(double esperado, double pagado, double total) {
+    if (esperado == 0) return 'Al día';
+    if (pagado == 0 && total > 0) return 'Sin pagos';
+    return 'Pendiente';
+  }
+
+  StatusType _estadoType(double esperado, double pagado, double total) {
+    if (esperado == 0) return StatusType.success;
+    if (pagado == 0 && total > 0) return StatusType.danger;
+    return StatusType.warning;
+  }
+
+  Color _estadoColor(double esperado, double pagado, double total) {
+    if (esperado == 0) return AppColors.ingreso;
+    if (pagado == 0 && total > 0) return AppColors.egreso;
+    return AppColors.advertencia;
+  }
+
+  Widget _th(String label, {required double w, TextAlign align = TextAlign.left}) {
+    return SizedBox(
+      width: w,
+      child: Text(
+        label,
+        style: AppText.label,
+        textAlign: align,
       ),
     );
   }
@@ -642,17 +1050,17 @@ class _PlantelPageState extends State<PlantelPage> {
   Color _colorPorRol(String rol) {
     switch (rol) {
       case 'JUGADOR':
-        return Colors.blue;
+        return AppColors.info;
       case 'DT':
-        return Colors.purple;
+        return AppColors.accentDim;
       case 'AYUDANTE':
-        return Colors.teal;
+        return AppColors.accent;
       case 'PF':
-        return Colors.orange;
+        return AppColors.advertencia;
       case 'OTRO':
-        return Colors.grey;
+        return AppColors.textMuted;
       default:
-        return Colors.grey;
+        return AppColors.textMuted;
     }
   }
 

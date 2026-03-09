@@ -35,16 +35,25 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
   final _montoPeriodicoController = TextEditingController();
   final _cuotasController = TextEditingController();
   final _observacionesController = TextEditingController();
+  // Controllers POR_EVENTO (v29+)
+  final _montoTitularController = TextEditingController();
+  final _montoSuplenteController = TextEditingController();
+  final _montoNoJugoController = TextEditingController(text: '0');
+  final _partidosEsperadosController = TextEditingController(text: '4');
 
   // Form values
   String _tipo = 'EGRESO';
-  String _modalidad = 'RECURRENTE'; // MONTO_TOTAL_CUOTAS | RECURRENTE
+  String _modalidad = 'RECURRENTE'; // MONTO_TOTAL_CUOTAS | RECURRENTE | POR_EVENTO (UI)
+  bool _esPorEvento = false;
   String? _codigoCategoria;
   String _frecuencia = 'MENSUAL';
   DateTime _fechaInicio = DateTime.now();
   DateTime? _fechaFin;
   int _unidadGestionId = 1;
   int? _entidadPlantelId;
+  int? _subcategoriaId;
+  Map<String, dynamic>? _subcategoriaSeleccionada;
+  String _unidadAcuerdo = 'ARS'; // 'ARS' | 'LTS'
 
   // Preview
   bool _mostrarPreview = false;
@@ -57,6 +66,7 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
   List<Map<String, dynamic>> _frecuencias = [];
   List<Map<String, dynamic>> _unidades = [];
   List<Map<String, dynamic>> _categorias = [];
+  List<Map<String, dynamic>> _subcategorias = [];
   List<Map<String, dynamic>> _entidadesPlantel = [];
 
   @override
@@ -72,6 +82,10 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
     _montoPeriodicoController.dispose();
     _cuotasController.dispose();
     _observacionesController.dispose();
+    _montoTitularController.dispose();
+    _montoSuplenteController.dispose();
+    _montoNoJugoController.dispose();
+    _partidosEsperadosController.dispose();
     super.dispose();
   }
 
@@ -85,12 +99,18 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
       final unidades = await db.query('unidades_gestion',
           where: 'activo = 1', orderBy: 'nombre');
       final categorias = await CategoriaMovimientoService.obtenerCategorias();
+      final subcategorias = await db.query(
+        'subcategorias',
+        where: 'activa = 1',
+        orderBy: 'categoria_id, orden, nombre',
+      );
       final entidades = await _plantelService.listarEntidades();
 
       setState(() {
         _frecuencias = frecuencias;
         _unidades = unidades;
         _categorias = categorias;
+        _subcategorias = subcategorias;
         _entidadesPlantel = entidades;
         _isLoading = false;
       });
@@ -116,6 +136,16 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
 
   Future<void> _generarPreview() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Los acuerdos POR_EVENTO no generan compromisos anticipados
+    if (_esPorEvento) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Los acuerdos por partido no generan compromisos anticipados'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _mostrarPreview = true);
 
@@ -224,15 +254,15 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
         entidadPlantelId: _entidadPlantelId,
         nombre: _nombreController.text.trim(),
         tipo: _tipo,
-        modalidad: _modalidad,
-        montoTotal: _modalidad == 'MONTO_TOTAL_CUOTAS'
+        modalidad: _esPorEvento ? 'RECURRENTE' : _modalidad,
+        montoTotal: _modalidad == 'MONTO_TOTAL_CUOTAS' && !_esPorEvento
             ? double.tryParse(_montoTotalController.text)
             : null,
-        montoPeriodico: _modalidad == 'RECURRENTE'
+        montoPeriodico: _modalidad == 'RECURRENTE' && !_esPorEvento
             ? double.tryParse(_montoPeriodicoController.text)
             : null,
-        frecuencia: _frecuencia,
-        cuotas: _modalidad == 'MONTO_TOTAL_CUOTAS'
+        frecuencia: _esPorEvento ? 'POR_EVENTO' : _frecuencia,
+        cuotas: _modalidad == 'MONTO_TOTAL_CUOTAS' && !_esPorEvento
             ? int.tryParse(_cuotasController.text)
             : null,
         fechaInicio: _formatDate(_fechaInicio),
@@ -241,11 +271,21 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
         observaciones: _observacionesController.text.trim().isEmpty
             ? null
             : _observacionesController.text.trim(),
+        subcategoriaId: _subcategoriaId,
+        unidad: _unidadAcuerdo,
+        esAdhesion: _codigoCategoria == 'ADHE',
+        esPorEvento: _esPorEvento,
+        montoTitular: _esPorEvento ? double.tryParse(_montoTitularController.text) : null,
+        montoSuplente: _esPorEvento ? double.tryParse(_montoSuplenteController.text) : null,
+        montoNoJugo: _esPorEvento ? (double.tryParse(_montoNoJugoController.text) ?? 0) : 0,
+        partidosEsperadosMes: _esPorEvento ? (int.tryParse(_partidosEsperadosController.text) ?? 4) : 4,
       );
 
       // Generar compromisos automáticamente
       final cuotasGeneradas =
           await AcuerdosService.generarCompromisos(acuerdoId);
+      final cuotasDetalle =
+          await AcuerdosService.previewCompromisos(acuerdoId);
 
       setState(() => _isSubmitting = false);
 
@@ -261,47 +301,132 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
                 const Text('Acuerdo Creado'),
               ],
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'El acuerdo se creó exitosamente',
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green[200]!),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'El acuerdo se creó exitosamente',
+                    style: TextStyle(fontSize: 16),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.insert_drive_file, size: 16),
-                          const SizedBox(width: 8),
-                          Text(
-                            'ID Acuerdo: $acuerdoId',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Encabezado resumen
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_month, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              '$cuotasGeneradas ${cuotasGeneradas == 1 ? 'compromiso' : 'compromisos'} generados',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        if (cuotasDetalle.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          const Divider(height: 1),
+                          const SizedBox(height: 8),
+                          // Encabezado de columnas
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 60,
+                                child: Text(
+                                  'Cuota',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'Vencimiento',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                'Monto',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          // Lista scrolleable de cuotas
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: cuotasDetalle.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, i) {
+                                final item = cuotasDetalle[i];
+                                final nroCuota = item['numero_cuota'] as int? ?? i + 1;
+                                final fechaStr =
+                                    item['fecha_programada']?.toString() ?? '';
+                                final fechaFmt = fechaStr.isNotEmpty
+                                    ? Format.fecha(DateTime.parse(fechaStr))
+                                    : '—';
+                                final monto =
+                                    (item['monto'] as num?)?.toDouble() ?? 0.0;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 60,
+                                        child: Text(
+                                          'Nº $nroCuota',
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          fechaFmt,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                      Text(
+                                        Format.moneyNoDecimals(monto),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.calendar_month, size: 16),
-                          const SizedBox(width: 8),
-                          Text('Compromisos generados: $cuotasGeneradas'),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             actions: [
               ElevatedButton(
@@ -418,6 +543,17 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
     );
   }
 
+  List<Map<String, dynamic>> get _subcategoriasActuales {
+    if (_codigoCategoria == null) return [];
+    final matchingCats = _categorias.where((c) => c['codigo'] == _codigoCategoria);
+    if (matchingCats.isEmpty) return [];
+    final catId = matchingCats.first['id'] as int?;
+    if (catId == null) return [];
+    return _subcategorias
+        .where((s) => s['categoria_id'] == catId && (s['activa'] as int? ?? 1) == 1)
+        .toList();
+  }
+
   Widget _buildSeccionBasica() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,6 +628,10 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
         ),
         const SizedBox(height: 16),
 
+        // Toggle adhesion eliminado: la adhesión ahora se marca seleccionando
+        // la categoría 'ADHE' y luego una subcategoría dinámica.
+        const SizedBox(height: 16),
+
         // Categoría (Autocomplete — permite tipear + buscar)
         Builder(
           builder: (context) {
@@ -539,7 +679,12 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
                     });
                   },
                   onSelected: (cat) {
-                    setState(() => _codigoCategoria = cat['codigo'].toString());
+                    setState(() {
+                      _codigoCategoria = cat['codigo'].toString();
+                      _subcategoriaId = null;
+                      _subcategoriaSeleccionada = null;
+                      _unidadAcuerdo = 'ARS';
+                    });
                   },
                   fieldViewBuilder:
                       (context, controller, focusNode, onFieldSubmitted) {
@@ -561,7 +706,11 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
                               text.toLowerCase(),
                         );
                         if (match.isEmpty) {
-                          _codigoCategoria = null;
+                          setState(() {
+                            _codigoCategoria = null;
+                            _subcategoriaId = null;
+                            _subcategoriaSeleccionada = null;
+                          });
                         }
                       },
                     );
@@ -611,6 +760,67 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
             );
           },
         ),
+
+        // Subcategoría (dinámica, según la categoría seleccionada)
+        if (_subcategoriasActuales.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          DropdownButtonFormField<int>(
+            value: _subcategoriaId,
+            decoration: const InputDecoration(
+              labelText: 'Subcategoría *',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.subdirectory_arrow_right),
+            ),
+            items: _subcategoriasActuales
+                .map((s) => DropdownMenuItem<int>(
+                      value: s['id'] as int,
+                      child: Text(s['nombre'].toString()),
+                    ))
+                .toList(),
+            validator: (_) => _subcategoriaId == null ? 'Requerido' : null,
+            onChanged: (val) {
+              setState(() {
+                _subcategoriaId = val;
+                _subcategoriaSeleccionada = _subcategoriasActuales
+                    .where((s) => s['id'] == val)
+                    .firstOrNull;
+                _unidadAcuerdo =
+                    _subcategoriaSeleccionada?['unidad_default'] as String? ??
+                        'ARS';
+              });
+            },
+          ),
+        ],
+
+        // Selector ARS/LTS (si la subcategoría tiene requiere_unidad = 1)
+        if (_subcategoriaSeleccionada != null &&
+            (_subcategoriaSeleccionada!['requiere_unidad'] as int?) == 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'ARS',
+                      label: Text('Dinero (ARS)'),
+                      icon: Icon(Icons.attach_money),
+                    ),
+                    ButtonSegment(
+                      value: 'LTS',
+                      label: Text('Litros (LTS)'),
+                      icon: Icon(Icons.water_drop),
+                    ),
+                  ],
+                  selected: {_unidadAcuerdo},
+                  onSelectionChanged: (val) {
+                    setState(() => _unidadAcuerdo = val.first);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -634,17 +844,26 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
               label: Text('Recurrente'),
               icon: Icon(Icons.repeat),
             ),
+            ButtonSegment(
+              value: 'POR_EVENTO',
+              label: Text('Por Partido'),
+              icon: Icon(Icons.sports_soccer),
+            ),
           ],
-          selected: {_modalidad},
+          selected: {_esPorEvento ? 'POR_EVENTO' : _modalidad},
           onSelectionChanged: (val) {
             setState(() {
-              _modalidad = val.first;
+              final sel = val.first;
+              _esPorEvento = sel == 'POR_EVENTO';
+              _modalidad = _esPorEvento ? 'RECURRENTE' : sel;
               _mostrarPreview = false;
             });
           },
         ),
         const SizedBox(height: 16),
-        if (_modalidad == 'MONTO_TOTAL_CUOTAS') ...[
+
+        // ── Cuotas ───────────────────────────────────────────────────────────
+        if (_modalidad == 'MONTO_TOTAL_CUOTAS' && !_esPorEvento) ...[
           TextFormField(
             controller: _montoTotalController,
             decoration: const InputDecoration(
@@ -682,7 +901,9 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
             },
           ),
         ],
-        if (_modalidad == 'RECURRENTE') ...[
+
+        // ── Recurrente ───────────────────────────────────────────────────────
+        if (_modalidad == 'RECURRENTE' && !_esPorEvento) ...[
           TextFormField(
             controller: _montoPeriodicoController,
             decoration: const InputDecoration(
@@ -703,26 +924,123 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
             },
           ),
         ],
-        const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
-          value: _frecuencia,
-          decoration: const InputDecoration(
-            labelText: 'Frecuencia *',
-            border: OutlineInputBorder(),
+
+        // ── POR_EVENTO ───────────────────────────────────────────────────────
+        if (_esPorEvento) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'El monto se registra el día del partido. No genera compromisos anticipados.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
           ),
-          items: _frecuencias
-              .map((f) => DropdownMenuItem(
-                    value: f['codigo'] as String,
-                    child: Text(f['descripcion'].toString()),
-                  ))
-              .toList(),
-          onChanged: (val) {
-            setState(() {
-              _frecuencia = val!;
-              _mostrarPreview = false;
-            });
-          },
-        ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _montoTitularController,
+            decoration: const InputDecoration(
+              labelText: 'Monto como titular *',
+              prefixText: '\$ ',
+              border: OutlineInputBorder(),
+              hintText: '10000',
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+            validator: (val) {
+              if (!_esPorEvento) return null;
+              if (val?.trim().isEmpty ?? true) return 'Requerido';
+              final monto = double.tryParse(val!);
+              if (monto == null || monto <= 0) return 'Debe ser mayor a 0';
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _montoSuplenteController,
+            decoration: const InputDecoration(
+              labelText: 'Monto como suplente *',
+              prefixText: '\$ ',
+              border: OutlineInputBorder(),
+              hintText: '5000',
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+            validator: (val) {
+              if (!_esPorEvento) return null;
+              if (val?.trim().isEmpty ?? true) return 'Requerido';
+              final monto = double.tryParse(val!);
+              if (monto == null || monto < 0) return 'Debe ser mayor o igual a 0';
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _montoNoJugoController,
+            decoration: const InputDecoration(
+              labelText: 'Monto si no juega (opcional)',
+              prefixText: '\$ ',
+              border: OutlineInputBorder(),
+              hintText: '0',
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _partidosEsperadosController,
+            decoration: const InputDecoration(
+              labelText: 'Partidos esperados por mes',
+              border: OutlineInputBorder(),
+              hintText: '4',
+              helperText: 'Solo para proyección. No compromete ningún pago.',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+        ],
+
+        // ── Frecuencia (solo para no-POR_EVENTO) ─────────────────────────────
+        if (!_esPorEvento) ...[
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: _frecuencia,
+            decoration: const InputDecoration(
+              labelText: 'Frecuencia *',
+              border: OutlineInputBorder(),
+            ),
+            items: _frecuencias
+                .where((f) => f['codigo'] != 'POR_EVENTO')
+                .map((f) => DropdownMenuItem(
+                      value: f['codigo'] as String,
+                      child: Text(f['descripcion'].toString()),
+                    ))
+                .toList(),
+            onChanged: (val) {
+              setState(() {
+                _frecuencia = val!;
+                _mostrarPreview = false;
+              });
+            },
+          ),
+        ],
       ],
     );
   }
@@ -921,20 +1239,28 @@ class _CrearAcuerdoPageState extends State<CrearAcuerdoPage> {
           ),
           const SizedBox(height: 8),
           _buildInfoRow('Tipo', _tipo == 'INGRESO' ? 'Ingreso' : 'Egreso'),
-          _buildInfoRow('Modalidad',
-              _modalidad == 'MONTO_TOTAL_CUOTAS' ? 'Cuotas' : 'Recurrente'),
-          if (_modalidad == 'MONTO_TOTAL_CUOTAS') ...[
-            _buildInfoRow('Monto Total', '\$${_montoTotalController.text}'),
-            _buildInfoRow('Cuotas', _cuotasController.text),
-          ] else
+          if (_esPorEvento) ...[
+            _buildInfoRow('Modalidad', 'Por Partido ⚽'),
+            _buildInfoRow('Monto titular', '\$${_montoTitularController.text}'),
+            _buildInfoRow('Monto suplente', '\$${_montoSuplenteController.text}'),
+            _buildInfoRow('Monto NO juega', '\$${_montoNoJugoController.text}'),
+            _buildInfoRow('Partidos/mes estimados', _partidosEsperadosController.text),
+          ] else ...[
+            _buildInfoRow('Modalidad',
+                _modalidad == 'MONTO_TOTAL_CUOTAS' ? 'Cuotas' : 'Recurrente'),
+            if (_modalidad == 'MONTO_TOTAL_CUOTAS') ...[
+              _buildInfoRow('Monto Total', '\$${_montoTotalController.text}'),
+              _buildInfoRow('Cuotas', _cuotasController.text),
+            ] else
+              _buildInfoRow(
+                  'Monto Periódico', '\$${_montoPeriodicoController.text}'),
             _buildInfoRow(
-                'Monto Periódico', '\$${_montoPeriodicoController.text}'),
-          _buildInfoRow(
-              'Frecuencia',
-              _frecuencias.firstWhere(
-                (f) => f['codigo'] == _frecuencia,
-                orElse: () => {'descripcion': _frecuencia},
-              )['descripcion'] as String),
+                'Frecuencia',
+                _frecuencias.firstWhere(
+                  (f) => f['codigo'] == _frecuencia,
+                  orElse: () => {'descripcion': _frecuencia},
+                )['descripcion'] as String),
+          ],
           _buildInfoRow(
               'Fecha Inicio', DateFormat('dd/MM/yyyy').format(_fechaInicio)),
           if (_fechaFin != null)

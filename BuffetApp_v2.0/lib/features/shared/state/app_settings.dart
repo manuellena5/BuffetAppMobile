@@ -25,6 +25,7 @@ class AppSettings extends ChangeNotifier {
 
   // Unidad de Gestión activa para Tesorería
   static const _kUnidadGestionActivaId = 'unidad_gestion_activa_id';
+  static const _kShowAdvanced = 'show_advanced_options';
 
   static const double uiScaleMin = 0.8;
   static const double uiScaleMax = 1.3;
@@ -74,6 +75,10 @@ class AppSettings extends ChangeNotifier {
   int? get unidadGestionActivaId => _unidadGestionActivaId;
   
   bool get isUnidadGestionConfigured => _unidadGestionActivaId != null;
+
+  // Opciones avanzadas (logs de errores, etc.)
+  bool _showAdvanced = false;
+  bool get showAdvanced => _showAdvanced;
 
   String _todayYmd() {
     final d = DateTime.now();
@@ -135,6 +140,9 @@ class AppSettings extends ChangeNotifier {
 
     // Unidad de Gestión activa para Tesorería
     _unidadGestionActivaId = sp.getInt(_kUnidadGestionActivaId);
+
+    // Opciones avanzadas
+    _showAdvanced = sp.getBool(_kShowAdvanced) ?? false;
 
     notifyListeners();
   }

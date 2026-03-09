@@ -5,10 +5,10 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:buffet_app/data/dao/db.dart';
-import 'package:buffet_app/features/shared/services/compromisos_service.dart';
-import 'package:buffet_app/features/tesoreria/services/transferencia_service.dart';
-import 'package:buffet_app/features/tesoreria/services/cuenta_service.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
+import 'package:cdm_gestion/features/shared/services/compromisos_service.dart';
+import 'package:cdm_gestion/features/tesoreria/services/transferencia_service.dart';
+import 'package:cdm_gestion/features/tesoreria/services/cuenta_service.dart';
 
 late String _tempDir;
 
@@ -36,7 +36,7 @@ void main() {
   setUp(() async {
     await AppDatabase.close();
     // Eliminar DB para empezar limpio en cada test
-    final dbFile = File(p.join(_tempDir, 'barcancha.db'));
+    final dbFile = File(p.join(_tempDir, 'cdm_gestion.db'));
     if (await dbFile.exists()) {
       try { await dbFile.delete(); } catch (_) {}
     }

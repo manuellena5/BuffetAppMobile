@@ -110,11 +110,6 @@ class _DashboardPageState extends State<DashboardPage> {
       title: 'Dashboard $_yearSeleccionado',
       body: Column(
         children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Dashboard $_yearSeleccionado',
-              subtitle: 'Resumen visual de tesorería',
-            ),
           Expanded(
             child: _loading
                 ? SkeletonLoader.cards(count: 3)

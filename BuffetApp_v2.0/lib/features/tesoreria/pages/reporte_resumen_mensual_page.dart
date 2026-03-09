@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:excel/excel.dart' hide Border;
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
@@ -215,10 +215,9 @@ class _ReporteResumenMensualPageState extends State<ReporteResumenMensualPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Resumen Mensual $_yearActual',
-      currentRouteName: '/reportes/resumen_mensual',
-      appBarColor: Colors.green,
+      currentRoute: '/reportes/resumen_mensual',
       actions: [
         IconButton(
           icon: const Icon(Icons.picture_as_pdf),

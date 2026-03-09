@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
@@ -109,10 +109,9 @@ class _PresupuestoPageState extends State<PresupuestoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Presupuesto $_anio',
-      currentRouteName: '/presupuesto',
-      appBarColor: Colors.teal,
+      currentRoute: '/presupuesto',
       actions: [
         IconButton(
           icon: const Icon(Icons.add),

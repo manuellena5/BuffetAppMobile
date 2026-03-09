@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:buffet_app/data/dao/db.dart';
-import 'package:buffet_app/features/buffet/services/caja_service.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
+import 'package:cdm_gestion/features/buffet/services/caja_service.dart';
 
 Future<void> _setupEnv() async {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -136,8 +136,7 @@ void main() {
       expect((tk['anulados'] as int?) ?? 0, 1);
     });
 
-    test('ensureCajaCierreResumenTable crea tabla y permite reemplazo', () async {
-      await AppDatabase.ensureCajaCierreResumenTable();
+    test('ensureCajaCierreResumenTable: tabla caja_cierre_resumen existe y permite reemplazo', () async {
       final db = await AppDatabase.instance();
 
       // Insert 1

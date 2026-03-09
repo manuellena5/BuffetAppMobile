@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
 import '../state/cart_model.dart';
@@ -537,7 +538,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
                       left: 16, right: 16, bottom: 16, top: 8),
                   child: Text('Versión: $_appVersion',
                       style:
-                          TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                          TextStyle(color: AppColors.textMuted, fontSize: 12)),
                 ),
             ],
           ),
@@ -571,7 +572,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
                       },
                       child: Icon(Icons.print,
                           size: 18,
-                          color: _usbConnected ? Colors.green : Colors.red),
+                        color: _usbConnected ? AppColors.ingreso : AppColors.egreso),
                     ),
                   ],
                 ),
@@ -583,7 +584,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
+                        backgroundColor: AppColors.ingreso,
                         padding: const EdgeInsets.symmetric(vertical: 16)),
                     onPressed: cart.isEmpty
                         ? null
@@ -672,23 +673,37 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
 
   // --- Colores por categoría ---
   // 1=Comida → Naranja, 2=Bebida → Celeste, 3/otros → Gris
-  static const Map<int, MaterialColor> _categorySwatch = {
-    1: Colors.orange,
-    2: Colors.lightBlue,
-  };
-
   static Color _categoryColor(int? catId) {
-    return _categorySwatch[catId] ?? Colors.grey;
+    switch (catId) {
+      case 1:
+        return AppColors.advertencia;
+      case 2:
+        return AppColors.info;
+      default:
+        return AppColors.textMuted;
+    }
   }
 
   static Color _categoryBgColor(int? catId) {
-    final swatch = _categorySwatch[catId];
-    return swatch?.shade100 ?? Colors.grey.shade200;
+    switch (catId) {
+      case 1:
+        return AppColors.advertenciaDim;
+      case 2:
+        return AppColors.infoDim;
+      default:
+        return AppColors.bgElevated;
+    }
   }
 
   static Color _categoryDarkColor(int? catId) {
-    final swatch = _categorySwatch[catId];
-    return swatch?.shade700 ?? Colors.grey.shade700;
+    switch (catId) {
+      case 1:
+        return AppColors.advertencia;
+      case 2:
+        return AppColors.info;
+      default:
+        return AppColors.textSecondary;
+    }
   }
 
   static String _categoryName(int? catId) {
@@ -834,7 +849,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
         const SizedBox(width: 12),
         if (((p['stock_actual'] as int?) ?? 0) != 999)
           Text('Stock: ${p['stock_actual']}',
-              style: TextStyle(color: Colors.grey.shade700)),
+              style: TextStyle(color: AppColors.textSecondary)),
       ]),
     );
   }
@@ -845,7 +860,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
       onPressed: () => _onTapProduct(p),
       style: ElevatedButton.styleFrom(
         backgroundColor: _categoryBgColor(catId),
-        foregroundColor: Colors.black87,
+        foregroundColor: AppColors.textSecondary,
         padding: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
@@ -860,12 +875,12 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
     final img = p['imagen'] as String?;
     if (img == null || img.isEmpty) {
       return const CircleAvatar(
-        backgroundColor: Colors.grey,
+        backgroundColor: AppColors.textMuted,
         child: Icon(Icons.image, color: Colors.white),
       );
     }
     return CircleAvatar(
-      backgroundColor: Colors.grey.shade300,
+      backgroundColor: AppColors.border,
       backgroundImage: FileImage(File(img)),
     );
   }
@@ -884,7 +899,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
         if (img != null && img.isNotEmpty)
           Image.file(File(img), fit: BoxFit.cover)
         else
-          Container(color: Colors.grey.shade300),
+          Container(color: AppColors.border),
         // chip de precio (arriba-derecha)
         if (price != null)
           Positioned(
@@ -893,7 +908,7 @@ class _BuffetHomePageState extends State<BuffetHomePage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.green.shade700.withValues(alpha: 0.85),
+                color: AppColors.ingreso.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(

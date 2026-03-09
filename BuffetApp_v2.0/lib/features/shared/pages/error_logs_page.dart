@@ -30,7 +30,7 @@ class _ErrorLogsPageState extends State<ErrorLogsPage> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final rows = await AppDatabase.ultimosErrores(limit: 500);
+    final rows = await ErrorLogDao.ultimosErrores(limit: 500);
     setState(() {
       _rows = rows;
       _loading = false;
@@ -50,7 +50,7 @@ class _ErrorLogsPageState extends State<ErrorLogsPage> {
       ),
     );
     if (ok != true) return;
-  await AppDatabase.clearErrorLogs();
+  await ErrorLogDao.clearErrorLogs();
   if (!mounted) return;
   await _load();
   if (!mounted) return;
@@ -83,11 +83,6 @@ class _ErrorLogsPageState extends State<ErrorLogsPage> {
       ],
       body: Column(
         children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Logs de errores',
-              subtitle: '${_rows.length} registros',
-            ),
           Expanded(
             child: _loading
           ? const Center(child: CircularProgressIndicator())

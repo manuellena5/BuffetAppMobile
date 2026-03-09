@@ -142,6 +142,9 @@ class EventoMovimientoService {
     String? estado,
     int? esTransferencia,
     String? transferenciaId,
+    int? eventoCdmId,
+    int? acuerdoId,
+    String? condicion,
   }) async {
     try {
       final db = await AppDatabase.instance();
@@ -173,6 +176,10 @@ class EventoMovimientoService {
         'compromiso_id': compromisoId,
         'entidad_plantel_id': entidadPlantelId,
         'estado': estado ?? 'CONFIRMADO',
+        'eliminado': 0,
+        'evento_cdm_id': eventoCdmId,
+        'acuerdo_id': acuerdoId,
+        'condicion': condicion,
         // created_ts + sync_estado usan DEFAULT
       });
     } catch (e, st) {
@@ -421,6 +428,9 @@ class EventoMovimientoService {
     String? archivoTipo,
     int? archivoSize,
     int? entidadPlantelId,
+    int? eventoCdmId,
+    String? condicion,
+    int? acuerdoId,
   }) async {
     try {
       final db = await AppDatabase.instance();
@@ -439,8 +449,11 @@ class EventoMovimientoService {
         'archivo_tipo': archivoTipo,
         'archivo_size': archivoSize,
         'entidad_plantel_id': entidadPlantelId,
+        'evento_cdm_id': eventoCdmId,
+        'condicion': condicion,
+        'acuerdo_id': acuerdoId,
         'updated_ts': DateTime.now().millisecondsSinceEpoch,
-        'sync_estado': 'PENDIENTE', // Marcar como pendiente de sincronización
+        'sync_estado': 'PENDIENTE',
       }, where: 'id=?', whereArgs: [id]);
     } catch (e, st) {
       await AppDatabase.logLocalError(

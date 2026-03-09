@@ -1,5 +1,5 @@
-name: buffet_app
-description: POS BuffetApp (offline-first) multiplataforma.
+name: cdm_gestion
+description: CDM Gestión — Sistema de gestión integral del Club Deportivo Mitre.
 publish_to: 'none'
 version: 1.3.5+20
 
@@ -8,6 +8,8 @@ environment:
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   sqflite: ^2.3.3
   sqflite_common_ffi: ^2.3.7+1

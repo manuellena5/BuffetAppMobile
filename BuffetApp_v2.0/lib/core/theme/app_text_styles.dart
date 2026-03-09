@@ -1,69 +1,38 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'app_colors.dart';
+/// Re-exporta AppText desde app_theme.dart (fuente única del Design System).
+export 'app_theme.dart' show AppText;
 
-/// Jerarquía tipográfica del Design System ERP (fuente Inter).
+import 'package:flutter/material.dart';
+import 'app_theme.dart';
+
+/// Wrapper de compatibilidad — usar AppText directamente en código nuevo.
+/// DEPRECADO: se eliminará cuando se complete la migración.
 class AppTextStyles {
   AppTextStyles._();
 
-  /// Base de Inter para usar como fontFamily global.
-  static TextStyle get _inter => GoogleFonts.inter();
+  static TextStyle screenTitle({Color? color}) =>
+      AppText.displayMd.copyWith(color: color);
 
-  // ─── Jerarquía ───
+  static TextStyle sectionSubtitle({Color? color}) =>
+      AppText.titleLg.copyWith(color: color);
 
-  /// Título de pantalla: 28px / w600
-  static TextStyle screenTitle({Color? color}) => _inter.copyWith(
-        fontSize: 28,
-        fontWeight: FontWeight.w600,
-        color: color ?? AppColors.textPrimaryLight,
-      );
+  static TextStyle body({Color? color}) =>
+      AppText.bodyMd.copyWith(color: color ?? AppColors.textPrimary);
 
-  /// Subtítulo de sección: 20px / w600
-  static TextStyle sectionSubtitle({Color? color}) => _inter.copyWith(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-        color: color ?? AppColors.textPrimaryLight,
-      );
+  static TextStyle tableText({Color? color}) =>
+      AppText.bodyMd.copyWith(color: color ?? AppColors.textPrimary);
 
-  /// Texto normal: 14px / w400
-  static TextStyle body({Color? color}) => _inter.copyWith(
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        color: color ?? AppColors.textPrimaryLight,
-      );
+  static TextStyle caption({Color? color}) =>
+      AppText.caption.copyWith(color: color);
 
-  /// Texto de tabla/datos: 13px / w400
-  static TextStyle tableText({Color? color}) => _inter.copyWith(
-        fontSize: 13,
-        fontWeight: FontWeight.w400,
-        color: color ?? AppColors.textPrimaryLight,
-      );
-
-  /// Texto secundario/caption: 12px / gris
-  static TextStyle caption({Color? color}) => _inter.copyWith(
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-        color: color ?? AppColors.textSecondaryLight,
-      );
-
-  /// Sidebar item: 14px / w500
-  static TextStyle sidebarItem({Color? color}) => _inter.copyWith(
-        fontSize: 14,
+  static TextStyle sidebarItem({Color? color}) =>
+      AppText.bodyMd.copyWith(
         fontWeight: FontWeight.w500,
-        color: color ?? AppColors.sidebarItemText,
+        color: color ?? AppColors.textMuted,
       );
 
-  /// Monto / dato grande: 24px / w700
-  static TextStyle bigNumber({Color? color}) => _inter.copyWith(
-        fontSize: 24,
-        fontWeight: FontWeight.w700,
-        color: color ?? AppColors.textPrimaryLight,
-      );
+  static TextStyle bigNumber({Color? color}) =>
+      AppText.kpiLg.copyWith(color: color);
 
-  /// Label de formulario: 13px / w500
-  static TextStyle label({Color? color}) => _inter.copyWith(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        color: color ?? AppColors.textSecondaryLight,
-      );
+  static TextStyle label({Color? color}) =>
+      AppText.labelMd.copyWith(color: color ?? AppColors.textMuted);
 }

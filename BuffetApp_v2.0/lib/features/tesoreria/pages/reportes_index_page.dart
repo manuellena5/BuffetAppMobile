@@ -25,8 +25,6 @@ class ReportesIndexPage extends StatelessWidget {
       title: 'Reportes',
       body: Column(
         children: [
-          if (isDesktop)
-            const AppHeader(title: 'Reportes', subtitle: 'Análisis e informes de Tesorería'),
           Expanded(
             child: Center(
               child: SingleChildScrollView(

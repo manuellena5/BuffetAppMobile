@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../services/caja_service.dart';
 import '../../shared/format.dart';
 import 'buffet_home_page.dart';
@@ -277,7 +278,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
         builder: (ctx) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.info_outline, color: Colors.blue, size: 28),
+              Icon(Icons.info_outline, color: AppColors.info, size: 28),
               SizedBox(width: 10),
               Text('Confirmar apertura'),
             ],
@@ -385,7 +386,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
             width: 130,
             child: Text('$label:',
                 style: const TextStyle(
-                    fontWeight: FontWeight.w600, color: Colors.black54)),
+                    fontWeight: FontWeight.w600, color: AppColors.textMuted)),
           ),
           Expanded(
             child: Text(value,
@@ -505,7 +506,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium
-                            ?.copyWith(color: Colors.grey.shade700),
+                            ?.copyWith(color: AppColors.textSecondary),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -543,7 +544,7 @@ class _CajaOpenPageState extends State<CajaOpenPage> {
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium
-                            ?.copyWith(color: Colors.grey),
+                            ?.copyWith(color: AppColors.textMuted),
                       ),
                     ),
                     const SizedBox(width: 10),

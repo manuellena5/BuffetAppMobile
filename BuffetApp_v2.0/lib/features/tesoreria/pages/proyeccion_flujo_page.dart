@@ -3,7 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
@@ -112,10 +112,9 @@ class _ProyeccionFlujoPageState extends State<ProyeccionFlujoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Proyección Flujo de Caja',
-      currentRouteName: '/reportes/proyeccion_flujo',
-      appBarColor: Colors.deepOrange,
+      currentRoute: '/reportes/proyeccion_flujo',
       body: _loading
           ? SkeletonLoader.cards(count: 3)
           : _error != null

@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../buffet/services/caja_service.dart';
 import '../../shared/services/supabase_sync_service.dart';
@@ -399,20 +400,20 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
       case _EventoSync.sincronizada:
         return (
           label: 'Completamente sincronizado',
-          fg: Colors.green.shade700,
-          bg: Colors.green.withValues(alpha: 0.10)
+          fg: AppColors.ingreso,
+          bg: AppColors.ingresoDim
         );
       case _EventoSync.parcial:
         return (
           label: 'Parcialmente sincronizado',
-          fg: Colors.amber.shade800,
-          bg: Colors.amber.withValues(alpha: 0.12)
+          fg: AppColors.advertencia,
+          bg: AppColors.advertenciaDim
         );
       case _EventoSync.error:
         return (
           label: 'Con errores',
-          fg: Colors.red.shade700,
-          bg: Colors.red.withValues(alpha: 0.10)
+          fg: AppColors.egreso,
+          bg: AppColors.egresoDim
         );
       case _EventoSync.pendiente:
         return (
@@ -438,22 +439,22 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
       case _SyncEstado.sincronizada:
         return (
           label: 'Sincronizada',
-          fg: Colors.green.shade700,
-          bg: Colors.green.withValues(alpha: 0.10),
+          fg: AppColors.ingreso,
+          bg: AppColors.ingresoDim,
           icon: Icons.cloud_done
         );
       case _SyncEstado.error:
         return (
           label: 'Error',
-          fg: Colors.red.shade700,
-          bg: Colors.red.withValues(alpha: 0.10),
+          fg: AppColors.egreso,
+          bg: AppColors.egresoDim,
           icon: Icons.error
         );
       case _SyncEstado.pendiente:
         return (
           label: 'Pendiente',
-          fg: Colors.amber.shade800,
-          bg: Colors.amber.withValues(alpha: 0.12),
+          fg: AppColors.advertencia,
+          bg: AppColors.advertenciaDim,
           icon: Icons.cloud_upload
         );
     }
@@ -621,8 +622,8 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                       colors: isPositive
-                                          ? [Colors.green.shade700, Colors.green.shade500]
-                                          : [Colors.red.shade700, Colors.red.shade400],
+                                          ? [AppColors.ingreso, AppColors.ingresoLight]
+                                          : [AppColors.egreso, AppColors.egresoLight],
                                     ),
                                   ),
                                   child: Column(
@@ -689,7 +690,7 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                     child: _StatCard(
                                       title: 'Otros Ing.',
                                       icon: Icons.add_circle_outline,
-                                      iconColor: Colors.teal,
+                                      iconColor: AppColors.accent,
                                       value: formatCurrencyNoDecimals(_totalIngresos),
                                     ),
                                   ),
@@ -698,7 +699,7 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                     child: _StatCard(
                                       title: 'Retiros',
                                       icon: Icons.remove_circle_outline,
-                                      iconColor: Colors.red.shade400,
+                                      iconColor: AppColors.egresoLight,
                                       value: formatCurrencyNoDecimals(_totalRetiros),
                                     ),
                                   ),
@@ -725,9 +726,9 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       child: _StatCard(
                                         title: 'Var. Efectivo',
                                         icon: Icons.payments,
-                                        iconColor: Colors.green,
+                                        iconColor: AppColors.ingreso,
                                         value: '${varEfectivo >= 0 ? '+' : ''}${formatCurrencyNoDecimals(varEfectivo)}',
-                                        valueColor: varEfectivo >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                        valueColor: varEfectivo >= 0 ? AppColors.ingreso : AppColors.egreso,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -735,9 +736,9 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       child: _StatCard(
                                         title: 'Var. Transf.',
                                         icon: Icons.account_balance,
-                                        iconColor: Colors.purple,
+                                        iconColor: AppColors.accentLight,
                                         value: '${varTransfer >= 0 ? '+' : ''}${formatCurrencyNoDecimals(varTransfer)}',
-                                        valueColor: varTransfer >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                        valueColor: varTransfer >= 0 ? AppColors.ingreso : AppColors.egreso,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -745,9 +746,9 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       child: _StatCard(
                                         title: 'Total Var.',
                                         icon: Icons.account_balance_wallet,
-                                        iconColor: Colors.indigo,
+                                        iconColor: AppColors.accentDim,
                                         value: '${totalVar >= 0 ? '+' : ''}${formatCurrencyNoDecimals(totalVar)}',
-                                        valueColor: totalVar >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                        valueColor: totalVar >= 0 ? AppColors.ingreso : AppColors.egreso,
                                       ),
                                     ),
                                   ],
@@ -770,7 +771,7 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                     child: _StatCard(
                                       title: 'Tickets',
                                       icon: Icons.confirmation_number,
-                                      iconColor: Colors.orange,
+                                      iconColor: AppColors.advertencia,
                                       value: '$_ticketsEmitidos',
                                     ),
                                   ),
@@ -779,7 +780,7 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                     child: _StatCard(
                                       title: 'Cajas',
                                       icon: Icons.point_of_sale,
-                                      iconColor: Colors.blueGrey,
+                                      iconColor: AppColors.textMuted,
                                       value: '${_cajas.length}',
                                     ),
                                   ),
@@ -789,14 +790,14 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                       title: 'Diferencia',
                                       icon: Icons.balance,
                                       iconColor: _diferenciaGlobal == 0
-                                          ? Colors.green
-                                          : (_diferenciaGlobal > 0 ? Colors.blue : Colors.red),
+                                          ? AppColors.ingreso
+                                          : (_diferenciaGlobal > 0 ? AppColors.info : AppColors.egreso),
                                       value: _diferenciaGlobal >= 0
                                           ? '+${formatCurrencyNoDecimals(_diferenciaGlobal)}'
                                           : formatCurrencyNoDecimals(_diferenciaGlobal),
                                       valueColor: _diferenciaGlobal == 0
-                                          ? Colors.green.shade700
-                                          : (_diferenciaGlobal > 0 ? Colors.blue : Colors.red.shade700),
+                                          ? AppColors.ingreso
+                                          : (_diferenciaGlobal > 0 ? AppColors.info : AppColors.egreso),
                                     ),
                                   ),
                                 ],
@@ -962,8 +963,8 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                                                 _cajaDetailRow('Diferencia', '${c.diferencia >= 0 ? '+' : ''}${formatCurrencyNoDecimals(c.diferencia)}',
                                                   bold: true,
                                                   valueColor: c.diferencia == 0
-                                                      ? Colors.green.shade700
-                                                      : (c.diferencia > 0 ? Colors.blue : Colors.red.shade700),
+                                                      ? AppColors.ingreso
+                                                      : (c.diferencia > 0 ? AppColors.info : AppColors.egreso),
                                                 ),
                                               ],
                                             ],
@@ -1002,12 +1003,12 @@ class _DetalleEventoPageState extends State<DetalleEventoPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.info,
-                              size: 16, color: Colors.amber.shade800),
+                              size: 16, color: AppColors.advertencia),
                           const SizedBox(width: 8),
                           Text(
                             '$pendientes caja${pendientes == 1 ? '' : 's'} pendiente${pendientes == 1 ? '' : 's'} de sincronización',
                             style: theme.textTheme.labelSmall?.copyWith(
-                                color: Colors.amber.shade800,
+                                color: AppColors.advertencia,
                                 fontWeight: FontWeight.w800),
                           ),
                         ],

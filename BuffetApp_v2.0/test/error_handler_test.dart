@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffet_app/features/tesoreria/pages/crear_movimiento_page.dart';
-import 'package:buffet_app/features/shared/state/app_settings.dart';
-import 'package:buffet_app/data/dao/db.dart';
+import 'package:cdm_gestion/core/theme/app_theme.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/crear_movimiento_page.dart';
+import 'package:cdm_gestion/features/shared/state/app_settings.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
 
 // Configura entorno de pruebas
 Future<void> _setupTestEnv() async {
@@ -27,6 +28,8 @@ Future<void> _setupTestEnv() async {
 
 void main() {
   setUpAll(() async {
+    // Evitar que google_fonts intente descargar fuentes por HTTP en tests
+    AppTheme.useSystemFonts = true;
     await _setupTestEnv();
   });
 
@@ -53,6 +56,7 @@ void main() {
       ChangeNotifierProvider<AppSettings>.value(
         value: settings,
         child: MaterialApp(
+          theme: AppTheme.dark,
           home: const CrearMovimientoPage(),
         ),
       ),
@@ -82,7 +86,7 @@ void main() {
     await AppDatabase.instance();
     
     // Limpiar logs previos
-    await AppDatabase.clearErrorLogs();
+    await ErrorLogDao.clearErrorLogs();
     
     // Crear un error simulado
     await AppDatabase.logLocalError(
@@ -93,7 +97,7 @@ void main() {
     );
     
     // Verificar que se guardó
-    final errors = await AppDatabase.ultimosErrores(limit: 10);
+    final errors = await ErrorLogDao.ultimosErrores(limit: 10);
     expect(errors.length, greaterThan(0));
     expect(errors.first['scope'], 'test.error');
     expect(errors.first['message'], contains('Error de prueba'));

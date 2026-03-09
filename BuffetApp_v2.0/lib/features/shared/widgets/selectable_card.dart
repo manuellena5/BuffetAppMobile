@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Tarjeta seleccionable estilo Enterprise (Dynamics 365 / SAP).
 ///
 /// Reemplaza RadioButtons / ListTiles básicos con tarjetas visualmente
@@ -78,7 +80,7 @@ class SelectableCard<T> extends StatelessWidget {
                   : theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _isSelected ? primary : Colors.grey.shade300,
+                color: _isSelected ? primary : context.appColors.border,
                 width: _isSelected ? 2 : 1,
               ),
               boxShadow: _isSelected
@@ -101,14 +103,14 @@ class SelectableCard<T> extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: _isSelected
                           ? (iconColor ?? primary).withValues(alpha: 0.12)
-                          : Colors.grey.shade100,
+                          : context.appColors.bgElevated,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       icon,
                       color: _isSelected
                           ? (iconColor ?? primary)
-                          : Colors.grey.shade500,
+                          : context.appColors.textMuted,
                       size: 22,
                     ),
                   ),
@@ -128,7 +130,7 @@ class SelectableCard<T> extends StatelessWidget {
                               _isSelected ? FontWeight.bold : FontWeight.w500,
                           color: _isSelected
                               ? theme.colorScheme.onSurface
-                              : Colors.grey.shade700,
+                              : context.appColors.textSecondary,
                         ),
                       ),
                       if (subtitle != null) ...[
@@ -137,7 +139,7 @@ class SelectableCard<T> extends StatelessWidget {
                           subtitle!,
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.grey.shade600,
+                            color: context.appColors.textMuted,
                           ),
                         ),
                       ],
@@ -158,7 +160,7 @@ class SelectableCard<T> extends StatelessWidget {
                     color: _isSelected ? primary : Colors.transparent,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: _isSelected ? primary : Colors.grey.shade400,
+                      color: _isSelected ? primary : context.appColors.textMuted,
                       width: _isSelected ? 0 : 2,
                     ),
                   ),

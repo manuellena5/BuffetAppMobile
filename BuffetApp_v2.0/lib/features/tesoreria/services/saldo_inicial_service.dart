@@ -40,7 +40,7 @@ class SaldoInicialService {
         throw Exception('El monto no puede ser negativo.');
       }
 
-      final existe = await AppDatabase.existeSaldoInicial(
+      final existe = await TesoreriaDao.existeSaldoInicial(
         unidadGestionId: unidadGestionId,
         periodoTipo: periodoTipo,
         periodoValor: periodoValor,
@@ -53,7 +53,7 @@ class SaldoInicialService {
         );
       }
 
-      return await AppDatabase.insertSaldoInicial(
+      return await TesoreriaDao.insertSaldoInicial(
         unidadGestionId: unidadGestionId,
         periodoTipo: periodoTipo,
         periodoValor: periodoValor,
@@ -83,7 +83,7 @@ class SaldoInicialService {
         throw Exception('El monto no puede ser negativo.');
       }
 
-      final filasAfectadas = await AppDatabase.actualizarSaldoInicial(
+      final filasAfectadas = await TesoreriaDao.actualizarSaldoInicial(
         id: id,
         monto: monto,
         observacion: observacion,
@@ -107,7 +107,7 @@ class SaldoInicialService {
   /// ⚠️ Usar con precaución: puede afectar cálculos históricos.
   static Future<void> eliminar(int id) async {
     try {
-      final filasAfectadas = await AppDatabase.eliminarSaldoInicial(id);
+      final filasAfectadas = await TesoreriaDao.eliminarSaldoInicial(id);
 
       if (filasAfectadas == 0) {
         throw Exception('Saldo inicial no encontrado.');
@@ -131,7 +131,7 @@ class SaldoInicialService {
     required String periodoValor,
   }) async {
     try {
-      final map = await AppDatabase.obtenerSaldoInicial(
+      final map = await TesoreriaDao.obtenerSaldoInicial(
         unidadGestionId: unidadGestionId,
         periodoTipo: periodoTipo,
         periodoValor: periodoValor,
@@ -152,7 +152,7 @@ class SaldoInicialService {
   /// Lista todos los saldos iniciales, opcionalmente filtrados por unidad.
   static Future<List<SaldoInicial>> listar({int? unidadGestionId}) async {
     try {
-      final mapList = await AppDatabase.listarSaldosIniciales(
+      final mapList = await TesoreriaDao.listarSaldosIniciales(
         unidadGestionId: unidadGestionId,
       );
 
@@ -228,7 +228,7 @@ class SaldoInicialService {
     required String periodoValor,
   }) async {
     try {
-      return await AppDatabase.existeSaldoInicial(
+      return await TesoreriaDao.existeSaldoInicial(
         unidadGestionId: unidadGestionId,
         periodoTipo: periodoTipo,
         periodoValor: periodoValor,

@@ -11,8 +11,10 @@ import '../../shared/format.dart';
 import '../../shared/widgets/progress_dialog.dart';
 import '../../shared/widgets/pagination_controls.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../layout/erp_layout.dart';
 import '../../../widgets/app_header.dart';
+import '../../../widgets/summary_card.dart';
 import '../../../domain/paginated_result.dart';
 import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
@@ -60,6 +62,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   
   // Vista
   bool _vistaTabla = true; // true = tabla, false = tarjetas
+  bool _kpiVisible = true;
   
   // Selecci\u00f3n de movimiento esperado (solo uno a la vez)
   MovimientoProyectado? _movimientoSeleccionado;
@@ -152,7 +155,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         
         // Intentar obtener saldo inicial del mes
         final periodoMes = '${_mesSeleccionado.year}-${_mesSeleccionado.month.toString().padLeft(2, '0')}';
-        final saldoInicialMes = await AppDatabase.obtenerSaldoInicial(
+        final saldoInicialMes = await TesoreriaDao.obtenerSaldoInicial(
           unidadGestionId: unidadGestionId,
           periodoTipo: 'MES',
           periodoValor: periodoMes,
@@ -164,7 +167,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         } else {
           // Intentar obtener saldo inicial del año
           final periodoAnio = '${_mesSeleccionado.year}';
-          final saldoInicialAnio = await AppDatabase.obtenerSaldoInicial(
+          final saldoInicialAnio = await TesoreriaDao.obtenerSaldoInicial(
             unidadGestionId: unidadGestionId,
             periodoTipo: 'ANIO',
             periodoValor: periodoAnio,
@@ -364,7 +367,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.wifi_off, color: Colors.orange),
+                Icon(Icons.wifi_off, color: AppColors.advertencia),
                 SizedBox(width: 8),
                 Text('Sin conexión'),
               ],
@@ -408,7 +411,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               children: [
                 Icon(
                   fallidos == 0 ? Icons.check_circle : Icons.warning,
-                  color: fallidos == 0 ? Colors.green : Colors.orange,
+                  color: fallidos == 0 ? AppColors.ingreso : AppColors.advertencia,
                 ),
                 const SizedBox(width: 8),
                 const Text('Sincronización completada'),
@@ -419,9 +422,9 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Total procesados: $total'),
-                Text('✓ Exitosos: $exitosos', style: const TextStyle(color: Colors.green)),
+                Text('✓ Exitosos: $exitosos', style: const TextStyle(color: AppColors.ingreso)),
                 if (fallidos > 0)
-                  Text('✗ Fallidos: $fallidos', style: const TextStyle(color: Colors.red)),
+                  Text('✗ Fallidos: $fallidos', style: const TextStyle(color: AppColors.egreso)),
               ],
             ),
             actions: [
@@ -453,7 +456,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.error, color: Colors.red),
+                Icon(Icons.error, color: AppColors.egreso),
                 SizedBox(width: 8),
                 Text('Error al sincronizar'),
               ],
@@ -509,7 +512,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green),
+                Icon(Icons.check_circle, color: AppColors.ingreso),
                 SizedBox(width: 8),
                 Text('Exportación exitosa'),
               ],
@@ -544,7 +547,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('No se pudo abrir: ${result.message}'),
-                          backgroundColor: Colors.orange,
+                          backgroundColor: AppColors.advertencia,
                         ),
                       );
                     }
@@ -553,7 +556,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('Error al abrir. Intente nuevamente.'),
-                          backgroundColor: Colors.red,
+                          backgroundColor: AppColors.egreso,
                         ),
                       );
                     }
@@ -582,7 +585,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.error, color: Colors.red),
+                Icon(Icons.error, color: AppColors.egreso),
                 SizedBox(width: 8),
                 Text('Error al exportar'),
               ],
@@ -661,7 +664,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(
-                    color: Colors.red,
+                    color: AppColors.egreso,
                     shape: BoxShape.circle,
                   ),
                   constraints: const BoxConstraints(
@@ -696,26 +699,25 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           onPressed: _exportarExcel,
         ),
       ],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CrearMovimientoPage(),
+      floatingActionButton: isDesktop
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CrearMovimientoPage(),
+                  ),
+                );
+                _load();
+              },
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Crear'),
             ),
-          );
-          _load();
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Crear'),
-      ),
       body: Column(
         children: [
-          if (isDesktop)
-            AppHeader(
-              title: 'Movimientos',
-              subtitle: _unidadGestionNombre ?? '',
-            ),
           Expanded(
             child: _loading
           ? SkeletonLoader.cards(count: 4)
@@ -723,228 +725,76 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               ? _buildSinUnidadGestion()
               : Column(
                   children: [
-                    // Header con totales
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.teal.shade700,
-                            Colors.teal.shade500,
+                    // KPIs con totales
+                    GestureDetector(
+                      onTap: () => setState(() => _kpiVisible = !_kpiVisible),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.contentPadding, vertical: AppSpacing.xs),
+                        child: Row(
+                          children: [
+                            Text('Resumen', style: AppText.label),
+                            const Spacer(),
+                            Icon(
+                              _kpiVisible ? Icons.expand_less : Icons.expand_more,
+                              size: 18,
+                              color: AppColors.textMuted,
+                            ),
                           ],
                         ),
                       ),
-                      child: SafeArea(
-                        bottom: false,
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1200),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Primera fila: Nombre y fecha | Saldo inicial
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _unidadGestionNombre ?? 'Cargando...',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          Text(
-                                            DateFormat('MMMM yyyy', 'es_AR').format(_mesSeleccionado),
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(0.8),
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            'Saldo inicial (arrastre): ',
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(0.8),
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                          Text(
-                                            Format.money(_saldoArrastre),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  // Segunda fila: Ingresos | Egresos
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.green.shade100.withOpacity(0.3),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                'Ingresos:',
-                                                style: TextStyle(
-                                                  color: Colors.white.withOpacity(0.9),
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              Text(
-                                                Format.money(_totalIngresos),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
+                    ),
+                    if (_kpiVisible) Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.contentPadding, vertical: AppSpacing.sm),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: _buildKpiCard('Saldo Arrastre', Format.moneyNoDecimals(_saldoArrastre), Icons.account_balance, AppColors.info)),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(child: _buildKpiCard('Ingresos', Format.moneyNoDecimals(_totalIngresos), Icons.trending_up, AppColors.ingreso)),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Row(
+                            children: [
+                              Expanded(child: _buildKpiCard('Egresos', Format.moneyNoDecimals(_totalEgresos), Icons.trending_down, AppColors.egreso)),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(child: _buildKpiCard('Saldo Real', Format.moneyNoDecimals(_saldo), Icons.account_balance_wallet, _saldo >= 0 ? AppColors.ingreso : AppColors.egreso)),
+                            ],
+                          ),
+                          if (_movimientosEsperados.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            InkWell(
+                              onTap: () => _mostrarDetalleProyeccion(),
+                              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                                decoration: AppDecorations.cardOf(context),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Proyección pendiente', style: AppText.caption),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          Format.money(_saldoEsperado),
+                                          style: AppText.monoBold.copyWith(
+                                            color: _saldoEsperado >= 0 ? AppColors.ingreso : AppColors.egreso,
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red.shade100.withOpacity(0.3),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                'Egresos:',
-                                                style: TextStyle(
-                                                  color: Colors.white.withOpacity(0.9),
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              Text(
-                                                Format.money(_totalEgresos),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  // Tercera fila: Saldo Real | Proyección
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: _saldo >= 0
-                                                ? Colors.white.withOpacity(0.2)
-                                                : Colors.red.withOpacity(0.3),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              const Text(
-                                                'Saldo Real:',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              Text(
-                                                Format.money(_saldo),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      if (_movimientosEsperados.isNotEmpty) ...[
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () => _mostrarDetalleProyeccion(),
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white.withOpacity(0.15),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Flexible(
-                                                    child: Text(
-                                                      'Proyección pendiente:',
-                                                      style: TextStyle(
-                                                        color: Colors.white.withOpacity(0.9),
-                                                        fontSize: 13,
-                                                      ),
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                  Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        Format.money(_saldoEsperado),
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                      Icon(
-                                                        Icons.chevron_right,
-                                                        color: Colors.white.withOpacity(0.6),
-                                                        size: 14,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(Icons.chevron_right, color: context.appColors.textMuted, size: 16),
                                       ],
-                                    ],
-                                  ),
-                                ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ),
+                          ],
+                        ],
                       ),
                     ),
                   
@@ -1141,6 +991,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   }
 
   Widget _buildMovimientosTable() {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: SingleChildScrollView(
@@ -1152,8 +1003,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           dataRowMinHeight: 36,
           dataRowMaxHeight: 56,
           headingRowHeight: 40,
-          headingRowColor: WidgetStateProperty.all(Colors.green.shade50),
-          border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+          headingRowColor: WidgetStateProperty.all(colors.bgElevated),
+          border: TableBorder.all(color: colors.border, width: 1),
           columns: const [
             DataColumn(label: Text('Fecha', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
             DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -1176,7 +1027,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           final esCancelado = item.estado == 'CANCELADO';
           return DataRow(
             color: WidgetStateProperty.all(
-              esCancelado ? Colors.red.shade50 : Colors.grey.shade100
+              esCancelado ? colors.egresoDim : colors.bgElevated
             ),
             onSelectChanged: (_) => _mostrarDetalleMovimientoEsperado(item),
             cells: [
@@ -1185,7 +1036,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   DateFormat('dd/MM/yyyy').format(item.fechaVencimiento),
                   style: TextStyle(
                     fontSize: 11,
-                    color: esCancelado ? Colors.red.shade400 : Colors.grey.shade600,
+                    color: esCancelado ? AppColors.egresoLight : colors.textMuted,
                     decoration: esCancelado ? TextDecoration.lineThrough : null,
                   ),
                 ),
@@ -1195,8 +1046,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: esCancelado
-                        ? Colors.red.shade100
-                        : esIngreso ? Colors.green.shade50 : Colors.red.shade50,
+                        ? colors.egresoDim
+                        : esIngreso ? colors.ingresoDim : colors.egresoDim,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
@@ -1208,8 +1059,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                             : esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
                         size: 14,
                         color: esCancelado
-                            ? Colors.red.shade400
-                            : esIngreso ? Colors.green.shade300 : Colors.red.shade300,
+                            ? AppColors.egresoLight
+                            : esIngreso ? AppColors.ingresoLight : AppColors.egresoLight,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1218,8 +1069,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: esCancelado
-                              ? Colors.red.shade400
-                              : esIngreso ? Colors.green.shade600 : Colors.red.shade600,
+                              ? AppColors.egresoLight
+                              : esIngreso ? AppColors.ingreso : AppColors.egreso,
                           decoration: esCancelado ? TextDecoration.lineThrough : null,
                         ),
                       ),
@@ -1240,7 +1091,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                           nombreCategoria.isEmpty ? '-' : nombreCategoria,
                           style: TextStyle(
                             fontSize: 12,
-                            color: esCancelado ? Colors.red.shade400 : Colors.grey.shade700,
+                            color: esCancelado ? AppColors.egresoLight : colors.textSecondary,
                             fontWeight: FontWeight.w600,
                             decoration: esCancelado ? TextDecoration.lineThrough : null,
                           ),
@@ -1250,7 +1101,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                             'Cuota ${item.numeroCuota}/${item.totalCuotas}',
                             style: TextStyle(
                               fontSize: 10,
-                              color: esCancelado ? Colors.red.shade300 : Colors.grey.shade500,
+                              color: esCancelado ? AppColors.egresoLight : colors.textMuted,
                               fontStyle: FontStyle.italic,
                               decoration: esCancelado ? TextDecoration.lineThrough : null,
                             ),
@@ -1267,8 +1118,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                     color: esCancelado
-                        ? Colors.red.shade400
-                        : esIngreso ? Colors.green.shade600 : Colors.red.shade600,
+                        ? AppColors.egresoLight
+                        : esIngreso ? AppColors.ingreso : AppColors.egreso,
                     decoration: esCancelado ? TextDecoration.lineThrough : null,
                   ),
                 ),
@@ -1281,7 +1132,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     item.entidadNombre ?? '-',
                     style: TextStyle(
                       fontSize: 11,
-                      color: esCancelado ? Colors.red.shade400 : Colors.grey.shade700,
+                      color: esCancelado ? AppColors.egresoLight : colors.textSecondary,
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1294,7 +1145,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   constraints: const BoxConstraints(maxWidth: 120),
                   child: Text(
                     item.nombre,
-                    style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 11, color: AppColors.info, fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
@@ -1303,12 +1154,12 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               DataCell(
                 Text(
                   item.observaciones ?? '',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: colors.textMuted),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
                 ),
               ),
-              const DataCell(Icon(Icons.remove, size: 16, color: Colors.grey)),
+              DataCell(Icon(Icons.remove, size: 16, color: colors.textMuted)),
               DataCell(
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1316,31 +1167,31 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     Icon(
                       esCancelado ? Icons.cancel : Icons.pending,
                       size: 14,
-                      color: esCancelado ? Colors.red.shade700 : Colors.orange.shade700,
+                      color: esCancelado ? AppColors.egreso : AppColors.advertencia,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       esCancelado ? 'CANCELADO' : 'ESPERADO',
                       style: TextStyle(
                         fontSize: 11,
-                        color: esCancelado ? Colors.red.shade700 : Colors.orange.shade700,
+                        color: esCancelado ? AppColors.egreso : AppColors.advertencia,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
-              const DataCell(
+              DataCell(
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.remove, size: 14, color: Colors.grey),
+                    Icon(Icons.remove, size: 14, color: colors.textMuted),
                     SizedBox(width: 4),
                     Text(
                       'N/A',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey,
+                        color: colors.textMuted,
                       ),
                     ),
                   ],
@@ -1348,7 +1199,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               ),
               DataCell(
                 IconButton(
-                  icon: const Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                  icon: const Icon(Icons.info_outline, size: 18, color: AppColors.info),
                   tooltip: 'Ver detalles',
                   onPressed: () => _mostrarDetalleMovimientoEsperado(item),
                 ),
@@ -1380,9 +1231,9 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
 
         Color? rowColor;
         if (syncEstado.toUpperCase() == 'ERROR') {
-          rowColor = Colors.red.shade50;
+          rowColor = colors.egresoDim;
         } else if (syncEstado.toUpperCase() == 'PENDIENTE') {
-          rowColor = Colors.orange.shade50;
+          rowColor = colors.advertenciaDim;
         }
 
         return DataRow(
@@ -1412,8 +1263,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: esIngreso 
-                      ? Colors.green.withOpacity(0.2)
-                      : Colors.red.withOpacity(0.2),
+                      ? AppColors.ingreso.withValues(alpha: 0.2)
+                      : AppColors.egreso.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -1422,7 +1273,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     Icon(
                       esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
                       size: 14,
-                      color: esIngreso ? Colors.green : Colors.red,
+                      color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -1430,7 +1281,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: esIngreso ? Colors.green.shade900 : Colors.red.shade900,
+                        color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                       ),
                     ),
                   ],
@@ -1454,7 +1305,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
-                  color: esIngreso ? Colors.green.shade700 : Colors.red.shade700,
+                  color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                 ),
               ),
             ),
@@ -1462,7 +1313,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.payment, size: 12, color: Colors.grey.shade600),
+                  Icon(Icons.payment, size: 12, color: colors.textMuted),
                   const SizedBox(width: 4),
                   Text(
                     medioPago.isEmpty ? '-' : medioPago,
@@ -1491,12 +1342,12 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.event_note, size: 12, color: Colors.blue.shade700),
+                          Icon(Icons.event_note, size: 12, color: AppColors.info),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               compromisoNombre,
-                              style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w600),
+                              style: TextStyle(fontSize: 11, color: AppColors.info, fontWeight: FontWeight.w600),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
@@ -1511,7 +1362,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 constraints: const BoxConstraints(maxWidth: 150),
                 child: Text(
                   obs.isEmpty ? '-' : obs,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                  style: TextStyle(fontSize: 11, color: colors.textMuted),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
                 ),
@@ -1519,8 +1370,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             ),
             DataCell(
               tieneAdjunto
-                  ? const Icon(Icons.attach_file, size: 16, color: Colors.blue)
-                  : const Icon(Icons.remove, size: 16, color: Colors.grey),
+                  ? const Icon(Icons.attach_file, size: 16, color: AppColors.info)
+                  : Icon(Icons.remove, size: 16, color: colors.textMuted),
             ),
             DataCell(
               _buildEstadoBadge(mov['estado'] as String? ?? 'CONFIRMADO'),
@@ -1530,7 +1381,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             ),
             DataCell(
               IconButton(
-                icon: const Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                icon: const Icon(Icons.info_outline, size: 18, color: AppColors.info),
                 tooltip: 'Ver detalles',
                 onPressed: id != null ? () => _mostrarDetalleMovimientoModal(id) : null,
               ),
@@ -1544,6 +1395,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   }
 
   Widget _buildEstadoBadge(String estado) {
+    final colors = context.appColors;
     IconData icon;
     Color color;
     String text;
@@ -1551,22 +1403,22 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     switch (estado.toUpperCase()) {
       case 'CONFIRMADO':
         icon = Icons.check_circle;
-        color = Colors.green;
+        color = AppColors.ingreso;
         text = 'Confirmado';
         break;
       case 'ESPERADO':
         icon = Icons.pending;
-        color = Colors.orange;
+        color = AppColors.advertencia;
         text = 'Esperado';
         break;
       case 'CANCELADO':
         icon = Icons.cancel;
-        color = Colors.red;
+        color = AppColors.egreso;
         text = 'Cancel.';
         break;
       default:
         icon = Icons.help_outline;
-        color = Colors.grey;
+        color = colors.textMuted;
         text = estado;
     }
 
@@ -1595,17 +1447,17 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     switch (estado.toUpperCase()) {
       case 'SINCRONIZADA':
         icon = Icons.cloud_done;
-        color = Colors.green;
+        color = AppColors.ingreso;
         text = 'OK';
         break;
       case 'ERROR':
         icon = Icons.error_outline;
-        color = Colors.red;
+        color = AppColors.egreso;
         text = 'Error';
         break;
       default:
         icon = Icons.cloud_queue;
-        color = Colors.orange;
+        color = AppColors.advertencia;
         text = 'Pend';
     }
 
@@ -1636,7 +1488,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             Icon(
               Icons.warning_amber,
               size: 64,
-              color: Colors.orange.shade400,
+              color: AppColors.advertencia,
             ),
             const SizedBox(height: 16),
             const Text(
@@ -1648,7 +1500,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             FilledButton.icon(
               onPressed: () => Navigator.pop(context),
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppColors.accent,
               ),
               icon: const Icon(Icons.arrow_back),
               label: const Text('Volver'),
@@ -1660,6 +1512,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   }
 
   Widget _buildMovimientoCard(Map<String, dynamic> mov) {
+    final colors = context.appColors;
     final id = mov['id'] as int?;
     final tipo = (mov['tipo'] ?? '').toString();
     final esIngreso = tipo == 'INGRESO';
@@ -1700,11 +1553,11 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         child: ListTile(
           leading: CircleAvatar(
             backgroundColor: esIngreso 
-                ? Colors.green.withOpacity(0.2)
-                : Colors.red.withOpacity(0.2),
+                ? AppColors.ingreso.withValues(alpha: 0.2)
+                : AppColors.egreso.withValues(alpha: 0.2),
             child: Icon(
               esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
-              color: esIngreso ? Colors.green : Colors.red,
+              color: esIngreso ? AppColors.ingreso : AppColors.egreso,
             ),
           ),
           title: FutureBuilder<String>(
@@ -1722,7 +1575,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   Text(
                     Format.money(monto),
                     style: TextStyle(
-                      color: esIngreso ? Colors.green : Colors.red,
+                      color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -1739,12 +1592,12 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     children: [
-                      Icon(Icons.event_note, size: 14, color: Colors.blue.shade700),
+                      Icon(Icons.event_note, size: 14, color: AppColors.info),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           compromisoNombre,
-                          style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600),
+                          style: TextStyle(fontSize: 12, color: AppColors.info, fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
@@ -1765,11 +1618,11 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Row(
                     children: [
-                      const Icon(Icons.attach_file, size: 14, color: Colors.blue),
+                      const Icon(Icons.attach_file, size: 14, color: AppColors.info),
                       const SizedBox(width: 4),
                       const Text(
                         'Tiene adjunto',
-                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                        style: TextStyle(fontSize: 12, color: AppColors.info),
                       ),
                     ],
                   ),
@@ -1781,7 +1634,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     obs,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: colors.textMuted,
                       fontStyle: FontStyle.italic,
                     ),
                     maxLines: 2,
@@ -1793,7 +1646,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     DateFormat('dd/MM/yyyy HH:mm').format(fecha),
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 11, color: colors.textMuted),
                   ),
                 ),
             ],
@@ -1805,7 +1658,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               const SizedBox(width: 4),
               _buildSyncBadgeCompact(syncEstado),
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: colors.textMuted),
             ],
           ),
         ),
@@ -1820,15 +1673,15 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     switch (syncEstado.toUpperCase()) {
       case 'SINCRONIZADA':
         icon = Icons.cloud_done;
-        color = Colors.green;
+        color = AppColors.ingreso;
         break;
       case 'ERROR':
         icon = Icons.error_outline;
-        color = Colors.red;
+        color = AppColors.egreso;
         break;
       default:
         icon = Icons.cloud_queue;
-        color = Colors.orange;
+        color = AppColors.advertencia;
     }
 
     return Icon(icon, size: 18, color: color);
@@ -1841,33 +1694,49 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     switch (estado.toUpperCase()) {
       case 'CONFIRMADO':
         icon = Icons.check_circle;
-        color = Colors.green;
+        color = AppColors.ingreso;
         break;
       case 'ESPERADO':
         icon = Icons.pending;
-        color = Colors.orange;
+        color = AppColors.advertencia;
         break;
       case 'CANCELADO':
         icon = Icons.cancel;
-        color = Colors.red;
+        color = AppColors.egreso;
         break;
       default:
         icon = Icons.help_outline;
-        color = Colors.grey;
+        color = context.appColors.textMuted;
     }
 
     return Icon(icon, size: 18, color: color);
   }
   
   Widget _buildMovimientoEsperadoCard(MovimientoProyectado mov) {
+    final colors = context.appColors;
     final esIngreso = mov.tipo == 'INGRESO';
     final esCancelado = mov.estado == 'CANCELADO';
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      color: esCancelado ? Colors.red.shade50 : Colors.grey.shade100,
+      color: esCancelado ? colors.egresoDim : colors.bgElevated,
       child: InkWell(
         onTap: esCancelado ? null : () async {
+          // Movimientos POR_EVENTO: abrir formulario de creación directamente
+          if (mov.esPorEvento) {
+            final result = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CrearMovimientoPage(
+                  eventoCdmIdInicial: mov.eventoCdmId,
+                  montoInicial: mov.monto,
+                  descripcionInicial: mov.nombre,
+                ),
+              ),
+            );
+            if (result == true) await _load();
+            return;
+          }
           // Navegar a confirmar movimiento (solo si no está cancelado)
           final result = await Navigator.push(
             context,
@@ -1904,7 +1773,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        style: TextButton.styleFrom(foregroundColor: Colors.green),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.ingreso),
                         child: const Text('Sí, reactivar'),
                       ),
                     ],
@@ -1939,7 +1808,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Compromiso reactivado correctamente'),
-                          backgroundColor: Colors.green,
+                          backgroundColor: AppColors.ingreso,
                         ),
                       );
                     }
@@ -1948,7 +1817,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Error al reactivar. Intente nuevamente.'),
-                          backgroundColor: Colors.red,
+                          backgroundColor: AppColors.egreso,
                         ),
                       );
                     }
@@ -1990,7 +1859,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx, true),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.egreso),
                   child: const Text('Sí, cancelar'),
                 ),
               ],
@@ -2040,7 +1909,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Cuota cancelada correctamente'),
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.ingreso,
                   ),
                 );
               }
@@ -2063,7 +1932,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   builder: (ctx) => AlertDialog(
                     title: const Row(
                       children: [
-                        Icon(Icons.error, color: Colors.red),
+                        Icon(Icons.error, color: AppColors.egreso),
                         SizedBox(width: 8),
                         Text('Error al cancelar'),
                       ],
@@ -2088,17 +1957,17 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         child: ListTile(
           leading: CircleAvatar(
             backgroundColor: esCancelado
-                ? Colors.red.withOpacity(0.2)
+                ? AppColors.egreso.withValues(alpha: 0.2)
                 : esIngreso 
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.red.withOpacity(0.1),
+                    ? AppColors.ingreso.withValues(alpha: 0.1)
+                    : AppColors.egreso.withValues(alpha: 0.1),
             child: Icon(
               esCancelado
                   ? Icons.cancel
                   : esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
               color: esCancelado
-                  ? Colors.red.shade400
-                  : esIngreso ? Colors.green.shade300 : Colors.red.shade300,
+                  ? AppColors.egresoLight
+                  : esIngreso ? AppColors.ingresoLight : AppColors.egresoLight,
             ),
           ),
           title: Row(
@@ -2108,7 +1977,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   mov.descripcion,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: esCancelado ? Colors.red.shade700 : Colors.grey.shade700,
+                    color: esCancelado ? AppColors.egreso : colors.textSecondary,
                     decoration: esCancelado ? TextDecoration.lineThrough : null,
                   ),
                 ),
@@ -2117,8 +1986,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 Format.money(mov.monto),
                 style: TextStyle(
                   color: esCancelado
-                      ? Colors.red.shade400
-                      : esIngreso ? Colors.green.shade600 : Colors.red.shade600,
+                      ? AppColors.egresoLight
+                      : esIngreso ? AppColors.ingreso : AppColors.egreso,
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                   decoration: esCancelado ? TextDecoration.lineThrough : null,
@@ -2132,7 +2001,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               if (mov.categoria.isNotEmpty)
                 Text(
                   mov.categoria,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: colors.textMuted),
                 ),
               const SizedBox(height: 4),
               Row(
@@ -2140,7 +2009,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   Icon(
                     esCancelado ? Icons.cancel : Icons.pending,
                     size: 14,
-                    color: esCancelado ? Colors.red.shade400 : Colors.grey.shade600,
+                    color: esCancelado ? AppColors.egresoLight : colors.textMuted,
                   ),
                   const SizedBox(width: 4),
                   Text(
@@ -2149,7 +2018,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                         : 'Vence: ${DateFormat('dd/MM/yyyy').format(mov.fechaVencimiento)}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: esCancelado ? Colors.red.shade600 : Colors.grey.shade600,
+                      color: esCancelado ? AppColors.egreso : colors.textMuted,
                     ),
                   ),
                 ],
@@ -2161,17 +2030,33 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                     'Cuota ${mov.numeroCuota}/${mov.totalCuotas}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey.shade600,
+                      color: colors.textMuted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
+              if (mov.esPorEvento)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      Icon(Icons.sports_soccer, size: 11, color: AppColors.info),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Por partido — ${mov.entidadNombre ?? ''}',
+                        style: TextStyle(fontSize: 11, color: AppColors.info),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 6),
               Text(
-                'Toque para confirmar • Mantenga presionado para cancelar',
+                mov.esPorEvento
+                    ? 'Toque para registrar el pago de este partido'
+                    : 'Toque para confirmar • Mantenga presionado para cancelar',
                 style: TextStyle(
                   fontSize: 10,
-                  color: Colors.grey.shade500,
+                  color: colors.textMuted,
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -2179,8 +2064,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ),
           trailing: Chip(
             label: const Text('ESPERADO', style: TextStyle(fontSize: 10)),
-            backgroundColor: Colors.orange.shade100,
-            labelStyle: TextStyle(color: Colors.orange.shade900),
+            backgroundColor: colors.advertenciaDim,
+            labelStyle: TextStyle(color: AppColors.advertencia),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
           ),
@@ -2191,12 +2076,13 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
   
   /// Muestra diálogo con detalle de movimientos proyectados
   void _mostrarDetalleProyeccion() {
+    final colors = context.appColors;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.pending_actions, color: Colors.orange.shade700),
+            Icon(Icons.pending_actions, color: AppColors.advertencia),
             const SizedBox(width: 8),
             const Expanded(
               child: Text('Movimientos Esperados'),
@@ -2213,7 +2099,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: colors.bgElevated,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -2238,7 +2124,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            color: _saldoEsperado >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                            color: _saldoEsperado >= 0 ? AppColors.ingreso : AppColors.egreso,
                           ),
                         ),
                       ],
@@ -2267,12 +2153,12 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                             leading: CircleAvatar(
                               radius: 16,
                               backgroundColor: esIngreso 
-                                  ? Colors.green.withOpacity(0.15)
-                                  : Colors.red.withOpacity(0.15),
+                                  ? AppColors.ingreso.withValues(alpha: 0.15)
+                                  : AppColors.egreso.withValues(alpha: 0.15),
                               child: Icon(
                                 esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
                                 size: 16,
-                                color: esIngreso ? Colors.green : Colors.red,
+                                color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                               ),
                             ),
                             title: Text(
@@ -2285,18 +2171,18 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                                 if (mov.categoria.isNotEmpty)
                                   Text(
                                     mov.categoria,
-                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                    style: TextStyle(fontSize: 11, color: colors.textMuted),
                                   ),
                                 Text(
                                   'Vence: ${DateFormat('dd/MM/yy').format(mov.fechaVencimiento)}',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                                  style: TextStyle(fontSize: 10, color: colors.textMuted),
                                 ),
                                 if (mov.numeroCuota != null && mov.totalCuotas != null)
                                   Text(
                                     'Cuota ${mov.numeroCuota}/${mov.totalCuotas}',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: Colors.blue.shade700,
+                                      color: AppColors.info,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -2307,13 +2193,29 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
-                                color: esIngreso ? Colors.green.shade700 : Colors.red.shade700,
+                                color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                               ),
                             ),
                             onTap: () async {
                               // Cerrar diálogo actual
                               Navigator.pop(ctx);
-                              
+
+                              // POR_EVENTO: abrir formulario de creación directamente
+                              if (mov.esPorEvento) {
+                                final result = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CrearMovimientoPage(
+                                      eventoCdmIdInicial: mov.eventoCdmId,
+                                      montoInicial: mov.monto,
+                                      descripcionInicial: mov.nombre,
+                                    ),
+                                  ),
+                                );
+                                if (result == true) await _load();
+                                return;
+                              }
+
                               // Navegar a confirmar movimiento
                               final result = await Navigator.push(
                                 context,
@@ -2361,7 +2263,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           children: [
             if (estado == 'CANCELADO' && compromisoId != null)
               ListTile(
-                leading: const Icon(Icons.refresh, color: Colors.green),
+                leading: const Icon(Icons.refresh, color: AppColors.ingreso),
                 title: const Text('Reactivar compromiso'),
                 subtitle: const Text('Cambiar estado a ESPERADO'),
                 onTap: () async {
@@ -2371,7 +2273,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
               )
             else if (estado != 'CANCELADO')
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.blue),
+                leading: const Icon(Icons.edit, color: AppColors.info),
                 title: const Text('Editar movimiento'),
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -2402,7 +2304,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Movimiento actualizado correctamente'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.ingreso,
         ),
       );
     }
@@ -2415,7 +2317,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Este movimiento no está asociado a un compromiso'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.advertencia,
         ),
       );
       return;
@@ -2436,7 +2338,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.green),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ingreso),
             child: const Text('Sí, reactivar'),
           ),
         ],
@@ -2501,7 +2403,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Compromiso reactivado correctamente'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.ingreso,
           ),
         );
       }
@@ -2510,7 +2412,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error al reactivar. Intente nuevamente.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -2555,7 +2457,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.egreso),
             child: const Text('Sí, cancelar'),
           ),
         ],
@@ -2610,7 +2512,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Cuota cancelada correctamente'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.ingreso,
             ),
           );
         }
@@ -2633,7 +2535,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             builder: (ctx) => AlertDialog(
               title: const Row(
                 children: [
-                  Icon(Icons.error, color: Colors.red),
+                  Icon(Icons.error, color: AppColors.egreso),
                   SizedBox(width: 8),
                   Text('Error al cancelar'),
                 ],
@@ -2690,6 +2592,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
     if (_movimientoSeleccionado == null) return;
     
     final mov = _movimientoSeleccionado!;
+    final colors = context.appColors;
     
     // Obtener observación de cancelación desde la BD
     String? observacionCancelacion;
@@ -2721,7 +2624,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.cancel, color: Colors.red.shade400),
+            Icon(Icons.cancel, color: AppColors.egreso),
             const SizedBox(width: 8),
             const Expanded(
               child: Text('Movimiento Cancelado'),
@@ -2738,13 +2641,13 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: mov.tipo == 'INGRESO' 
-                      ? Colors.green.shade50 
-                      : Colors.red.shade50,
+                      ? colors.ingresoDim 
+                      : colors.egresoDim,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: mov.tipo == 'INGRESO' 
-                        ? Colors.green.shade200 
-                        : Colors.red.shade200,
+                        ? AppColors.ingresoLight 
+                        : AppColors.egresoLight,
                   ),
                 ),
                 child: Row(
@@ -2757,8 +2660,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                               ? Icons.arrow_downward 
                               : Icons.arrow_upward,
                           color: mov.tipo == 'INGRESO' 
-                              ? Colors.green 
-                              : Colors.red,
+                              ? AppColors.ingreso 
+                              : AppColors.egreso,
                         ),
                         const SizedBox(width: 8),
                         Text(
@@ -2766,8 +2669,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: mov.tipo == 'INGRESO' 
-                                ? Colors.green.shade700 
-                                : Colors.red.shade700,
+                                ? AppColors.ingreso 
+                                : AppColors.egreso,
                           ),
                         ),
                       ],
@@ -2778,8 +2681,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: mov.tipo == 'INGRESO' 
-                            ? Colors.green.shade700 
-                            : Colors.red.shade700,
+                            ? AppColors.ingreso 
+                            : AppColors.egreso,
                       ),
                     ),
                   ],
@@ -2833,9 +2736,9 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: colors.bgElevated,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: colors.border),
                 ),
                 child: Text(
                   observacionCancelacion?.isNotEmpty == true
@@ -2844,8 +2747,8 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   style: TextStyle(
                     fontSize: 13,
                     color: observacionCancelacion?.isNotEmpty == true
-                        ? Colors.grey.shade800
-                        : Colors.grey.shade500,
+                        ? colors.textSecondary
+                        : colors.textMuted,
                     fontStyle: observacionCancelacion?.isNotEmpty == true
                         ? FontStyle.normal
                         : FontStyle.italic,
@@ -2859,6 +2762,38 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiCard(String label, String valor, IconData icono, Color color) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: AppDecorations.cardOf(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icono, size: 14, color: color),
+              const SizedBox(width: 3),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            valor,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -2933,7 +2868,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
             children: [
               Icon(
                 tipo == 'INGRESO' ? Icons.arrow_downward : Icons.arrow_upward,
-                color: tipo == 'INGRESO' ? Colors.green : Colors.red,
+                color: tipo == 'INGRESO' ? AppColors.ingreso : AppColors.egreso,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -2995,7 +2930,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
+                  backgroundColor: AppColors.accent,
                   foregroundColor: Colors.white,
                 ),
                 child: const Text('Ver completo'),
@@ -3013,7 +2948,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error al cargar detalle. Intente nuevamente.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -3032,7 +2967,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           children: [
             Icon(
               Icons.pending,
-              color: mov.estado == 'CANCELADO' ? Colors.red : Colors.orange,
+              color: mov.estado == 'CANCELADO' ? AppColors.egreso : AppColors.advertencia,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -3100,7 +3035,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppColors.accent,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Confirmar'),
@@ -3130,7 +3065,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.green),
+            style: TextButton.styleFrom(foregroundColor: AppColors.ingreso),
             child: const Text('Sí, reactivar'),
           ),
         ],
@@ -3170,7 +3105,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Compromiso reactivado correctamente'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.ingreso,
             ),
           );
         }
@@ -3179,7 +3114,7 @@ class _MovimientosListPageState extends State<MovimientosListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Error al reactivar. Intente nuevamente.'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.egreso,
             ),
           );
         }

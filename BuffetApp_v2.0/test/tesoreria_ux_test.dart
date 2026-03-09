@@ -4,20 +4,21 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-import 'package:buffet_app/features/shared/state/app_settings.dart';
-import 'package:buffet_app/features/shared/state/drawer_state.dart';
-import 'package:buffet_app/features/shared/state/app_mode.dart';
-import 'package:buffet_app/features/shared/widgets/tesoreria_scaffold.dart';
-import 'package:buffet_app/layout/erp_layout.dart';
-import 'package:buffet_app/features/tesoreria/pages/tesoreria_home_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/unidad_gestion_selector_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/movimientos_list_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/acuerdos_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/plantel_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/saldos_iniciales_list_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/reporte_categorias_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/reporte_resumen_mensual_page.dart';
-import 'package:buffet_app/features/tesoreria/pages/gestionar_jugadores_page.dart';
+import 'package:cdm_gestion/core/theme/app_theme.dart';
+import 'package:cdm_gestion/features/shared/state/app_settings.dart';
+import 'package:cdm_gestion/features/shared/state/drawer_state.dart';
+import 'package:cdm_gestion/features/shared/state/app_mode.dart';
+import 'package:cdm_gestion/features/shared/widgets/tesoreria_scaffold.dart';
+import 'package:cdm_gestion/layout/erp_layout.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/tesoreria_home_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/unidad_gestion_selector_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/movimientos_list_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/acuerdos_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/plantel_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/saldos_iniciales_list_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/reporte_categorias_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/reporte_resumen_mensual_page.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/gestionar_jugadores_page.dart';
 
 /// Tests de comportamiento UX del módulo de Tesorería
 /// Valida:
@@ -28,6 +29,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
+    // Evitar que google_fonts intente descargar fuentes por HTTP en tests
+    AppTheme.useSystemFonts = true;
     // Inicializar SharedPreferences para tests
     SharedPreferences.setMockInitialValues({});
     // Inicializar locale de fecha para tests
@@ -46,6 +49,7 @@ void main() {
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
           child: MaterialApp(
+            theme: AppTheme.dark,
             home: Builder(
               builder: (context) {
                 final settings = Provider.of<AppSettings>(context, listen: false);
@@ -83,8 +87,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: MovimientosListPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const MovimientosListPage(),
           ),
         ),
       );
@@ -104,8 +109,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: AcuerdosPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const AcuerdosPage(),
           ),
         ),
       );
@@ -124,8 +130,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: PlantelPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const PlantelPage(),
           ),
         ),
       );
@@ -144,8 +151,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: SaldosInicialesListPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const SaldosInicialesListPage(),
           ),
         ),
       );
@@ -164,8 +172,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: ReporteCategoriasPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const ReporteCategoriasPage(),
           ),
         ),
       );
@@ -184,8 +193,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: ReporteResumenMensualPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const ReporteResumenMensualPage(),
           ),
         ),
       );
@@ -204,8 +214,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: GestionarJugadoresPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const GestionarJugadoresPage(),
           ),
         ),
       );
@@ -236,8 +247,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => AppSettings()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: MovimientosListPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const MovimientosListPage(),
           ),
         ),
       );
@@ -270,8 +282,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => AppSettings()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: MovimientosListPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const MovimientosListPage(),
           ),
         ),
       );
@@ -304,8 +317,9 @@ void main() {
             ChangeNotifierProvider(create: (_) => DrawerState()),
             ChangeNotifierProvider(create: (_) => AppModeState()),
           ],
-          child: const MaterialApp(
-            home: MovimientosListPage(),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const MovimientosListPage(),
           ),
         ),
       );

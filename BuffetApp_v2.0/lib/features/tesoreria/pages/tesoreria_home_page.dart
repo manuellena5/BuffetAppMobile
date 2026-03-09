@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/state/app_settings.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../layout/erp_layout.dart';
 import '../../../widgets/app_header.dart';
 import '../../../data/dao/db.dart';
@@ -12,8 +11,9 @@ import '../../shared/widgets/skeleton_loader.dart';
 import 'crear_movimiento_page.dart';
 import 'movimientos_list_page.dart';
 import 'unidad_gestion_selector_page.dart';
-import 'compromisos_erp_screen.dart';
+import 'compromisos_page.dart';
 import 'acuerdos_page.dart';
+import 'adhesiones_page.dart';
 import 'plantel_page.dart';
 import 'categorias_movimiento_page.dart';
 import 'reportes_index_page.dart';
@@ -59,8 +59,6 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= AppSpacing.breakpointTablet;
 
     // Pantalla de selección de unidad de gestión si corresponde
@@ -85,18 +83,6 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
           ? SkeletonLoader.cards(count: 4)
           : Column(
               children: [
-                if (isDesktop)
-                  AppHeader(
-                    title: 'Tesorería',
-                    subtitle: _unidadGestionNombre ?? 'Sin unidad seleccionada',
-                    trailing: [
-                      ActionChip(
-                        avatar: const Icon(Icons.business, size: 16),
-                        label: Text(_unidadGestionNombre ?? 'Sin seleccionar'),
-                        onPressed: _cambiarUnidadGestion,
-                      ),
-                    ],
-                  ),
                 Expanded(
                   child: ResponsiveContainer(
                     maxWidth: 1200,
@@ -109,22 +95,21 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
                             Icon(
                               Icons.account_balance,
                               size: 80,
-                              color: AppColors.primary.withValues(alpha: 0.5),
+                              color: AppColors.accent.withValues(alpha: 0.5),
                             ),
                             const SizedBox(height: 16),
                             Text(
                               'Tesorería',
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
+                              style: AppText.displayMd.copyWith(
+                                color: AppColors.accent,
                               ),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'Gestión de movimientos financieros\n${_unidadGestionNombre ?? 'Sin unidad seleccionada'}',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                              style: AppText.bodyLg.copyWith(
+                                color: AppColors.textSecondary,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -171,7 +156,7 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
                                   onTap: () async {
                                     await Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) => const CompromisosErpScreen()),
+                                      MaterialPageRoute(builder: (_) => const CompromisosPage()),
                                     );
                                     _cargarConteoCompromisos();
                                   },
@@ -181,10 +166,21 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
                                   icon: Icons.handshake,
                                   title: 'Acuerdos',
                                   subtitle: 'Contratos y acuerdos',
-                                  color: Colors.purple,
+                                  color: AppColors.accentDim,
                                   onTap: () => Navigator.push(
                                     context,
                                     MaterialPageRoute(builder: (_) => const AcuerdosPage()),
+                                  ),
+                                ),
+                                _buildActionCard(
+                                  context,
+                                  icon: Icons.volunteer_activism,
+                                  title: 'Adhesiones',
+                                  subtitle: 'Seguimiento de adhesiones',
+                                  color: const Color(0xFF3b82f6),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const AdhesionesPage()),
                                   ),
                                 ),
                                 _buildActionCard(
@@ -225,7 +221,7 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
                                   icon: Icons.dashboard,
                                   title: 'Dashboard',
                                   subtitle: 'Resumen visual',
-                                  color: Colors.indigo,
+                                  color: AppColors.accent,
                                   onTap: () => Navigator.push(
                                     context,
                                     MaterialPageRoute(builder: (_) => const DashboardPage()),
@@ -366,7 +362,7 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error al cargar la unidad de gestión.'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.egreso,
           ),
         );
       }
@@ -410,7 +406,7 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: const BoxDecoration(
-                          color: Colors.red,
+                          color: AppColors.egreso,
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
@@ -441,10 +437,7 @@ class _TesoreriaHomePageState extends State<TesoreriaHomePage> {
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[600],
-                ),
+                style: AppText.caption,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

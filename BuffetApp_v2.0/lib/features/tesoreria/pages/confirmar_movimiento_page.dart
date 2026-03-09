@@ -219,6 +219,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
   }
 
   Future<void> _confirmar() async {
+    if (!mounted) return;
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -286,6 +287,7 @@ class _ConfirmarMovimientoPageState extends State<ConfirmarMovimientoPage> {
         stackTrace: st,
       );
 
+      if (!mounted) return;
       setState(() => _isSubmitting = false);
 
       if (mounted) {

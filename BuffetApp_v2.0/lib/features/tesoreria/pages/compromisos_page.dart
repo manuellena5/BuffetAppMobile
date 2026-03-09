@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/format.dart';
+import '../../../widgets/status_badge.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../widgets/ayuda_tesoreria_dialog.dart';
 import '../widgets/calendario_mensual_widget.dart';
 import '../widgets/flujo_caja_widget.dart';
+import 'confirmar_movimiento_page.dart';
 import 'crear_compromiso_page.dart';
 import 'detalle_compromiso_page.dart';
 
@@ -42,6 +45,9 @@ class _CompromisosPageState extends State<CompromisosPage>
 
   // Vista
   bool _vistaTabla = true; // false = tarjetas, true = tabla (por defecto)
+
+  // Selector de mes para la vista lista
+  DateTime _mesActualLista = DateTime(DateTime.now().year, DateTime.now().month);
 
   // Tabs: lista, calendario, flujo de caja
   late final TabController _tabController;
@@ -217,9 +223,9 @@ class _CompromisosPageState extends State<CompromisosPage>
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Acuerdos y Compromisos',
-      currentRouteName: '/compromisos',
+      currentRoute: '/compromisos',
       actions: [
         // Toggle vista tabla/tarjetas (solo en pestaña lista)
         if (_tabController.index == 0)
@@ -239,7 +245,8 @@ class _CompromisosPageState extends State<CompromisosPage>
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _crearCompromiso,
-        backgroundColor: Colors.teal,
+        backgroundColor: AppColors.accent,
+        foregroundColor: AppColors.textPrimary,
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Compromiso'),
       ),
@@ -267,6 +274,9 @@ class _CompromisosPageState extends State<CompromisosPage>
                 // --- Pestaña 1: Lista ---
                 Column(
                   children: [
+                    // Selector de mes (carrusel)
+                    _buildSelectorMesLista(),
+
                     // FASE 22.5: Filtros visibles
                     _buildFiltrosVisibles(),
                     const Divider(height: 1),
@@ -275,24 +285,23 @@ class _CompromisosPageState extends State<CompromisosPage>
                     Expanded(
                       child: _isLoading
                           ? SkeletonLoader.table(rows: 6, columns: 5)
-                          : _compromisos.isEmpty
+                          : _compromisosMesFiltrado.isEmpty
                               ? const EmptyState(
                                   icon: Icons.event_note,
                                   title: 'No hay compromisos registrados',
                                   subtitle: 'Creá un compromiso para empezar',
                                 )
-                              : Align(
-                                  alignment: Alignment.topCenter,
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                        maxWidth: _vistaTabla ? 1400 : 1000),
-                                    child: RefreshIndicator(
-                                      onRefresh: _cargarCompromisos,
-                                      child: _vistaTabla
-                                          ? _buildTabla()
-                                          : _buildTarjetas(),
-                                    ),
-                                  ),
+                              : RefreshIndicator(
+                                  onRefresh: _cargarCompromisos,
+                                  child: _vistaTabla
+                                      ? _buildTabla()
+                                      : Align(
+                                          alignment: Alignment.topCenter,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(maxWidth: 1000),
+                                            child: _buildTarjetas(),
+                                          ),
+                                        ),
                                 ),
                     ),
                   ],
@@ -317,11 +326,64 @@ class _CompromisosPageState extends State<CompromisosPage>
     );
   }
 
+  void _cambiarMesLista(int delta) {
+    setState(() {
+      _mesActualLista = DateTime(_mesActualLista.year, _mesActualLista.month + delta);
+    });
+  }
+
+  Widget _buildSelectorMesLista() {
+    return Container(
+      color: context.appColors.bgSurface,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: () => _cambiarMesLista(-1),
+          ),
+          Text(
+            DateFormat('MMMM yyyy', 'es_ES').format(_mesActualLista),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: () => _cambiarMesLista(1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Filtra compromisos por el mes seleccionado en la vista lista.
+  /// Un compromiso se muestra si su período (fecha_inicio → fecha_fin | hoy)
+  /// intersecta el mes seleccionado.
+  List<Map<String, dynamic>> get _compromisosMesFiltrado {
+    final mesInicio = DateTime(_mesActualLista.year, _mesActualLista.month, 1);
+    final mesFin = DateTime(_mesActualLista.year, _mesActualLista.month + 1, 0);
+    final mesInicioStr = DateFormat('yyyy-MM-dd').format(mesInicio);
+    final mesFinStr = DateFormat('yyyy-MM-dd').format(mesFin);
+
+    return _compromisos.where((c) {
+      final inicio = c['fecha_inicio'] as String? ?? '';
+      final fin = c['fecha_fin'] as String?;
+      // Si no hay fecha de inicio, incluir siempre
+      if (inicio.isEmpty) return true;
+      // Compromiso empieza después del mes → no incluir
+      if (inicio.compareTo(mesFinStr) > 0) return false;
+      // Si tiene fecha_fin y terminó antes del mes → no incluir
+      if (fin != null && fin.isNotEmpty && fin.compareTo(mesInicioStr) < 0) return false;
+      return true;
+    }).toList();
+  }
+
   /// FASE 22.5: Sección de filtros visibles (dropdowns en lugar de modal)
   Widget _buildFiltrosVisibles() {
+    final colors = context.appColors;
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.grey.shade100,
+      color: colors.bgElevated,
       child: ResponsiveContainer(
         maxWidth: 1400,
         child: Column(
@@ -337,13 +399,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                   width: 200,
                   child: DropdownButtonFormField<int?>(
                     initialValue: _entidadPlantelId,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Entidad',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: colors.bgSurface,
                     ),
                     items: [
                       const DropdownMenuItem<int?>(
@@ -364,13 +426,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                   width: 150,
                   child: DropdownButtonFormField<String?>(
                     initialValue: _rolFiltro,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Rol',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: colors.bgSurface,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
@@ -390,13 +452,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                   width: 150,
                   child: DropdownButtonFormField<String?>(
                     initialValue: _tipoFiltro,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Tipo',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: colors.bgSurface,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
@@ -415,13 +477,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                   width: 150,
                   child: DropdownButtonFormField<bool?>(
                     initialValue: _activoFiltro,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Estado',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: colors.bgSurface,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
@@ -439,13 +501,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                   width: 180,
                   child: DropdownButtonFormField<bool?>(
                     initialValue: _origenAcuerdoFiltro,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Origen',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: colors.bgSurface,
                     ),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Todos')),
@@ -472,7 +534,7 @@ class _CompromisosPageState extends State<CompromisosPage>
                   icon: const Icon(Icons.filter_list),
                   label: const Text('Filtrar'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.ingreso,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -484,10 +546,10 @@ class _CompromisosPageState extends State<CompromisosPage>
                 ),
                 const Spacer(),
                 Text(
-                  '${_compromisos.length} resultado${_compromisos.length != 1 ? 's' : ''}',
+                  '${_compromisosMesFiltrado.length} resultado${_compromisosMesFiltrado.length != 1 ? 's' : ''}',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey.shade700,
+                    color: colors.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -499,84 +561,259 @@ class _CompromisosPageState extends State<CompromisosPage>
     );
   }
 
+  // ─── STYLED TABLE ──────────────────────────────────────────────────────────
   Widget _buildTabla() {
     return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SingleChildScrollView(
-        child: DataTable(
-          showCheckboxColumn: false,
-          columns: const [
-            DataColumn(label: Text('Nombre')),
-            DataColumn(label: Text('Tipo')),
-            DataColumn(label: Text('Entidad')), // FASE 22.5
-            DataColumn(label: Text('Rol')), // FASE 22.5
-            DataColumn(label: Text('Monto')),
-            DataColumn(label: Text('Frecuencia')),
-            DataColumn(label: Text('Próximo Vencimiento')),
-            DataColumn(label: Text('Cuotas')),
-            DataColumn(label: Text('Origen')),
-            DataColumn(label: Text('Estado')),
-            DataColumn(label: Text('Acciones')),
-          ],
-          rows: _compromisos.map((c) => _buildFilaTabla(c)).toList(),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Container(
+          decoration: AppDecorations.cardOf(context),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(color: context.appColors.border)),
+                ),
+                child: Row(
+                  children: [
+                    _tableHeader('NOMBRE', flex: 3),
+                    _tableHeader('TIPO', flex: 1),
+                    _tableHeader('ENTIDAD', flex: 2),
+                    _tableHeader('MONTO', flex: 2),
+                    _tableHeader('FRECUENCIA', flex: 1),
+                    _tableHeader('PRÓX. VTO', flex: 2),
+                    _tableHeader('CUOTAS', flex: 1),
+                    _tableHeader('ORIGEN', flex: 1),
+                    _tableHeader('ESTADO', flex: 1),
+                    _tableHeader('', flex: 2), // acciones
+                  ],
+                ),
+              ),
+              // Rows
+              ..._compromisosMesFiltrado.asMap().entries.map((entry) {
+                try {
+                  return _buildStyledRow(entry.value, entry.key);
+                } catch (e, stack) {
+                  AppDatabase.logLocalError(
+                    scope: 'compromisos_page.render_fila_tabla',
+                    error: e.toString(),
+                    stackTrace: stack,
+                    payload: {'compromiso_id': entry.value['id']},
+                  );
+                  return Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning, color: AppColors.advertencia, size: 18),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text('Error al mostrar compromiso', style: AppText.bodyMd),
+                      ],
+                    ),
+                  );
+                }
+              }),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  DataRow _buildFilaTabla(Map<String, dynamic> c) {
+  Widget _tableHeader(String label, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Text(label, style: AppText.label),
+    );
+  }
+
+  Widget _buildStyledRow(Map<String, dynamic> c, int index) {
+    final id = c['id'] as int;
+    final nombre = c['nombre']?.toString() ?? 'Sin nombre';
     final activo = c['activo'] == 1;
-    final tipo = c['tipo'] as String;
+    final tipo = (c['tipo'] as String?) ?? 'EGRESO';
     final cuotas = c['cuotas'];
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
     final esDeAcuerdo = c['es_de_acuerdo'] == true;
-
-    // FASE 22.5: Obtener info de entidad desde la vista (ya viene con JOIN)
     final entidadNombre = c['entidad_nombre'] as String? ?? '—';
-    final rolNombre = c['entidad_rol'] as String? ?? '—';
+    final esIngreso = tipo == 'INGRESO';
+    final tipoColor = esIngreso ? AppColors.ingreso : AppColors.egreso;
 
-    return DataRow(
-      onSelectChanged: (_) => _verDetalle(c['id'] as int),
-      cells: [
-        DataCell(Text(c['nombre'] ?? '')),
-        DataCell(_buildTipoBadge(tipo)),
-        DataCell(Text(entidadNombre)), // FASE 22.5
-        DataCell(Text(rolNombre)), // FASE 22.5
-        DataCell(Text(Format.money(c['monto'] ?? 0))),
-        DataCell(Text(c['frecuencia'] ?? '')),
-        DataCell(_buildProximoVencimiento(c['id'] as int)),
-        DataCell(Text(cuotas != null ? '$cuotasConfirmadas/$cuotas' : '—')),
-        DataCell(_buildOrigenBadge(esDeAcuerdo)),
-        DataCell(_buildEstadoBadge(activo)),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(activo ? Icons.pause : Icons.play_arrow),
-                iconSize: 20,
-                onPressed: () => _pausarReactivar(c['id'] as int, activo),
-                tooltip: activo ? 'Pausar' : 'Reactivar',
-              ),
-              IconButton(
-                icon: const Icon(Icons.info_outline),
-                iconSize: 20,
-                onPressed: () => _verDetalle(c['id'] as int),
-                tooltip: 'Ver detalle',
-              ),
-            ],
-          ),
+    // Iniciales para avatar
+    final iniciales = nombre.length >= 2
+        ? nombre.substring(0, 2).toUpperCase()
+        : nombre.toUpperCase();
+
+    return InkWell(
+      onTap: () => _verDetalle(id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          border: Border(
+              bottom: BorderSide(
+                  color: context.appColors.border.withValues(alpha: 0.5))),
         ),
-      ],
+        child: Row(
+          children: [
+            // Nombre con avatar
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: esIngreso
+                          ? context.appColors.ingresoDim
+                          : context.appColors.infoDim,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      iniciales,
+                      style: AppText.label.copyWith(
+                        color: esIngreso
+                            ? AppColors.ingresoLight
+                            : AppColors.infoLight,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      nombre,
+                      style: AppText.titleSm,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Tipo
+            Expanded(
+              flex: 1,
+              child: StatusBadge(
+                label: tipo,
+                type: esIngreso ? StatusType.success : StatusType.danger,
+              ),
+            ),
+
+            // Entidad
+            Expanded(
+              flex: 2,
+              child: Text(
+                entidadNombre,
+                style: AppText.bodyMd,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
+            // Monto
+            Expanded(
+              flex: 2,
+              child: Text(
+                Format.money(c['monto'] ?? 0),
+                style: AppText.monoBold.copyWith(color: tipoColor),
+              ),
+            ),
+
+            // Frecuencia
+            Expanded(
+              flex: 1,
+              child: Text(c['frecuencia']?.toString() ?? '—', style: AppText.bodyMd),
+            ),
+
+            // Próximo vencimiento
+            Expanded(
+              flex: 2,
+              child: _buildProximoVencimiento(id),
+            ),
+
+            // Cuotas
+            Expanded(
+              flex: 1,
+              child: Text(
+                cuotas != null ? '$cuotasConfirmadas/$cuotas' : '—',
+                style: AppText.monoSm,
+              ),
+            ),
+
+            // Origen
+            Expanded(
+              flex: 1,
+              child: StatusBadge(
+                label: esDeAcuerdo ? 'Acuerdo' : 'Manual',
+                type: esDeAcuerdo ? StatusType.info : StatusType.neutral,
+              ),
+            ),
+
+            // Estado
+            Expanded(
+              flex: 1,
+              child: StatusBadge(
+                label: activo ? 'Activo' : 'Pausado',
+                type: activo ? StatusType.success : StatusType.neutral,
+              ),
+            ),
+
+            // Acciones
+            Expanded(
+              flex: 2,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (activo)
+                    _ghostButton(
+                      esIngreso ? 'Cobrar' : 'Pagar',
+                      () => _registrarMovimiento(c),
+                      color: tipoColor,
+                    ),
+                  _ghostButton(
+                    activo ? 'Pausar' : 'Reactivar',
+                    () => _pausarReactivar(id, activo),
+                    color: AppColors.advertencia,
+                  ),
+                  _ghostButton('Ver', () => _verDetalle(id)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ghostButton(String label, VoidCallback onTap, {Color? color}) {
+    final c = color ?? AppColors.accent;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+        child: Text(
+          label,
+          style: AppText.labelMd.copyWith(color: c),
+        ),
+      ),
     );
   }
 
   Widget _buildTarjetas() {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _compromisos.length,
+      itemCount: _compromisosMesFiltrado.length,
       itemBuilder: (context, index) {
-        final c = _compromisos[index];
+        final c = _compromisosMesFiltrado[index];
         return _buildTarjeta(c);
       },
     );
@@ -588,13 +825,18 @@ class _CompromisosPageState extends State<CompromisosPage>
     final cuotas = c['cuotas'];
     final cuotasConfirmadas = c['cuotas_confirmadas'] ?? 0;
     final esDeAcuerdo = c['es_de_acuerdo'] == true;
+    final esIngreso = tipo == 'INGRESO';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      decoration: AppDecorations.cardOf(context).copyWith(
+        boxShadow: AppShadows.cardFor(context),
+      ),
       child: InkWell(
         onTap: () => _verDetalle(c['id'] as int),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -602,13 +844,7 @@ class _CompromisosPageState extends State<CompromisosPage>
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      c['nombre'] ?? '',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: Text(c['nombre'] ?? '', style: AppText.titleSm),
                   ),
                   _buildTipoBadge(tipo),
                   const SizedBox(width: 8),
@@ -622,13 +858,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                 Row(
                   children: [
                     Icon(Icons.handshake,
-                        size: 16, color: Colors.purple.shade700),
+                        size: 16, color: AppColors.accentLight),
                     const SizedBox(width: 4),
                     Text(
                       'Generado desde Acuerdo',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.purple.shade700,
+                        color: AppColors.accentLight,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -645,19 +881,10 @@ class _CompromisosPageState extends State<CompromisosPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Monto',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
+                        Text('Monto', style: AppText.caption),
                         Text(
                           Format.money(c['monto'] ?? 0),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: AppText.monoBold,
                         ),
                       ],
                     ),
@@ -666,17 +893,8 @@ class _CompromisosPageState extends State<CompromisosPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Frecuencia',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        Text(
-                          c['frecuencia'] ?? '',
-                          style: const TextStyle(fontSize: 14),
-                        ),
+                        Text('Frecuencia', style: AppText.caption),
+                        Text(c['frecuencia'] ?? '', style: AppText.bodyMd),
                       ],
                     ),
                   ),
@@ -692,13 +910,13 @@ class _CompromisosPageState extends State<CompromisosPage>
                 // Barra de progreso de cuotas
                 LinearProgressIndicator(
                   value: cuotasConfirmadas / cuotas,
-                  backgroundColor: Colors.grey[300],
-                  color: tipo == 'INGRESO' ? Colors.green : Colors.blue,
+                  backgroundColor: AppColors.border,
+                  color: esIngreso ? AppColors.ingreso : AppColors.info,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$cuotasConfirmadas de $cuotas cuotas confirmadas',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: AppText.caption,
                 ),
                 const SizedBox(height: 8),
                 // Estado financiero (pagado/remanente)
@@ -709,18 +927,34 @@ class _CompromisosPageState extends State<CompromisosPage>
 
               // Acciones
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  // Botón registrar cobro/pago
+                  if (activo)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _registrarMovimiento(c),
+                        icon: Icon(
+                          esIngreso ? Icons.arrow_downward : Icons.arrow_upward,
+                          size: 18,
+                        ),
+                        label: Text(esIngreso ? 'Cobrar' : 'Pagar'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: esIngreso ? AppColors.ingreso : AppColors.egreso,
+                          foregroundColor: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  if (activo) const SizedBox(width: 8),
                   TextButton.icon(
                     onPressed: () => _pausarReactivar(c['id'] as int, activo),
-                    icon: Icon(activo ? Icons.pause : Icons.play_arrow),
+                    icon: Icon(activo ? Icons.pause : Icons.play_arrow, size: 18),
                     label: Text(activo ? 'Pausar' : 'Reactivar'),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
+                  const Spacer(),
+                  IconButton(
                     onPressed: () => _verDetalle(c['id'] as int),
-                    icon: const Icon(Icons.info_outline),
-                    label: const Text('Ver Detalle'),
+                    icon: const Icon(Icons.chevron_right),
+                    tooltip: 'Ver detalle',
                   ),
                 ],
               ),
@@ -736,13 +970,13 @@ class _CompromisosPageState extends State<CompromisosPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: esIngreso ? Colors.green[100] : Colors.red[100],
+        color: esIngreso ? AppColors.ingresoDim : AppColors.egresoDim,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         tipo,
         style: TextStyle(
-          color: esIngreso ? Colors.green[900] : Colors.red[900],
+          color: esIngreso ? AppColors.ingreso : AppColors.egreso,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -754,45 +988,16 @@ class _CompromisosPageState extends State<CompromisosPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: activo ? Colors.blue[100] : Colors.grey[300],
+        color: activo ? AppColors.infoDim : AppColors.bgElevated,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         activo ? 'ACTIVO' : 'PAUSADO',
         style: TextStyle(
-          color: activo ? Colors.blue[900] : Colors.grey[700],
+          color: activo ? AppColors.info : AppColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
-      ),
-    );
-  }
-
-  Widget _buildOrigenBadge(bool esDeAcuerdo) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: esDeAcuerdo ? Colors.purple[100] : Colors.grey[200],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            esDeAcuerdo ? Icons.handshake : Icons.edit,
-            size: 14,
-            color: esDeAcuerdo ? Colors.purple[900] : Colors.grey[700],
-          ),
-          const SizedBox(width: 4),
-          Text(
-            esDeAcuerdo ? 'ACUERDO' : 'MANUAL',
-            style: TextStyle(
-              color: esDeAcuerdo ? Colors.purple[900] : Colors.grey[700],
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -813,14 +1018,14 @@ class _CompromisosPageState extends State<CompromisosPage>
         final hoy = DateTime.now();
         final diferencia = fecha.difference(hoy).inDays;
 
-        Color color = Colors.grey[700]!;
+        Color color = AppColors.textSecondary;
         String prefijo = '';
 
         if (diferencia < 0) {
-          color = Colors.red;
+          color = AppColors.egreso;
           prefijo = 'Vencido: ';
         } else if (diferencia <= 7) {
-          color = Colors.orange;
+          color = AppColors.advertencia;
           prefijo = 'Próximo: ';
         } else {
           prefijo = 'Próximo: ';
@@ -856,9 +1061,9 @@ class _CompromisosPageState extends State<CompromisosPage>
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.blue.shade50,
+            color: AppColors.infoDim,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.blue.shade200),
+            border: Border.all(color: AppColors.info),
           ),
           child: Row(
             children: [
@@ -870,7 +1075,7 @@ class _CompromisosPageState extends State<CompromisosPage>
                       'Pagado',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[600],
+                        color: AppColors.textMuted,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -880,7 +1085,7 @@ class _CompromisosPageState extends State<CompromisosPage>
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.green[700],
+                        color: AppColors.ingreso,
                       ),
                     ),
                   ],
@@ -889,7 +1094,7 @@ class _CompromisosPageState extends State<CompromisosPage>
               Container(
                 width: 1,
                 height: 32,
-                color: Colors.grey[300],
+                color: AppColors.border,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -900,7 +1105,7 @@ class _CompromisosPageState extends State<CompromisosPage>
                       'Remanente',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[600],
+                        color: AppColors.textMuted,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -910,7 +1115,7 @@ class _CompromisosPageState extends State<CompromisosPage>
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.orange[700],
+                        color: AppColors.advertencia,
                       ),
                     ),
                   ],
@@ -929,6 +1134,36 @@ class _CompromisosPageState extends State<CompromisosPage>
     final remanente =
         await _compromisosService.calcularMontoRemanente(compromisoId);
     return {'pagado': pagado, 'remanente': remanente};
+  }
+
+  Future<void> _registrarMovimiento(Map<String, dynamic> c) async {
+    final compromisoId = c['id'] as int;
+    final tipo = c['tipo'] as String;
+    final monto = (c['monto'] as num?)?.toDouble() ?? 0.0;
+    final categoria = c['categoria'] as String? ?? '';
+
+    // Calcular próximo vencimiento
+    final proximoVenc = await _compromisosService.calcularProximoVencimiento(compromisoId);
+    final fecha = proximoVenc ?? DateTime.now();
+
+    if (!mounted) return;
+
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ConfirmarMovimientoPage(
+          compromisoId: compromisoId,
+          fechaVencimiento: fecha,
+          montoSugerido: monto,
+          tipo: tipo,
+          categoria: categoria,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _cargarCompromisos();
+    }
   }
 
   Future<void> _crearCompromiso() async {

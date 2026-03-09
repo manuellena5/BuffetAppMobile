@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../features/shared/services/compromisos_service.dart';
 import '../../../features/shared/format.dart';
 import '../../../data/dao/db.dart';
@@ -93,7 +94,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppColors.egreso),
             const SizedBox(height: 12),
             Text(_error!),
             const SizedBox(height: 12),
@@ -114,13 +115,13 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.event_available,
-                  size: 64, color: Colors.grey.shade400),
+                  size: 64, color: AppColors.textMuted),
               const SizedBox(height: 16),
               Text(
                 'No hay cuotas en el periodo',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey.shade600,
+                  color: AppColors.textMuted,
                 ),
               ),
               const SizedBox(height: 8),
@@ -128,7 +129,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
                 'Se muestran cuotas de los últimos 30 días y próximos 60 días',
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.grey.shade500,
+                  color: AppColors.textMuted,
                 ),
               ),
             ],
@@ -179,7 +180,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
             _buildSeccionHeader(
               'Vencidas',
               Icons.warning_amber_rounded,
-              Colors.red,
+              AppColors.egreso,
               vencidas.length,
               _calcularTotal(vencidas),
             ),
@@ -193,7 +194,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
             _buildSeccionHeader(
               'Esta semana',
               Icons.schedule,
-              Colors.orange,
+              AppColors.advertencia,
               estaSemana.length,
               _calcularTotal(estaSemana),
             ),
@@ -207,7 +208,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
             _buildSeccionHeader(
               'Próximas',
               Icons.event_note,
-              Colors.blue,
+              AppColors.info,
               proximas.length,
               _calcularTotal(proximas),
             ),
@@ -221,7 +222,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
             _buildSeccionHeader(
               'Confirmadas recientemente',
               Icons.check_circle,
-              Colors.green,
+              AppColors.ingreso,
               confirmadas.length,
               _calcularTotalConfirmado(confirmadas),
             ),
@@ -261,7 +262,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
           children: [
             Row(
               children: [
-                Icon(Icons.calendar_month, color: Colors.blue.shade700),
+                Icon(Icons.calendar_month, color: AppColors.info),
                 const SizedBox(width: 8),
                 const Text(
                   'Resumen de pagos',
@@ -277,24 +278,24 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
                 if (vencidas.isNotEmpty)
                   _buildResumenChip(
                     '${vencidas.length} vencida${vencidas.length > 1 ? 's' : ''}',
-                    Colors.red,
+                    AppColors.egreso,
                     Format.money(_calcularTotal(vencidas)),
                   ),
                 if (estaSemana.isNotEmpty)
                   _buildResumenChip(
                     '${estaSemana.length} esta semana',
-                    Colors.orange,
+                    AppColors.advertencia,
                     Format.money(_calcularTotal(estaSemana)),
                   ),
                 _buildResumenChip(
                   '${proximas.length} próxima${proximas.length != 1 ? 's' : ''}',
-                  Colors.blue,
+                  AppColors.info,
                   Format.money(_calcularTotal(proximas)),
                 ),
                 if (confirmadas.isNotEmpty)
                   _buildResumenChip(
                     '${confirmadas.length} pagada${confirmadas.length > 1 ? 's' : ''}',
-                    Colors.green,
+                    AppColors.ingreso,
                     Format.money(_calcularTotalConfirmado(confirmadas)),
                   ),
               ],
@@ -399,7 +400,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
     final compromisoId = cuota['compromiso_id'] as int;
 
     final esIngreso = tipo == 'INGRESO';
-    final colorTipo = esIngreso ? Colors.green : Colors.red;
+    final colorTipo = esIngreso ? AppColors.ingreso : AppColors.egreso;
 
     // Calcular días de diferencia con hoy
     DateTime? fechaDt;
@@ -424,17 +425,17 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
     Color bgColor;
     switch (visual) {
       case _CuotaEstadoVisual.vencida:
-        borderColor = Colors.red.shade300;
-        bgColor = Colors.red.shade50;
+        borderColor = AppColors.egresoLight;
+        bgColor = AppColors.egresoDim;
       case _CuotaEstadoVisual.estaSemana:
-        borderColor = Colors.orange.shade300;
-        bgColor = Colors.orange.shade50;
+        borderColor = AppColors.advertenciaLight;
+        bgColor = AppColors.advertenciaDim;
       case _CuotaEstadoVisual.proxima:
-        borderColor = Colors.blue.shade200;
-        bgColor = Colors.blue.shade50;
+        borderColor = AppColors.info;
+        bgColor = AppColors.infoDim;
       case _CuotaEstadoVisual.confirmada:
-        borderColor = Colors.green.shade200;
-        bgColor = Colors.green.shade50;
+        borderColor = AppColors.ingresoLight;
+        bgColor = AppColors.ingresoDim;
     }
 
     return Card(
@@ -499,7 +500,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
                           Padding(
                             padding: const EdgeInsets.only(left: 4),
                             child: Icon(Icons.handshake,
-                                size: 14, color: Colors.purple.shade400),
+                                size: 14, color: AppColors.accentLight),
                           ),
                       ],
                     ),
@@ -513,7 +514,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
                               : fecha,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade700,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -541,7 +542,7 @@ class _CalendarioPagosWidgetState extends State<CalendarioPagosWidget> {
                               entidad,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey.shade600,
+                                color: AppColors.textMuted,
                                 fontStyle: FontStyle.italic,
                               ),
                               maxLines: 1,

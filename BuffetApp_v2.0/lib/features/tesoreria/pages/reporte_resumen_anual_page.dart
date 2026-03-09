@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:excel/excel.dart' as excel;
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import '../../shared/state/app_settings.dart';
 import '../../shared/format.dart';
@@ -217,10 +217,9 @@ class _ReporteResumenAnualPageState extends State<ReporteResumenAnualPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Resumen Anual',
-      currentRouteName: '/reportes/resumen_anual',
-      appBarColor: Colors.green,
+      currentRoute: '/reportes/resumen_anual',
       actions: [
         IconButton(
           icon: _exportando

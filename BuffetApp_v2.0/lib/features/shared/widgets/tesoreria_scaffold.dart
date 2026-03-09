@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/theme/app_theme.dart';
 import '../state/drawer_state.dart';
 import '../state/app_mode.dart';
 import 'tesoreria_drawer_helper.dart';
@@ -133,6 +134,9 @@ class _TesoreriaScaffoldState extends State<TesoreriaScaffold> {
           showAdvanced: effectiveShowAdvanced,
           onLoadVersion: widget.onLoadVersion,
         );
+
+        // Forzar tema oscuro en el drawer (igual que ErpLayout)
+        final darkDrawer = Theme(data: AppTheme.dark, child: drawer);
         
         return Scaffold(
           backgroundColor: widget.backgroundColor,
@@ -151,10 +155,10 @@ class _TesoreriaScaffoldState extends State<TesoreriaScaffold> {
             actions: widget.actions,
             bottom: widget.bottom,
           ),
-          drawer: drawerState.isFixed ? null : drawer,
+          drawer: drawerState.isFixed ? null : darkDrawer,
           body: Row(
             children: [
-              if (drawerState.isFixed) drawer,
+              if (drawerState.isFixed) darkDrawer,
               Expanded(child: widget.body),
             ],
           ),

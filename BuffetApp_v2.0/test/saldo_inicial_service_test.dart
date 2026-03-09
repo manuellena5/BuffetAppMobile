@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
-import 'package:buffet_app/data/dao/db.dart';
-import 'package:buffet_app/features/tesoreria/services/saldo_inicial_service.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
+import 'package:cdm_gestion/features/tesoreria/services/saldo_inicial_service.dart';
 
 late String _tempDir;
 
@@ -28,7 +28,7 @@ void main() {
   group('SaldoInicialService', () {
     setUp(() async {
       await AppDatabase.close();
-      final dbFile = File(p.join(_tempDir, 'barcancha.db'));
+      final dbFile = File(p.join(_tempDir, 'cdm_gestion.db'));
       if (await dbFile.exists()) {
         await dbFile.delete();
       }

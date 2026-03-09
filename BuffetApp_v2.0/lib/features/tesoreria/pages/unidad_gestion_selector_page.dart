@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
+import '../../../layout/erp_layout.dart';
 import '../../shared/state/app_settings.dart';
 
 /// Página/Diálogo para seleccionar la Unidad de Gestión activa.
@@ -348,10 +348,9 @@ class _UnidadGestionSelectorPageState extends State<UnidadGestionSelectorPage> {
   Widget build(BuildContext context) {
     // Si NO es flujo inicial, usar TesoreriaScaffold con drawer
     if (!widget.isInitialFlow) {
-      return TesoreriaScaffold(
+      return ErpLayout(
         title: 'Seleccionar Unidad de Gestión',
-        currentRouteName: '/unidad_gestion',
-        appBarColor: Colors.orange,
+        currentRoute: '/unidad_gestion',
         body: _buildBody(context),
         floatingActionButton: _selectedId != null
             ? FloatingActionButton.extended(

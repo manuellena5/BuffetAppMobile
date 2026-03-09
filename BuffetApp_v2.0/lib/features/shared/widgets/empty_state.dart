@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Widget reutilizable para estados vacíos en listas/tablas.
 ///
 /// Muestra un icono grande, título, subtítulo opcional y acción opcional.
@@ -37,7 +39,7 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final effectiveColor = iconColor ?? Colors.grey.shade400;
+    final effectiveColor = iconColor ?? context.appColors.textMuted;
 
     return Center(
       child: Padding(
@@ -51,7 +53,7 @@ class EmptyState extends StatelessWidget {
             Text(
               title,
               style: theme.textTheme.titleMedium?.copyWith(
-                color: Colors.grey.shade600,
+                color: context.appColors.textMuted,
               ),
               textAlign: TextAlign.center,
             ),
@@ -60,7 +62,7 @@ class EmptyState extends StatelessWidget {
               Text(
                 subtitle!,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade500,
+                  color: context.appColors.textMuted,
                 ),
                 textAlign: TextAlign.center,
               ),

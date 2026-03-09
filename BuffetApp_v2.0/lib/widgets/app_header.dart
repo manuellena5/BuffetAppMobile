@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_text_styles.dart';
-import '../core/theme/app_spacing.dart';
+import '../core/theme/app_theme.dart';
 
 /// Header de pantalla estilo ERP.
 /// Título grande + botón de acción principal opcional.
@@ -21,17 +19,14 @@ class AppHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    final c = context.appColors;
     return Container(
-      height: AppSpacing.headerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      height: AppSpacing.topbarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : AppColors.cardLight,
+        color: c.bgSurface,
         border: Border(
-          bottom: BorderSide(
-            color: isDark ? AppColors.borderDark : AppColors.borderLight,
-          ),
+          bottom: BorderSide(color: c.border),
         ),
       ),
       child: Row(
@@ -41,17 +36,9 @@ class AppHeader extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: AppTextStyles.screenTitle(
-                    color: isDark ? AppColors.textPrimaryDark : null,
-                  ),
-                ),
+                Text(title, style: AppText.displayMd),
                 if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    style: AppTextStyles.caption(),
-                  ),
+                  Text(subtitle!, style: AppText.caption),
               ],
             ),
           ),
@@ -61,7 +48,7 @@ class AppHeader extends StatelessWidget {
                   child: w,
                 )),
           if (action != null) ...[
-            const SizedBox(width: AppSpacing.base),
+            const SizedBox(width: AppSpacing.lg),
             action!,
           ],
         ],

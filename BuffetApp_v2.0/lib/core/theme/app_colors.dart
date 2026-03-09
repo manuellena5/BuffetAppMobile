@@ -1,45 +1,49 @@
+/// Re-exporta AppColors desde app_theme.dart (fuente única del Design System).
+/// Los aliases de compatibilidad permiten compilar sin migrar cada archivo de golpe.
+export 'app_theme.dart' show AppColors;
+
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
-/// Paleta de colores del Design System ERP.
-/// Incluye variantes light y dark.
-class AppColors {
-  AppColors._();
+/// Aliases de compatibilidad — usar los nuevos nombres de AppColors directamente.
+/// DEPRECADO: se eliminará cuando se complete la migración de todas las pantallas.
+extension AppColorsCompat on Never {
+  // Estos getters no se usan en runtime, se proveen como constantes estáticas
+  // a través de la clase AppColorsLegacy.
+}
 
-  // ─── Primarios ───
-  static const primary = Color(0xFF2563EB);
-  static const primaryLight = Color(0xFF3B82F6);
-  static const primaryDark = Color(0xFF1D4ED8);
+class AppColorsLegacy {
+  AppColorsLegacy._();
 
-  // ─── Superficies LIGHT ───
-  static const backgroundLight = Color(0xFFF5F7FA);
-  static const cardLight = Color(0xFFFFFFFF);
-  static const formSurfaceLight = Color(0xFFF8FAFC); // contraste sutil para formularios
-  static const borderLight = Color(0xFFE5E7EB);
-  static const textPrimaryLight = Color(0xFF111827);
-  static const textSecondaryLight = Color(0xFF6B7280);
+  static const Color primary = AppColors.accent;
+  static const Color primaryLight = AppColors.accentLight;
+  static const Color primaryDark = AppColors.accentDim;
 
-  // ─── Superficies DARK ───
-  static const backgroundDark = Color(0xFF0F172A);
-  static const cardDark = Color(0xFF1E293B);
-  static const formSurfaceDark = Color(0xFF253348); // contraste sutil para formularios
-  static const borderDark = Color(0xFF334155);
-  static const textPrimaryDark = Color(0xFFF1F5F9);
-  static const textSecondaryDark = Color(0xFF94A3B8);
+  static const Color backgroundLight = AppColors.bgBase;
+  static const Color backgroundDark = AppColors.bgBase;
+  static const Color cardLight = AppColors.bgSurface;
+  static const Color cardDark = AppColors.bgSurface;
+  static const Color formSurfaceLight = AppColors.bgElevated;
+  static const Color formSurfaceDark = AppColors.bgElevated;
+  static const Color borderLight = AppColors.border;
+  static const Color borderDark = AppColors.border;
+  static const Color textPrimaryLight = AppColors.textPrimary;
+  static const Color textPrimaryDark = AppColors.textPrimary;
+  static const Color textSecondaryLight = AppColors.textSecondary;
+  static const Color textSecondaryDark = AppColors.textSecondary;
 
-  // ─── Sidebar ───
-  static const sidebarBg = Color(0xFF111827);
-  static const sidebarItemText = Color(0xFF9CA3AF);
-  static const sidebarItemHover = Color(0xFF1F2937);
-  static const sidebarItemSelected = Color(0xFF2563EB);
-  static const sidebarItemSelectedText = Color(0xFFFFFFFF);
+  static const Color sidebarBg = AppColors.bgSurface;
+  static const Color sidebarItemText = AppColors.textMuted;
+  static const Color sidebarItemHover = AppColors.bgElevated;
+  static const Color sidebarItemSelected = AppColors.accent;
+  static const Color sidebarItemSelectedText = AppColors.textPrimary;
 
-  // ─── Estados financieros ───
-  static const success = Color(0xFF16A34A);     // pagado
-  static const successLight = Color(0xFFDCFCE7); // fondo pagado
-  static const warning = Color(0xFFF59E0B);     // hoy/proximo
-  static const warningLight = Color(0xFFFEF3C7); // fondo hoy
-  static const danger = Color(0xFFDC2626);      // vencido
-  static const dangerLight = Color(0xFFFEE2E2); // fondo vencido
-  static const info = Color(0xFF2563EB);        // pendiente
-  static const infoLight = Color(0xFFDBEAFE);   // fondo pendiente
+  static const Color success = AppColors.ingreso;
+  static const Color successLight = AppColors.ingresoDim;
+  static const Color warning = AppColors.advertencia;
+  static const Color warningLight = AppColors.advertenciaDim;
+  static const Color danger = AppColors.egreso;
+  static const Color dangerLight = AppColors.egresoDim;
+  static const Color info = AppColors.info;
+  static const Color infoLight = AppColors.infoDim;
 }

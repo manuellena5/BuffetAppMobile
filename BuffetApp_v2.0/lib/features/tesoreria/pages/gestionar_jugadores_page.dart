@@ -2,13 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../shared/widgets/responsive_container.dart';
-import '../../shared/widgets/tesoreria_scaffold.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 import 'package:intl/intl.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/services/plantel_import_export_service.dart';
+import '../../../layout/erp_layout.dart';
 import 'crear_jugador_page.dart';
 import 'detalle_jugador_page.dart';
 import 'editar_jugador_page.dart';
@@ -32,8 +32,7 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
   String _filtroRol = 'TODOS';
   String _filtroEstado = 'ACTIVOS';
   String _filtroTipoContratacion = 'TODOS'; // TODOS, LOCAL, REFUERZO, OTRO
-  bool _vistaTabla = false; // false = tarjetas, true = tabla
-  Set<int> _jugadoresSeleccionados = {}; // IDs de jugadores seleccionados en vista tabla
+  Set<int> _jugadoresSeleccionados = {}; // IDs de jugadores seleccionados
 
   @override
   void initState() {
@@ -145,10 +144,9 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
 
   @override
   Widget build(BuildContext context) {
-    return TesoreriaScaffold(
+    return ErpLayout(
       title: 'Gestionar Jugadores',
-      currentRouteName: '/gestionar_jugadores',
-      appBarColor: Colors.teal,
+      currentRoute: '/gestionar_jugadores',
       actions: [
         // Importar
         IconButton(
@@ -179,12 +177,6 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
               child: Text('Exportar Ayudantes'),
             ),
           ],
-        ),
-        // Cambiar vista
-        IconButton(
-          icon: Icon(_vistaTabla ? Icons.view_module : Icons.table_chart),
-          tooltip: _vistaTabla ? 'Ver tarjetas' : 'Ver tabla',
-          onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
         ),
       ],
       body: ResponsiveContainer(
@@ -285,9 +277,7 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
                             label: const Text('Agregar primera entidad'),
                           ),
                         )
-                      : _vistaTabla
-                          ? _buildTabla()
-                          : _buildTarjetas(),
+                      : _buildTabla(),
             ),
           ],
           ),
@@ -305,75 +295,6 @@ class _GestionarJugadoresPageState extends State<GestionarJugadoresPage> {
               icon: const Icon(Icons.person_remove),
               label: Text('Dar de baja (${_jugadoresSeleccionados.length})'),
             ),
-    );
-  }
-
-  Widget _buildTarjetas() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: _entidades.length,
-      itemBuilder: (context, index) {
-        final entidad = _entidades[index];
-        final id = entidad['id'] as int;
-        final nombre = entidad['nombre'] as String;
-        final rol = entidad['rol'] as String;
-        final activo = (entidad['estado_activo'] as int) == 1;
-        final contacto = entidad['contacto'] as String?;
-        final observaciones = entidad['observaciones'] as String?;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          color: activo ? null : Colors.grey.shade200,
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _colorPorRol(rol),
-              child: Text(
-                _inicialesRol(rol),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-            title: Text(
-              nombre,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                decoration: activo ? null : TextDecoration.lineThrough,
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_nombreRol(rol)),
-                if (contacto != null && contacto.isNotEmpty)
-                  Text('📞 $contacto', style: const TextStyle(fontSize: 12)),
-                if (observaciones != null && observaciones.isNotEmpty)
-                  Text(
-                    observaciones,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-            trailing: Chip(
-              label: Text(
-                activo ? 'ACTIVO' : 'BAJA',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-              ),
-              backgroundColor: activo ? Colors.green.shade100 : Colors.grey.shade300,
-              side: BorderSide.none,
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DetalleJugadorPage(entidadId: id),
-                ),
-              ).then((_) => _cargarEntidades());
-            },
-            onLongPress: () => _mostrarMenuAcciones(id, nombre, activo),
-          ),
-        );
-      },
     );
   }
 

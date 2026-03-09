@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
 import '../../../features/shared/services/acuerdos_service.dart';
@@ -187,7 +188,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.advertencia,
           ),
         );
       }
@@ -299,9 +300,26 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
     );
   }
 
+  String _formatFechaNacConEdad(String? fechaNac) {
+    if (fechaNac == null || fechaNac.isEmpty) return '-';
+    try {
+      final dt = DateTime.parse(fechaNac);
+      final hoy = DateTime.now();
+      int edad = hoy.year - dt.year;
+      if (hoy.month < dt.month || (hoy.month == dt.month && hoy.day < dt.day)) {
+        edad--;
+      }
+      final f = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+      return '$f ($edad años)';
+    } catch (_) {
+      return fechaNac;
+    }
+  }
+
   Widget _buildInformacionBasica() {
     if (_entidad == null) return const SizedBox.shrink();
 
+    final cs = context.appColors;
     final nombre = _entidad!['nombre'] as String;
     final rol = _entidad!['rol'] as String;
     final activo = (_entidad!['estado_activo'] as int) == 1;
@@ -312,7 +330,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      color: activo ? Colors.blue.shade50 : Colors.grey.shade200,
+      color: activo ? cs.infoDim : cs.bgElevated,
       child: Column(
         children: [
           CircleAvatar(
@@ -342,7 +360,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           if (!activo)
             const Chip(
               label: Text('DADO DE BAJA'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.egreso,
               labelStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           const Divider(height: 24),
@@ -351,7 +369,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           if (dni != null && dni.isNotEmpty)
             _buildInfoRow(Icons.badge, 'DNI', dni),
           if (fechaNac != null && fechaNac.isNotEmpty)
-            _buildInfoRow(Icons.cake, 'Fecha nacimiento', fechaNac),
+            _buildInfoRow(Icons.cake, 'Fecha nacimiento', _formatFechaNacConEdad(fechaNac)),
           if (observaciones != null && observaciones.isNotEmpty)
             _buildInfoRow(Icons.notes, 'Observaciones', observaciones),
         ],
@@ -365,7 +383,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icono, size: 18, color: Colors.grey.shade700),
+          Icon(icono, size: 18, color: AppColors.textSecondary),
           const SizedBox(width: 8),
           Text(
             '$label: ',
@@ -384,16 +402,17 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
     final pagado = _estadoMensual['pagado'] as double? ?? 0.0;
     final esperado = _estadoMensual['esperado'] as double? ?? 0.0;
     final atrasado = _estadoMensual['atrasado'] as double? ?? 0.0;
+    final cs = context.appColors;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.grey.shade50,
+      color: cs.bgElevated,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.attach_money, color: Colors.blue.shade700, size: 24),
+              Icon(Icons.attach_money, color: AppColors.info, size: 24),
               const SizedBox(width: 8),
               Text(
                 'Resumen Económico - ${_nombreMes(_mesActual)} $_anioActual',
@@ -405,11 +424,11 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           Row(
             children: [
               Expanded(
-                child: _buildKpiCard('Total mensual', '\$${_formatMonto(totalComprometido)}', Colors.blue),
+                child: _buildKpiCard('Total mensual', '\$${_formatMonto(totalComprometido)}', AppColors.info),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildKpiCard('Pagado', '\$${_formatMonto(pagado)}', Colors.green),
+                child: _buildKpiCard('Pagado', '\$${_formatMonto(pagado)}', AppColors.ingreso),
               ),
             ],
           ),
@@ -417,11 +436,11 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           Row(
             children: [
               Expanded(
-                child: _buildKpiCard('Esperado', '\$${_formatMonto(esperado)}', Colors.orange),
+                child: _buildKpiCard('Esperado', '\$${_formatMonto(esperado)}', AppColors.advertencia),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildKpiCard('Atrasado', '\$${_formatMonto(atrasado)}', Colors.red),
+                child: _buildKpiCard('Atrasado', '\$${_formatMonto(atrasado)}', AppColors.egreso),
               ),
             ],
           ),
@@ -438,7 +457,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+            Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
             const SizedBox(height: 4),
             Text(
               valor,
@@ -458,7 +477,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.list_alt, color: Colors.orange.shade700, size: 24),
+              Icon(Icons.list_alt, color: AppColors.advertencia, size: 24),
               const SizedBox(width: 8),
               const Text(
                 'Compromisos Asociados',
@@ -470,17 +489,17 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           // Mostrar error si hubo problemas al cargar
           if (_errorCompromisos != null)
             Card(
-              color: Colors.red.shade50,
+              color: AppColors.egresoDim,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                    Icon(Icons.error_outline, color: AppColors.egreso, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'No se pudieron cargar los compromisos. Por favor, intente nuevamente.',
-                        style: TextStyle(fontSize: 13, color: Colors.red.shade900),
+                        style: TextStyle(fontSize: 13, color: AppColors.egreso),
                       ),
                     ),
                   ],
@@ -493,7 +512,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   'Sin compromisos asociados',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 14, color: AppColors.textMuted),
                 ),
               ),
             )
@@ -515,35 +534,35 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: activo ? null : Colors.grey.shade100,
+                    color: activo ? null : AppColors.bgElevated,
                     child: ListTile(
                       leading: Icon(
                         activo ? Icons.check_circle : Icons.cancel,
-                        color: activo ? Colors.green : Colors.grey,
+                        color: activo ? AppColors.ingreso : AppColors.textMuted,
                       ),
                       title: Text(nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (categoria != null)
-                            Text(categoria, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                            Text(categoria, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                           Text('\$${_formatMonto(monto)} mensual', style: const TextStyle(fontSize: 12)),
                           if (fechaInicio != null || fechaFin != null)
                             Text(
                               '${fechaInicio ?? '?'} → ${fechaFin ?? 'vigente'}',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                             ),
                         ],
                       ),
                       trailing: activo
                           ? const Chip(
                               label: Text('Activo', style: TextStyle(fontSize: 10)),
-                              backgroundColor: Colors.green,
+                              backgroundColor: AppColors.ingreso,
                               labelStyle: TextStyle(color: Colors.white),
                             )
                           : const Chip(
                               label: Text('Inactivo', style: TextStyle(fontSize: 10)),
-                              backgroundColor: Colors.grey,
+                              backgroundColor: AppColors.textMuted,
                               labelStyle: TextStyle(color: Colors.white),
                             ),
                     ),
@@ -559,9 +578,9 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                   
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: Colors.orange.shade50,
+                    color: AppColors.advertenciaDim,
                     child: ListTile(
-                      leading: Icon(Icons.warning, color: Colors.orange.shade700),
+                      leading: Icon(Icons.warning, color: AppColors.advertencia),
                       title: const Text('Error al mostrar compromiso'),
                       subtitle: const Text(
                         'Algunos datos no están disponibles',
@@ -585,7 +604,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.history, color: Colors.purple.shade700, size: 24),
+              Icon(Icons.history, color: AppColors.accentDim, size: 24),
               const SizedBox(width: 8),
               const Text(
                 'Historial de Pagos (últimos 6 meses)',
@@ -600,7 +619,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   'Sin pagos registrados',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 14, color: AppColors.textMuted),
                 ),
               ),
             )
@@ -618,12 +637,12 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading: const Icon(Icons.payment, color: Colors.green),
+                    leading: const Icon(Icons.payment, color: AppColors.ingreso),
                     title: Text(mesAnio, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text('$cantidadMovimientos pago(s)', style: const TextStyle(fontSize: 12)),
                     trailing: Text(
                       '\$${_formatMonto(totalPagado)}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.ingreso),
                     ),
                   ),
                 );
@@ -642,7 +661,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.receipt_long, color: Colors.teal.shade700, size: 24),
+              Icon(Icons.receipt_long, color: AppColors.accentDim, size: 24),
               const SizedBox(width: 8),
               const Text(
                 'Movimientos Asociados (últimos 6 meses)',
@@ -653,7 +672,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           const SizedBox(height: 4),
           Text(
             'Incluye movimientos de compromisos y movimientos directos',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
           if (_movimientos.isEmpty)
@@ -662,7 +681,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   'Sin movimientos registrados',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 14, color: AppColors.textMuted),
                 ),
               ),
             )
@@ -683,7 +702,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                 
                 final esIngreso = tipo == 'INGRESO';
                 final icono = esIngreso ? Icons.arrow_downward : Icons.arrow_upward;
-                final color = esIngreso ? Colors.green : Colors.red;
+                final color = esIngreso ? AppColors.ingreso : AppColors.egreso;
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -720,7 +739,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                             style: TextStyle(
                               fontSize: 11,
                               fontStyle: FontStyle.italic,
-                              color: Colors.blue.shade700,
+                              color: AppColors.info,
                             ),
                           )
                         else
@@ -729,7 +748,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                             style: TextStyle(
                               fontSize: 11,
                               fontStyle: FontStyle.italic,
-                              color: Colors.grey.shade700,
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         if (observacion != null && observacion.isNotEmpty)
@@ -739,7 +758,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                               observacion,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                color: AppColors.textMuted,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -798,17 +817,17 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
   Color _colorPorRol(String rol) {
     switch (rol) {
       case 'JUGADOR':
-        return Colors.blue;
+        return AppColors.info;
       case 'DT':
-        return Colors.purple;
+        return AppColors.accentDim;
       case 'AYUDANTE':
-        return Colors.teal;
+        return AppColors.accent;
       case 'PF':
-        return Colors.orange;
+        return AppColors.advertencia;
       case 'OTRO':
-        return Colors.grey;
+        return AppColors.textMuted;
       default:
-        return Colors.grey;
+        return AppColors.textMuted;
     }
   }
   
@@ -834,7 +853,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: ListTile(
             leading: origenGrupal
-                ? const Icon(Icons.group, color: Colors.blue)
+                ? const Icon(Icons.group, color: AppColors.info)
                 : const Icon(Icons.person),
             title: Text(nombre),
             subtitle: Text(
@@ -849,7 +868,7 @@ class _DetalleJugadorPageState extends State<DetalleJugadorPage> {
                     label: const Text('Grupal', style: TextStyle(fontSize: 10)),
                     padding: const EdgeInsets.all(4),
                     visualDensity: VisualDensity.compact,
-                    backgroundColor: Colors.blue.shade100,
+                    backgroundColor: AppColors.infoDim,
                   ),
                 const SizedBox(width: 8),
                 const Icon(Icons.arrow_forward_ios, size: 16),

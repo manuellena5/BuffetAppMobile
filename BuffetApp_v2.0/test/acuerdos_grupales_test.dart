@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buffet_app/data/dao/db.dart';
-import 'package:buffet_app/features/tesoreria/services/acuerdos_grupales_service.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
+import 'package:cdm_gestion/features/tesoreria/services/acuerdos_grupales_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {

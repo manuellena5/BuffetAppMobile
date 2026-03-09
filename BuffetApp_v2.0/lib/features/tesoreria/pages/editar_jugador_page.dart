@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../shared/widgets/breadcrumb.dart';
+import '../../shared/widgets/responsive_container.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/services/plantel_service.dart';
 
@@ -115,6 +116,15 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
     } finally {
       setState(() => _cargando = false);
     }
+  }
+
+  int _calcularEdad(DateTime fecha) {
+    final hoy = DateTime.now();
+    int edad = hoy.year - fecha.year;
+    if (hoy.month < fecha.month || (hoy.month == fecha.month && hoy.day < fecha.day)) {
+      edad--;
+    }
+    return edad;
   }
 
   Future<void> _seleccionarFecha() async {
@@ -299,42 +309,15 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
       ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+          : ResponsiveContainer(
+              maxWidth: 700,
+              child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Información de solo lectura
-                    Card(
-                      color: activo ? Colors.blue.shade50 : Colors.grey.shade200,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Información de solo lectura',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            Text('ID: ${widget.entidadId}', style: const TextStyle(fontSize: 12)),
-                            Text('Compromisos asociados: $_cantidadCompromisos', style: const TextStyle(fontSize: 12)),
-                            Text(
-                              'Estado: ${activo ? 'ACTIVO' : 'DADO DE BAJA'}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: activo ? Colors.green : Colors.red,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
                     // Campo: Nombre
                     TextFormField(
                       controller: _nombreCtrl,
@@ -396,9 +379,8 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Campo: Tipo de Contratación (solo JUGADOR)
-                    if (_rolSeleccionado == 'JUGADOR')
-                      DropdownButtonFormField<String>(
+                    // Campo: Tipo de Contratación (todos los roles)
+                    DropdownButtonFormField<String>(
                         value: _tipoContratacion,
                         decoration: const InputDecoration(
                           labelText: 'Tipo de Contratación',
@@ -415,7 +397,7 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
                           setState(() => _tipoContratacion = value);
                         },
                       ),
-                    if (_rolSeleccionado == 'JUGADOR') const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
                     // Campo: Posición (solo JUGADOR)
                     if (_rolSeleccionado == 'JUGADOR')
@@ -483,6 +465,20 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
                         ),
                       ),
                     ),
+                    if (_fechaNacimiento != null) ...[
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Text(
+                          '${_calcularEdad(_fechaNacimiento!)} años',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     // Campo: Observaciones
@@ -521,6 +517,7 @@ class _EditarJugadorPageState extends State<EditarJugadorPage> {
                 ),
               ),
             ),
+          ),
     );
   }
   

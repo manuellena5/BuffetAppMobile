@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../shared/format.dart';
@@ -82,7 +83,7 @@ class _ProductsPageState extends State<ProductsPage>
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text('No hay productos en esta categoría',
-              style: TextStyle(color: Colors.grey, fontSize: 16)),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
         ),
       );
     }
@@ -184,13 +185,13 @@ class _ProductsPageState extends State<ProductsPage>
 Widget _buildLeadingImage(String? imgPath) {
   if (imgPath == null || imgPath.isEmpty) {
     return const CircleAvatar(
-        backgroundColor: Colors.grey,
+        backgroundColor: AppColors.textMuted,
         child: Icon(Icons.image, color: Colors.white));
   }
   final file = File(imgPath);
   if (!file.existsSync()) {
     return const CircleAvatar(
-        backgroundColor: Colors.grey,
+        backgroundColor: AppColors.textMuted,
         child: Icon(Icons.image, color: Colors.white));
   }
   return CircleAvatar(backgroundImage: FileImage(file));
@@ -579,7 +580,7 @@ class _ProductFormState extends State<_ProductForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No se pudo procesar la imagen'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.egreso,
         ),
       );
     }
@@ -600,7 +601,7 @@ class _ProductFormState extends State<_ProductForm> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Quitar', style: TextStyle(color: Colors.red)),
+            child: const Text('Quitar', style: TextStyle(color: AppColors.egreso)),
           ),
         ],
       ),
@@ -628,9 +629,9 @@ class _ProductFormState extends State<_ProductForm> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
+                  color: AppColors.bgElevated,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: AppColors.border),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: _savingImage
@@ -652,11 +653,11 @@ class _ProductFormState extends State<_ProductForm> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(Icons.add_a_photo,
-                                  color: Colors.grey, size: 28),
+                                  color: AppColors.textMuted, size: 28),
                               SizedBox(height: 4),
                               Text('Agregar',
                                   style: TextStyle(
-                                      fontSize: 10, color: Colors.grey)),
+                                      fontSize: 10, color: AppColors.textMuted)),
                             ],
                           ),
               ),
@@ -682,9 +683,9 @@ class _ProductFormState extends State<_ProductForm> {
                         const SizedBox(width: 8),
                         TextButton.icon(
                           icon: const Icon(Icons.delete_outline,
-                              size: 18, color: Colors.red),
+                              size: 18, color: AppColors.egreso),
                           label: const Text('Quitar',
-                              style: TextStyle(color: Colors.red)),
+                              style: TextStyle(color: AppColors.egreso)),
                           onPressed: _savingImage ? null : _removeImage,
                         ),
                       ],
@@ -693,7 +694,7 @@ class _ProductFormState extends State<_ProductForm> {
                     Text(
                       'Toque la imagen para verla completa',
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600),
+                          fontSize: 11, color: AppColors.textMuted),
                     ),
                   ] else ...[
                     ElevatedButton.icon(
@@ -705,7 +706,7 @@ class _ProductFormState extends State<_ProductForm> {
                     Text(
                       'Se redimensiona y comprime automáticamente',
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600),
+                          fontSize: 11, color: AppColors.textMuted),
                     ),
                   ],
                 ],

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../core/theme/app_colors.dart';
+import '../core/theme/app_theme.dart';
 
 /// Tipo de estado para el badge.
 enum StatusType { success, warning, danger, info, neutral }
@@ -44,14 +43,11 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bgColor, fgColor) = _colors();
+    final (bgColor, fgColor) = _colorsOf(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: AppDecorations.badgeFor(fgColor),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -61,7 +57,7 @@ class StatusBadge extends StatelessWidget {
           ],
           Text(
             label,
-            style: GoogleFonts.inter(
+            style: AppText.label.copyWith(
               fontSize: fontSize,
               fontWeight: FontWeight.w600,
               color: fgColor,
@@ -72,13 +68,14 @@ class StatusBadge extends StatelessWidget {
     );
   }
 
-  (Color bg, Color fg) _colors() {
+  (Color bg, Color fg) _colorsOf(BuildContext context) {
+    final c = context.appColors;
     return switch (type) {
-      StatusType.success => (AppColors.successLight, AppColors.success),
-      StatusType.warning => (AppColors.warningLight, AppColors.warning),
-      StatusType.danger => (AppColors.dangerLight, AppColors.danger),
-      StatusType.info => (AppColors.infoLight, AppColors.info),
-      StatusType.neutral => (const Color(0xFFF3F4F6), const Color(0xFF6B7280)),
+      StatusType.success => (c.ingresoDim, AppColors.ingreso),
+      StatusType.warning => (c.advertenciaDim, AppColors.advertencia),
+      StatusType.danger => (c.egresoDim, AppColors.egreso),
+      StatusType.info => (c.infoDim, AppColors.info),
+      StatusType.neutral => (c.bgElevated, c.textMuted),
     };
   }
 }

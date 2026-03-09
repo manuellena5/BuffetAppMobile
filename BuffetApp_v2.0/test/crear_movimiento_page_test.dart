@@ -6,10 +6,11 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:buffet_app/data/dao/db.dart';
-import 'package:buffet_app/features/shared/state/app_settings.dart';
-import 'package:buffet_app/features/shared/state/drawer_state.dart';
-import 'package:buffet_app/features/tesoreria/pages/crear_movimiento_page.dart';
+import 'package:cdm_gestion/data/dao/db.dart';
+import 'package:cdm_gestion/core/theme/app_theme.dart';
+import 'package:cdm_gestion/features/shared/state/app_settings.dart';
+import 'package:cdm_gestion/features/shared/state/drawer_state.dart';
+import 'package:cdm_gestion/features/tesoreria/pages/crear_movimiento_page.dart';
 
 // Mock para PathProvider
 class MockPathProviderPlatform extends Fake
@@ -29,6 +30,9 @@ class MockPathProviderPlatform extends Fake
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
+    
+    // Evitar que google_fonts intente descargar fuentes por HTTP en tests
+    AppTheme.useSystemFonts = true;
     
     // Inicializar sqflite ffi para que AppDatabase use una implementación
     // en memoria/ffi durante tests (evita bloqueos en plataformas nativas).
@@ -65,6 +69,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.dark,
           home: MultiProvider(
             providers: [
               ChangeNotifierProvider.value(value: settings),
@@ -105,6 +110,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.dark,
           home: MultiProvider(
             providers: [
               ChangeNotifierProvider.value(value: settings),
@@ -145,6 +151,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.dark,
           home: MultiProvider(
             providers: [
               ChangeNotifierProvider.value(value: settings),
@@ -184,6 +191,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.dark,
           home: MultiProvider(
             providers: [
               ChangeNotifierProvider.value(value: settings),

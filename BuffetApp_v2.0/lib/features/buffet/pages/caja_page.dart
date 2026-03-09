@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../services/caja_service.dart';
 import '../../shared/services/movimiento_service.dart';
@@ -290,7 +291,7 @@ class _CajaPageState extends State<CajaPage> {
             subtitle: 'Efectivo: ${formatCurrency(_movIngresosEfectivo)} • Transf: ${formatCurrency(_movIngresosTransferencia)}',
             value: '+ ${formatCurrency(_movIngresos)}',
             valueStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700, color: Colors.green.shade700),
+                fontWeight: FontWeight.w700, color: AppColors.ingreso),
           ),
           const Divider(height: 16),
           _movementRow(
@@ -485,14 +486,14 @@ class _CajaPageState extends State<CajaPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
+                    color: AppColors.advertenciaDim,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.shade100),
+                    border: Border.all(color: AppColors.advertenciaDim),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info, size: 18, color: Colors.amber.shade800),
+                      Icon(Icons.info, size: 18, color: AppColors.advertencia),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -500,7 +501,7 @@ class _CajaPageState extends State<CajaPage> {
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
-                              ?.copyWith(color: Colors.amber.shade900),
+                              ?.copyWith(color: AppColors.advertencia),
                         ),
                       ),
                     ],
@@ -595,7 +596,7 @@ class _CajaPageState extends State<CajaPage> {
                               '${difEfectivo >= 0 ? '+' : ''}${formatCurrency(difEfectivo)}',
                               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w900,
-                                color: difEfectivo == 0 ? Colors.green : (difEfectivo > 0 ? Colors.blue : Colors.red),
+                                color: difEfectivo == 0 ? AppColors.ingreso : (difEfectivo > 0 ? AppColors.info : AppColors.egreso),
                               ),
                             ),
                           ],
@@ -612,7 +613,7 @@ class _CajaPageState extends State<CajaPage> {
                               '${difTransf >= 0 ? '+' : ''}${formatCurrency(difTransf)}',
                               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w900,
-                                color: difTransf == 0 ? Colors.green : (difTransf > 0 ? Colors.blue : Colors.red),
+                                color: difTransf == 0 ? AppColors.ingreso : (difTransf > 0 ? AppColors.info : AppColors.egreso),
                               ),
                             ),
                           ],
@@ -624,11 +625,11 @@ class _CajaPageState extends State<CajaPage> {
                           '${difTotal >= 0 ? '+' : ''}${formatCurrency(difTotal)}',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w900,
-                            color: difTotal == 0 ? Colors.green : (difTotal > 0 ? Colors.blue : Colors.red),
+                            color: difTotal == 0 ? AppColors.ingreso : (difTotal > 0 ? AppColors.info : AppColors.egreso),
                           ),
                         ),
                         Text('(Suma de diferencias por medio de pago)',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
                         const Divider(height: 16),
                         _kvRow(context, 'Entradas vendidas', entradasVendidas == 0 ? '—' : '$entradasVendidas'),
                         _kvRow(context, 'Tickets vendidos', '$ticketsEmitidos'),
@@ -669,13 +670,13 @@ class _CajaPageState extends State<CajaPage> {
                         Row(
                           children: [
                             Expanded(child: Text('RESULTADO NETO', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900))),
-                            Text(formatCurrency(resultadoNeto), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: resultadoNeto >= 0 ? Colors.green.shade700 : Colors.red)),
+                            Text(formatCurrency(resultadoNeto), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900, color: resultadoNeto >= 0 ? AppColors.ingreso : AppColors.egreso)),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '(${formatCurrency(ventasEfec)} + ${formatCurrency(ventasTransf)} + ${formatCurrency(_movIngresos)} - ${formatCurrency(_movRetiros)})',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
                         ),
                         const Divider(height: 16),
                         Row(
@@ -691,7 +692,7 @@ class _CajaPageState extends State<CajaPage> {
                               '${difEfectivoRes >= 0 ? '+' : ''}${formatCurrency(difEfectivoRes)}',
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: difEfectivoRes == 0 ? Colors.green : (difEfectivoRes > 0 ? Colors.blue : Colors.red),
+                                color: difEfectivoRes == 0 ? AppColors.ingreso : (difEfectivoRes > 0 ? AppColors.info : AppColors.egreso),
                               ),
                             ),
                           ],
@@ -703,7 +704,7 @@ class _CajaPageState extends State<CajaPage> {
                               '${difTransfRes >= 0 ? '+' : ''}${formatCurrency(difTransfRes)}',
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: difTransfRes == 0 ? Colors.green : (difTransfRes > 0 ? Colors.blue : Colors.red),
+                                color: difTransfRes == 0 ? AppColors.ingreso : (difTransfRes > 0 ? AppColors.info : AppColors.egreso),
                               ),
                             ),
                           ],
@@ -716,7 +717,7 @@ class _CajaPageState extends State<CajaPage> {
                               formatCurrency(resultadoConDif),
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w900,
-                                color: resultadoConDif >= 0 ? Colors.green.shade700 : Colors.red,
+                                color: resultadoConDif >= 0 ? AppColors.ingreso : AppColors.egreso,
                               ),
                             ),
                           ],
@@ -724,7 +725,7 @@ class _CajaPageState extends State<CajaPage> {
                         const SizedBox(height: 4),
                         Text(
                           '(${formatCurrency(resultadoNeto)} + ${formatCurrency(difEfectivoRes)} + ${formatCurrency(difTransfRes)})',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
                         ),
                       ],
                     );
@@ -769,7 +770,7 @@ class _CajaPageState extends State<CajaPage> {
             builder: (ctx, snap) {
               final connected = snap.data?.$1 ?? false;
               final devName = snap.data?.$2;
-              final color = connected ? Colors.green : Colors.redAccent;
+              final color = connected ? AppColors.ingreso : AppColors.egreso;
               final tooltip = connected
                   ? 'Impresora: Conectada${devName != null && devName.isNotEmpty ? ' ($devName)' : ''}\nTocar para imprimir'
                   : 'Impresora: No conectada\nTocar para imprimir';
@@ -1008,16 +1009,16 @@ class _CajaPageState extends State<CajaPage> {
               Text('+ Ingresos extra: ${formatCurrency(ingresos)}'),
               if (ingEfec > 0 || ingTransf > 0)
                 Text('  (Efectivo: ${formatCurrency(ingEfec)} • Transf: ${formatCurrency(ingTransf)})',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
               Text('- Retiros: ${formatCurrency(retiros)}'),
               if (retEfec > 0 || retTransf > 0)
                 Text('  (Efectivo: ${formatCurrency(retEfec)} • Transf: ${formatCurrency(retTransf)})',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
               const SizedBox(height: 4),
               Text('TOTAL MOV. EFECTIVO: ${totalMovEfectivoDialog >= 0 ? '+' : ''}${formatCurrency(totalMovEfectivoDialog)}',
                   style: const TextStyle(fontWeight: FontWeight.w700)),
               Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ingEfec)} - ${formatCurrency(retEfec)})',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
               const SizedBox(height: 10),
               // CONCILIACIÓN POR MEDIO DE PAGO
               Text('CONCILIACIÓN POR MEDIO DE PAGO', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
@@ -1030,7 +1031,7 @@ class _CajaPageState extends State<CajaPage> {
                 return Text(
                   'Diferencia efectivo: ${difEfectivo >= 0 ? '+' : ''}${formatCurrency(difEfectivo)}',
                   style: TextStyle(
-                    color: difEfectivo == 0 ? Colors.green : (difEfectivo > 0 ? Colors.blue : Colors.red),
+                    color: difEfectivo == 0 ? AppColors.ingreso : (difEfectivo > 0 ? AppColors.info : AppColors.egreso),
                     fontWeight: FontWeight.w700,
                   ),
                 );
@@ -1045,12 +1046,12 @@ class _CajaPageState extends State<CajaPage> {
                     Text('Transf. esperadas: ${formatCurrency(transfEsperadaDialog)}'),
                     if (ingTransf > 0 || retTransf > 0)
                       Text('  (Ventas ${formatCurrency(ventasTransfDialog)} + Ing. ${formatCurrency(ingTransf)} - Ret. ${formatCurrency(retTransf)})',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                     Text('Transf. declaradas: ${formatCurrency(tr)}'),
                     Text(
                       'Diferencia transf.: ${difTransf >= 0 ? '+' : ''}${formatCurrency(difTransf)}',
                       style: TextStyle(
-                        color: difTransf == 0 ? Colors.green : (difTransf > 0 ? Colors.blue : Colors.red),
+                        color: difTransf == 0 ? AppColors.ingreso : (difTransf > 0 ? AppColors.info : AppColors.egreso),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1070,12 +1071,12 @@ class _CajaPageState extends State<CajaPage> {
                       '${difTotal >= 0 ? '+' : ''}${formatCurrency(difTotal)}',
                       style: TextStyle(
                         fontSize: 16,
-                        color: difTotal == 0 ? Colors.green : (difTotal > 0 ? Colors.blue : Colors.red),
+                        color: difTotal == 0 ? AppColors.ingreso : (difTotal > 0 ? AppColors.info : AppColors.egreso),
                         fontWeight: FontWeight.w900,
                       ),
                     ),
                     Text('(Suma de diferencias por medio de pago)',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                   ],
                 );
               }(),
@@ -1099,7 +1100,7 @@ class _CajaPageState extends State<CajaPage> {
                     Text('RESULTADO NETO: ${formatCurrency(resultadoNetoDialog)}',
                         style: const TextStyle(fontWeight: FontWeight.w900)),
                     Text('(${formatCurrency(ventasEfectivoDialog)} + ${formatCurrency(ventasTransfDialog)} + ${formatCurrency(ingresos)} - ${formatCurrency(retiros)})',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                     const SizedBox(height: 8),
                     Text('RESULTADO NETO + DIFERENCIAS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
                     const SizedBox(height: 4),
@@ -1107,20 +1108,20 @@ class _CajaPageState extends State<CajaPage> {
                       'Dif. efectivo: ${difEfDialog >= 0 ? '+' : ''}${formatCurrency(difEfDialog)}',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: difEfDialog == 0 ? Colors.green : (difEfDialog > 0 ? Colors.blue : Colors.red),
+                        color: difEfDialog == 0 ? AppColors.ingreso : (difEfDialog > 0 ? AppColors.info : AppColors.egreso),
                       ),
                     ),
                     Text(
                       'Dif. transferencias: ${difTrDialog >= 0 ? '+' : ''}${formatCurrency(difTrDialog)}',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: difTrDialog == 0 ? Colors.green : (difTrDialog > 0 ? Colors.blue : Colors.red),
+                        color: difTrDialog == 0 ? AppColors.ingreso : (difTrDialog > 0 ? AppColors.info : AppColors.egreso),
                       ),
                     ),
                     Text('TOTAL: ${formatCurrency(resultadoConDifDialog)}',
-                        style: TextStyle(fontWeight: FontWeight.w900, color: resultadoConDifDialog >= 0 ? Colors.green.shade700 : Colors.red)),
+                        style: TextStyle(fontWeight: FontWeight.w900, color: resultadoConDifDialog >= 0 ? AppColors.ingreso : AppColors.egreso)),
                     Text('(${formatCurrency(resultadoNetoDialog)} + ${formatCurrency(difEfDialog)} + ${formatCurrency(difTrDialog)})',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                   ],
                 );
               }(),
@@ -1269,7 +1270,7 @@ class _CajaPageState extends State<CajaPage> {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.description, color: Colors.green.shade700, size: 28),
+            Icon(Icons.description, color: AppColors.ingreso, size: 28),
             const SizedBox(width: 12),
             const Expanded(child: Text('Archivo de cierre de caja')),
           ],
@@ -1334,7 +1335,7 @@ class _CajaPageState extends State<CajaPage> {
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Error al compartir el archivo Excel. Intente nuevamente.'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.egreso,
         ),
       );
     }
@@ -1355,7 +1356,7 @@ class _CajaPageState extends State<CajaPage> {
         builder: (ctx) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              Icon(Icons.check_circle, color: AppColors.ingreso, size: 32),
               const SizedBox(width: 12),
               const Expanded(child: Text('Excel generado')),
             ],
@@ -1391,7 +1392,7 @@ class _CajaPageState extends State<CajaPage> {
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Error al exportar a Excel. Intente nuevamente.'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.egreso,
         ),
       );
     }
@@ -1475,14 +1476,14 @@ class _StatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isAbierta = estado.toUpperCase().contains('ABIERTA');
     final color =
-        isAbierta ? Colors.green : Theme.of(context).colorScheme.secondary;
+        isAbierta ? AppColors.ingreso : Theme.of(context).colorScheme.secondary;
 
     final sync = (syncEstado ?? '').trim().toUpperCase();
     final hasSync = sync.isNotEmpty;
     final syncColor = (sync == 'SINCRONIZADA')
-        ? Colors.green
+        ? AppColors.ingreso
         : (sync == 'ERROR')
-            ? Colors.redAccent
+            ? AppColors.egreso
             : Theme.of(context).colorScheme.secondary;
 
     return Container(

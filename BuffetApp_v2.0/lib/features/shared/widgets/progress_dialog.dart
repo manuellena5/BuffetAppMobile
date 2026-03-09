@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Diálogo de progreso con indicador y mensaje
 /// 
 /// Ejemplo de uso:
@@ -68,7 +70,7 @@ class ProgressCounterDialog extends StatelessWidget {
                 child: CircularProgressIndicator(
                   value: progress,
                   strokeWidth: 6,
-                  backgroundColor: Colors.grey[300],
+                  backgroundColor: context.appColors.border,
                 ),
               ),
               Text(
@@ -93,7 +95,7 @@ class ProgressCounterDialog extends StatelessWidget {
             '$current / $total',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[600],
+              color: context.appColors.textMuted,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -104,7 +106,7 @@ class ProgressCounterDialog extends StatelessWidget {
               subtitle!,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: context.appColors.textMuted,
               ),
               textAlign: TextAlign.center,
             ),
@@ -175,7 +177,7 @@ class LinearProgressDialog extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 8,
-              backgroundColor: Colors.grey[300],
+              backgroundColor: context.appColors.border,
             ),
           ),
           const SizedBox(height: 8),
@@ -186,7 +188,7 @@ class LinearProgressDialog extends StatelessWidget {
               '$percentage%',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[700],
+                color: context.appColors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -198,7 +200,7 @@ class LinearProgressDialog extends StatelessWidget {
               subtitle!,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: context.appColors.textMuted,
               ),
             ),
           ],

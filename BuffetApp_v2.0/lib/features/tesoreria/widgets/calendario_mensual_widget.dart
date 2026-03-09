@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../../features/shared/format.dart';
 import '../../../features/shared/services/compromisos_service.dart';
@@ -40,10 +41,18 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
   bool _isLoading = true;
   String? _error;
 
-  // KPIs
+  // KPIs - desagregados por Ingreso / Egreso
   double _totalHoy = 0;
+  double _totalHoyIngreso = 0;
+  double _totalHoyEgreso = 0;
   double _totalSemana = 0;
+  double _totalSemanaIngreso = 0;
+  double _totalSemanaEgreso = 0;
   double _totalMes = 0;
+  double _totalMesIngreso = 0;
+  double _totalMesEgreso = 0;
+  double _totalPagado = 0;
+  double _totalCobrado = 0;
   int _vencidosCount = 0;
   int _estaSemanaCount = 0;
 
@@ -102,32 +111,49 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
       final mesFin = DateFormat('yyyy-MM-dd')
           .format(DateTime(hoy.year, hoy.month + 1, 0));
 
-      double totalHoy = 0;
-      double totalSemana = 0;
-      double totalMes = 0;
+      double totalHoy = 0, totalHoyIng = 0, totalHoyEgr = 0;
+      double totalSemana = 0, totalSemanaIng = 0, totalSemanaEgr = 0;
+      double totalMes = 0, totalMesIng = 0, totalMesEgr = 0;
+      double totalPagado = 0, totalCobrado = 0;
       int vencidos = 0;
       int estaSemana = 0;
 
       for (final c in cuotas) {
         final estado = c['cuota_estado'] as String? ?? 'ESPERADO';
-        if (estado == 'CONFIRMADO' || estado == 'CANCELADO') continue;
-
         final fecha = c['fecha_programada'] as String? ?? '';
         final monto = (c['monto_esperado'] as num?)?.toDouble() ?? 0;
+        final tipo = c['compromiso_tipo'] as String? ?? '';
+        final esIngreso = tipo == 'INGRESO';
+
+        // Cobrado / Pagado: cuotas CONFIRMADAS del mes actual
+        if (estado == 'CONFIRMADO' &&
+            fecha.compareTo(mesInicio) >= 0 &&
+            fecha.compareTo(mesFin) <= 0) {
+          if (esIngreso) {
+            totalCobrado += monto;
+          } else {
+            totalPagado += monto;
+          }
+        }
+
+        if (estado == 'CONFIRMADO' || estado == 'CANCELADO') continue;
 
         if (fecha == hoyStr) {
           totalHoy += monto;
+          if (esIngreso) { totalHoyIng += monto; } else { totalHoyEgr += monto; }
         }
 
         if (fecha.compareTo(hoyStr) >= 0 &&
             fecha.compareTo(semanaStr) <= 0) {
           totalSemana += monto;
+          if (esIngreso) { totalSemanaIng += monto; } else { totalSemanaEgr += monto; }
           estaSemana++;
         }
 
         if (fecha.compareTo(mesInicio) >= 0 &&
             fecha.compareTo(mesFin) <= 0) {
           totalMes += monto;
+          if (esIngreso) { totalMesIng += monto; } else { totalMesEgr += monto; }
         }
 
         if (fecha.compareTo(hoyStr) < 0) {
@@ -139,8 +165,16 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
         setState(() {
           _cuotasPorDia = mapa;
           _totalHoy = totalHoy;
+          _totalHoyIngreso = totalHoyIng;
+          _totalHoyEgreso = totalHoyEgr;
           _totalSemana = totalSemana;
+          _totalSemanaIngreso = totalSemanaIng;
+          _totalSemanaEgreso = totalSemanaEgr;
           _totalMes = totalMes;
+          _totalMesIngreso = totalMesIng;
+          _totalMesEgreso = totalMesEgr;
+          _totalPagado = totalPagado;
+          _totalCobrado = totalCobrado;
           _vencidosCount = vencidos;
           _estaSemanaCount = estaSemana;
           _isLoading = false;
@@ -188,7 +222,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const Icon(Icons.error_outline, size: 48, color: AppColors.egreso),
             const SizedBox(height: 12),
             Text(_error!),
             const SizedBox(height: 12),
@@ -280,43 +314,136 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
     );
   }
 
-  /// Panel de KPIs: Hoy, Esta semana, Este mes
+  /// Panel de KPIs: Hoy, Esta semana, Este mes, Cobrado, Pagado
+  /// Cada KPI se desagrega en Total | Ingreso | Egreso
   Widget _buildKPIs() {
     return Card(
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
           children: [
-            Expanded(
-              child: _buildKPIItem(
-                'Hoy',
-                Format.money(_totalHoy),
-                Icons.today,
-                Colors.orange,
-              ),
+            // Fila 1: Hoy, Esta semana, Este mes
+            Row(
+              children: [
+                Expanded(
+                  child: _buildKPIDesagregado(
+                    'Hoy',
+                    Icons.today,
+                    AppColors.advertencia,
+                    _totalHoy,
+                    _totalHoyIngreso,
+                    _totalHoyEgreso,
+                  ),
+                ),
+                _dividerVertical(),
+                Expanded(
+                  child: _buildKPIDesagregado(
+                    'Esta semana',
+                    Icons.date_range,
+                    AppColors.info,
+                    _totalSemana,
+                    _totalSemanaIngreso,
+                    _totalSemanaEgreso,
+                  ),
+                ),
+                _dividerVertical(),
+                Expanded(
+                  child: _buildKPIDesagregado(
+                    'Este mes',
+                    Icons.calendar_month,
+                    AppColors.accent,
+                    _totalMes,
+                    _totalMesIngreso,
+                    _totalMesEgreso,
+                  ),
+                ),
+              ],
             ),
-            _dividerVertical(),
-            Expanded(
-              child: _buildKPIItem(
-                'Esta semana',
-                Format.money(_totalSemana),
-                Icons.date_range,
-                Colors.blue,
-              ),
-            ),
-            _dividerVertical(),
-            Expanded(
-              child: _buildKPIItem(
-                'Este mes',
-                Format.money(_totalMes),
-                Icons.calendar_month,
-                Colors.teal,
-              ),
+            const Divider(height: 24),
+            // Fila 2: Cobrado y Pagado (del mes actual)
+            Row(
+              children: [
+                Expanded(
+                  child: _buildKPIItem(
+                    'Cobrado',
+                    Format.money(_totalCobrado),
+                    Icons.arrow_downward,
+                    AppColors.ingreso,
+                  ),
+                ),
+                _dividerVertical(),
+                Expanded(
+                  child: _buildKPIItem(
+                    'Pagado',
+                    Format.money(_totalPagado),
+                    Icons.arrow_upward,
+                    AppColors.egreso,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// KPI desagregado: muestra Total, luego Ingreso / Egreso debajo
+  Widget _buildKPIDesagregado(
+    String label,
+    IconData icon,
+    Color color,
+    double total,
+    double ingreso,
+    double egreso,
+  ) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 28),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textMuted,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          Format.money(total),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              Format.money(ingreso),
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.ingreso,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Text(' / ', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+            Text(
+              Format.money(egreso),
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.egreso,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -330,7 +457,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey.shade600,
+            color: AppColors.textMuted,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -353,7 +480,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
       width: 1,
       height: 48,
       margin: const EdgeInsets.symmetric(horizontal: 8),
-      color: Colors.grey.shade300,
+      color: AppColors.border,
     );
   }
 
@@ -365,20 +492,20 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
 
     return Card(
       elevation: 1,
-      color: _vencidosCount > 0 ? Colors.red.shade50 : Colors.orange.shade50,
+      color: _vencidosCount > 0 ? AppColors.egresoDim : AppColors.advertenciaDim,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             if (_vencidosCount > 0) ...[
               Icon(Icons.warning_amber_rounded,
-                  color: Colors.red.shade700, size: 20),
+                  color: AppColors.egreso, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '$_vencidosCount compromiso${_vencidosCount > 1 ? 's' : ''} vencido${_vencidosCount > 1 ? 's' : ''}',
                   style: TextStyle(
-                    color: Colors.red.shade800,
+                    color: AppColors.egreso,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -389,17 +516,17 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                 width: 1,
                 height: 24,
                 margin: const EdgeInsets.symmetric(horizontal: 12),
-                color: Colors.grey.shade400,
+                color: AppColors.textMuted,
               ),
             if (_estaSemanaCount > 0) ...[
               Icon(Icons.schedule,
-                  color: Colors.orange.shade700, size: 20),
+                  color: AppColors.advertencia, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '$_estaSemanaCount compromiso${_estaSemanaCount > 1 ? 's' : ''} esta semana',
                   style: TextStyle(
-                    color: Colors.orange.shade800,
+                    color: AppColors.advertencia,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -432,18 +559,18 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
         titleCentered: true,
         formatButtonShowsNext: false,
         formatButtonDecoration: BoxDecoration(
-          border: Border.all(color: Colors.teal),
+          border: Border.all(color: AppColors.accent),
           borderRadius: BorderRadius.circular(16),
         ),
-        formatButtonTextStyle: const TextStyle(color: Colors.teal),
+        formatButtonTextStyle: const TextStyle(color: AppColors.accent),
       ),
       calendarStyle: CalendarStyle(
         todayDecoration: BoxDecoration(
-          color: Colors.teal.withValues(alpha: 0.3),
+          color: AppColors.accent.withValues(alpha: 0.3),
           shape: BoxShape.circle,
         ),
         selectedDecoration: const BoxDecoration(
-          color: Colors.teal,
+          color: AppColors.accent,
           shape: BoxShape.circle,
         ),
         markerDecoration: const BoxDecoration(
@@ -575,11 +702,11 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
     }
 
     // Prioridad: vencido > esta semana > pendiente > confirmado
-    if (tieneVencido) return Colors.red;
-    if (tieneEstaSemana) return Colors.orange;
-    if (tienePendiente) return Colors.blue;
-    if (tieneConfirmado) return Colors.green;
-    return Colors.grey;
+    if (tieneVencido) return AppColors.egreso;
+    if (tieneEstaSemana) return AppColors.advertencia;
+    if (tienePendiente) return AppColors.info;
+    if (tieneConfirmado) return AppColors.ingreso;
+    return AppColors.textMuted;
   }
 
   double _totalDia(List<Map<String, dynamic>> cuotas) {
@@ -612,7 +739,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
             // Header del día
             Row(
               children: [
-                Icon(Icons.event, color: Colors.teal.shade700),
+                Icon(Icons.event, color: AppColors.accent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -629,7 +756,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.teal.shade700,
+                      color: AppColors.accent,
                     ),
                   ),
               ],
@@ -643,7 +770,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                   child: Text(
                     'Sin compromisos este día',
                     style: TextStyle(
-                      color: Colors.grey.shade500,
+                    color: AppColors.textMuted,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -679,23 +806,23 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
     String estadoLabel;
 
     if (estado == 'CONFIRMADO') {
-      color = Colors.green;
+      color = AppColors.ingreso;
       icon = Icons.check_circle;
       estadoLabel = 'Pagado';
     } else if (estado == 'CANCELADO') {
-      color = Colors.grey;
+      color = AppColors.textMuted;
       icon = Icons.cancel;
       estadoLabel = 'Cancelado';
     } else if (fecha.compareTo(hoyStr) < 0) {
-      color = Colors.red;
+      color = AppColors.egreso;
       icon = Icons.error;
       estadoLabel = 'Vencido';
     } else if (fecha.compareTo(semanaStr) <= 0) {
-      color = Colors.orange;
+      color = AppColors.advertencia;
       icon = Icons.schedule;
       estadoLabel = 'Vence pronto';
     } else {
-      color = Colors.blue;
+      color = AppColors.info;
       icon = Icons.pending;
       estadoLabel = 'Pendiente';
     }
@@ -767,7 +894,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
-                            color: (esIngreso ? Colors.green : Colors.red)
+                            color: (esIngreso ? AppColors.ingreso : AppColors.egreso)
                                 .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -776,7 +903,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: esIngreso ? Colors.green : Colors.red,
+                              color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                             ),
                           ),
                         ),
@@ -787,7 +914,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                               entidad,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                color: AppColors.textMuted,
                                 fontStyle: FontStyle.italic,
                               ),
                               overflow: TextOverflow.ellipsis,
@@ -802,7 +929,7 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                         'Cuota #$numeroCuota',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade500,
+                          color: AppColors.textMuted,
                         ),
                       ),
                     ],
@@ -819,12 +946,12 @@ class _CalendarioMensualWidgetState extends State<CalendarioMensualWidget> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
-                      color: esIngreso ? Colors.green.shade700 : Colors.red.shade700,
+                      color: esIngreso ? AppColors.ingreso : AppColors.egreso,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Icon(Icons.chevron_right,
-                      size: 18, color: Colors.grey.shade400),
+                      size: 18, color: AppColors.textMuted),
                 ],
               ),
             ],

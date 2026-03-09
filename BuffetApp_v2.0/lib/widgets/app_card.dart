@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
+import '../core/theme/app_theme.dart';
 
-/// Tarjeta base del Design System ERP.
-/// Fondo blanco, border radius 10, sombra muy suave, borde sutil.
+/// Tarjeta base del Design System.
+/// Fondo oscuro, border radius 12, sombra suave, borde sutil.
 class AppCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -17,29 +16,22 @@ class AppCard extends StatelessWidget {
     this.padding,
     this.onTap,
     this.color,
-    this.borderRadius = 10,
+    this.borderRadius = 12,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = color ?? (isDark ? AppColors.cardDark : AppColors.cardLight);
-    final borderColor = isDark ? AppColors.borderDark : AppColors.borderLight;
+    final c = context.appColors;
+    final bgColor = color ?? c.bgSurface;
 
     final card = Container(
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: c.border),
+        boxShadow: AppShadows.cardFor(context),
       ),
-      padding: padding ?? AppSpacing.paddingCard,
+      padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
       child: child,
     );
 

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buffet_app/features/shared/services/tesoreria_sync_service.dart';
+import 'package:cdm_gestion/features/shared/services/tesoreria_sync_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {

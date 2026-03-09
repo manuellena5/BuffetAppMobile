@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../shared/format.dart';
 import '../../../data/dao/db.dart';
 import '../state/cart_model.dart';
@@ -124,7 +125,7 @@ class CartPage extends StatelessWidget {
                 const SizedBox(height: 10),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppColors.ingreso,
                       padding: const EdgeInsets.symmetric(vertical: 16)),
                   onPressed: cart.isEmpty
                       ? null

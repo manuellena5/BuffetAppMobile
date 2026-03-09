@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/dao/db.dart';
 import '../../shared/format.dart';
 import '../../shared/services/print_service.dart';
@@ -114,19 +115,19 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: isAnulado
-                          ? Colors.redAccent.withValues(alpha: 0.15)
+                          ? AppColors.egreso.withValues(alpha: 0.15)
                           : (isNoImpreso
-                              ? Colors.orangeAccent.withValues(alpha: 0.15)
-                              : Colors.blueGrey.withValues(alpha: 0.15)),
+                              ? AppColors.advertencia.withValues(alpha: 0.15)
+                              : AppColors.textMuted.withValues(alpha: 0.15)),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(displayStatus,
                         style: TextStyle(
                             color: isAnulado
-                                ? Colors.redAccent
+                                ? AppColors.egreso
                                 : (isNoImpreso
-                                    ? Colors.orangeAccent
-                                    : Colors.blueGrey),
+                                    ? AppColors.advertencia
+                                    : AppColors.textMuted),
                             fontWeight: FontWeight.w600)),
                   ),
                 ],
@@ -137,7 +138,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(color: Colors.black54),
+                    ?.copyWith(color: AppColors.textMuted),
               ),
               if (_metodoPago != null) ...
               [
@@ -149,7 +150,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                           ? Icons.account_balance
                           : Icons.payments_outlined,
                       size: 16,
-                      color: Colors.black54,
+                      color: AppColors.textMuted,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -157,7 +158,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
-                          ?.copyWith(color: Colors.black54),
+                          ?.copyWith(color: AppColors.textMuted),
                     ),
                   ],
                 ),
@@ -308,9 +309,9 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                   Expanded(
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
+                        backgroundColor: AppColors.egreso,
                         foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.redAccent),
+                        side: BorderSide(color: AppColors.egreso),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: () async {
@@ -334,7 +335,7 @@ class _SaleDetailPageState extends State<SaleDetailPage> {
                                   child: const Text('Cancelar')),
                               ElevatedButton(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.redAccent,
+                                    backgroundColor: AppColors.egreso,
                                     foregroundColor: Colors.white,
                                   ),
                                   onPressed: () => Navigator.pop(ctx, true),
